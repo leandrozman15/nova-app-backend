@@ -8,6 +8,10 @@ export class UpdatePlayerDto {
 
   @IsOptional()
   @IsString()
+  uid?: string;
+
+  @IsOptional()
+  @IsString()
   email?: string;
 
   @IsOptional()

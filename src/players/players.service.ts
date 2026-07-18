@@ -50,7 +50,7 @@ export class PlayersService {
     return this.prisma.player.create({
       data: {
         companyId,
-        authUid: dto.authUid,
+        authUid: dto.authUid ?? dto.uid,
         email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
@@ -70,7 +70,7 @@ export class PlayersService {
     return this.prisma.player.update({
       where: { id },
       data: {
-        authUid: dto.authUid,
+        authUid: dto.authUid ?? dto.uid,
         email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
@@ -93,6 +93,7 @@ export class PlayersService {
   }
 
   async provisionProfile(input: CreatePlayerDto & { companyId?: string }) {
+    const authUid = input.authUid ?? input.uid;
     const resolvedCompanyId =
       input.companyId ||
       (await this.prisma.club.findUnique({
@@ -108,7 +109,7 @@ export class PlayersService {
       where: {
         companyId: resolvedCompanyId,
         OR: [
-          input.authUid ? { authUid: input.authUid } : undefined,
+          authUid ? { authUid } : undefined,
           input.email ? { email: input.email } : undefined,
         ].filter(Boolean) as Array<{ authUid?: string; email?: string }>,
       },
@@ -118,7 +119,7 @@ export class PlayersService {
       ? await this.prisma.player.update({
           where: { id: existing.id },
           data: {
-            authUid: input.authUid,
+            authUid,
             email: input.email,
             firstName: input.firstName,
             lastName: input.lastName,
@@ -133,7 +134,7 @@ export class PlayersService {
       : await this.prisma.player.create({
           data: {
             companyId: resolvedCompanyId,
-            authUid: input.authUid,
+            authUid,
             email: input.email,
             firstName: input.firstName,
             lastName: input.lastName,
@@ -146,7 +147,7 @@ export class PlayersService {
           },
         });
 
-    if (input.authUid) {
+    if (authUid) {
       const claims: Record<string, unknown> = {
         email: input.email,
         name: `${input.firstName} ${input.lastName}`.trim(),
@@ -164,7 +165,7 @@ export class PlayersService {
         }
       });
 
-      await this.firebaseAdminService.auth.setCustomUserClaims(input.authUid, claims);
+      await this.firebaseAdminService.auth.setCustomUserClaims(authUid, claims);
     }
 
     return player;

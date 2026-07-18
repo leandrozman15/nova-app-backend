@@ -8,6 +8,10 @@ export class CreatePlayerDto {
 
   @IsOptional()
   @IsString()
+  uid?: string;
+
+  @IsOptional()
+  @IsString()
   email?: string;
 
   @IsString()
