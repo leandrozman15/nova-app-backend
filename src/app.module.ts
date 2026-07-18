@@ -16,6 +16,7 @@ import { PlayerPaymentsModule } from './player-payments/player-payments.module';
 import { PlayersModule } from './players/players.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StandingsModule } from './standings/standings.module';
+import { ShopModule } from './shop/shop.module';
 import { TeamsModule } from './teams/teams.module';
 import { TrainingSessionsModule } from './training-sessions/training-sessions.module';
 import { UsersModule } from './users/users.module';
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
     PlayersModule,
     MatchesModule,
     StandingsModule,
+    ShopModule,
     FinanceTransactionsModule,
     PlayerPaymentsModule,
     TrainingSessionsModule,

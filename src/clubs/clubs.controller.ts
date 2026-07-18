@@ -10,13 +10,13 @@ import { UpdateClubDto } from './dto/update-club.dto';
 export class ClubsController {
   constructor(private readonly clubsService: ClubsService) {}
 
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get()
   list(@Req() req: unknown) {
     return this.clubsService.list(requireCompanyId(req));
   }
 
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get(':id')
   getById(@Req() req: unknown, @Param('id') id: string) {
     return this.clubsService.getById(requireCompanyId(req), id);

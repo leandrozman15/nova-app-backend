@@ -62,6 +62,14 @@ enum PaymentStatus {
   overdue
 }
 
+enum ShopOrderStatus {
+  pending
+  preparing
+  ready
+  delivered
+  cancelled
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -78,6 +86,8 @@ model Company {
   matchCallups          MatchCallup[]
   financialTransactions FinancialTransaction[]
   playerPayments        PlayerPayment[]
+  shopProducts          ShopProduct[]
+  shopOrders            ShopOrder[]
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
@@ -113,6 +123,8 @@ model Club {
   players Player[]
   financialTransactions FinancialTransaction[]
   playerPayments        PlayerPayment[]
+  shopProducts          ShopProduct[]
+  shopOrders            ShopOrder[]
   trainingSessions      TrainingSession[]
   injuryReports         InjuryReport[]
 
@@ -318,6 +330,58 @@ model PlayerPayment {
   @@index([companyId, playerId])
   @@index([companyId, status])
   @@unique([playerId, month, year])
+}
+
+model ShopProduct {
+  id          String   @id @default(cuid())
+  companyId   String
+  clubId      String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(12, 2)
+  category    String
+  images      Json?
+  sizes       Json?
+  sports      Json?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  orders  ShopOrder[]
+
+  @@index([companyId])
+  @@index([clubId])
+  @@index([companyId, clubId])
+}
+
+model ShopOrder {
+  id                 String          @id @default(cuid())
+  companyId          String
+  clubId             String
+  customerExternalId String
+  customerName       String
+  productId          String?
+  productName        String
+  productImage       String?
+  size               String?
+  price              Decimal         @db.Decimal(12, 2)
+  status             ShopOrderStatus @default(pending)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  product ShopProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([clubId])
+  @@index([productId])
+  @@index([customerExternalId])
+  @@index([companyId, clubId])
+  @@index([companyId, customerExternalId])
+  @@index([companyId, status])
 }
 
 model TrainingSession {
