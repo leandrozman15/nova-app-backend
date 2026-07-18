@@ -89,6 +89,7 @@ model Company {
   shopProducts          ShopProduct[]
   shopOrders            ShopOrder[]
   facilities            Facility[]
+  facilityRentals       FacilityRental[]
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
@@ -127,6 +128,7 @@ model Club {
   shopProducts          ShopProduct[]
   shopOrders            ShopOrder[]
   facilities            Facility[]
+  facilityRentals       FacilityRental[]
   trainingSessions      TrainingSession[]
   injuryReports         InjuryReport[]
 
@@ -407,10 +409,39 @@ model Facility {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  rentals FacilityRental[]
 
   @@index([companyId])
   @@index([clubId])
   @@index([companyId, clubId])
+}
+
+model FacilityRental {
+  id          String   @id @default(cuid())
+  companyId   String
+  clubId      String
+  facilityId  String
+  clientName  String
+  clientPhone String?
+  status      String   @default("confirmed")
+  isRecurrent Boolean  @default(false)
+  day         String
+  hour        Int
+  price       Decimal  @db.Decimal(12, 2)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([clubId])
+  @@index([facilityId])
+  @@index([companyId, clubId])
+  @@index([companyId, facilityId])
+  @@index([companyId, day, hour])
 }
 
 model TrainingSession {
