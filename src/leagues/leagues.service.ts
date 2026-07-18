@@ -36,6 +36,7 @@ export class LeaguesService {
         name: dto.name,
         season: dto.season,
         clubId: dto.clubId,
+        municipalityId: dto.municipalityId,
       },
     });
   }
@@ -49,6 +50,7 @@ export class LeaguesService {
         name: dto.name,
         season: dto.season,
         clubId: dto.clubId,
+        municipalityId: dto.municipalityId,
       },
     });
   }

@@ -63,6 +63,34 @@ export class UsersService {
     teamId?: string;
     isFan?: boolean;
   }) {
+    if (input.companyId) {
+      const [firebaseUser, company] = await Promise.all([
+        this.firebaseAdminService.auth.getUser(input.uid),
+        this.prisma.company.findUnique({ where: { id: input.companyId } }),
+      ]);
+
+      if (!company) {
+        throw new ConflictException('Company not found');
+      }
+
+      await this.prisma.user.upsert({
+        where: { firebaseUid: input.uid },
+        update: {
+          email: input.email ?? firebaseUser.email ?? `${input.uid}@bootstrap.local`,
+          name: input.name ?? firebaseUser.displayName ?? null,
+          role: input.role,
+          companyId: company.id,
+        },
+        create: {
+          firebaseUid: input.uid,
+          email: input.email ?? firebaseUser.email ?? `${input.uid}@bootstrap.local`,
+          name: input.name ?? firebaseUser.displayName ?? null,
+          role: input.role,
+          companyId: company.id,
+        },
+      });
+    }
+
     const claims: Record<string, unknown> = {
       email: input.email,
       name: input.name,
@@ -99,23 +127,6 @@ export class UsersService {
       (await this.prisma.company.create({
         data: { name: 'Fluxion Sport' },
       }));
-
-    await this.prisma.user.upsert({
-      where: { firebaseUid: input.uid },
-      update: {
-        email: input.email ?? `${input.uid}@bootstrap.local`,
-        name: input.name ?? 'Super Administrador',
-        role: 'admin',
-        companyId: company.id,
-      },
-      create: {
-        firebaseUid: input.uid,
-        email: input.email ?? `${input.uid}@bootstrap.local`,
-        name: input.name ?? 'Super Administrador',
-        role: 'admin',
-        companyId: company.id,
-      },
-    });
 
     return this.provisionProfileClaims({
       uid: input.uid,

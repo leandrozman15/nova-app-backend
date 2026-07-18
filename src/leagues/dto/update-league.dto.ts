@@ -14,4 +14,8 @@ export class UpdateLeagueDto {
   @IsOptional()
   @IsString()
   clubId?: string;
+
+  @IsOptional()
+  @IsString()
+  municipalityId?: string;
 }

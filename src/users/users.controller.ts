@@ -60,7 +60,7 @@ export class UsersController {
       name: body.name,
       role: body.role,
       roles: Array.isArray(body.roles) ? body.roles : undefined,
-      companyId: body.companyId,
+      companyId: body.companyId ?? typedReq.companyId,
       clubId: body.clubId,
       leagueId: body.leagueId,
       municipalityId: body.municipalityId,

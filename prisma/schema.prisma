@@ -76,6 +76,7 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  municipalities        Municipality[]
   users                 User[]
   clubs                 Club[]
   leagues               League[]
@@ -93,6 +94,25 @@ model Company {
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
+}
+
+model Municipality {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  centerLat Float?
+  centerLng Float?
+  status    String?  @default("active")
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clubs   Club[]
+  leagues League[]
+
+  @@index([companyId])
+  @@index([companyId, name])
 }
 
 model User {
@@ -114,15 +134,21 @@ model User {
 model Club {
   id               String   @id @default(cuid())
   name             String
+  leagueId         String?
+  municipalityId   String?
   municipalityName String?
+  address          String?
+  sport            String?
+  status           String?
   companyId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  leagues League[]
-  teams   Team[]
-  players Player[]
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  municipality Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  league       League?       @relation("LeagueClubs", fields: [leagueId], references: [id], onDelete: SetNull)
+  teams        Team[]
+  players      Player[]
   financialTransactions FinancialTransaction[]
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
@@ -134,6 +160,8 @@ model Club {
 
   @@index([companyId])
   @@index([companyId, name])
+  @@index([leagueId])
+  @@index([municipalityId])
 }
 
 model League {
@@ -142,17 +170,21 @@ model League {
   season    String?
   companyId String
   clubId    String?
+  municipalityId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  club    Club?   @relation(fields: [clubId], references: [id], onDelete: SetNull)
-  teams   Team[]
-  matches Match[]
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club         Club?         @relation(fields: [clubId], references: [id], onDelete: SetNull)
+  municipality Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
+  clubs        Club[]        @relation("LeagueClubs")
+  teams        Team[]
+  matches      Match[]
 
   @@index([companyId])
   @@index([companyId, name])
   @@index([clubId])
+  @@index([municipalityId])
 }
 
 model Team {

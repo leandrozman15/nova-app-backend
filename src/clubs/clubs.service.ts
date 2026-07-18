@@ -32,7 +32,12 @@ export class ClubsService {
       data: {
         companyId,
         name: dto.name,
+        municipalityId: dto.municipalityId,
+        leagueId: dto.leagueId,
         municipalityName: dto.municipalityName,
+        address: dto.address,
+        sport: dto.sport,
+        status: dto.status,
       },
     });
   }
@@ -44,7 +49,12 @@ export class ClubsService {
       where: { id },
       data: {
         name: dto.name,
+        municipalityId: dto.municipalityId,
+        leagueId: dto.leagueId,
         municipalityName: dto.municipalityName,
+        address: dto.address,
+        sport: dto.sport,
+        status: dto.status,
       },
     });
   }

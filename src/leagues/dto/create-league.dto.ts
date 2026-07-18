@@ -13,4 +13,8 @@ export class CreateLeagueDto {
   @IsOptional()
   @IsString()
   clubId?: string;
+
+  @IsOptional()
+  @IsString()
+  municipalityId?: string;
 }

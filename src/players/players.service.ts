@@ -117,6 +117,23 @@ export class PlayersService {
       if (firebaseUser && input.email && firebaseUser.email && firebaseUser.email !== input.email) {
         throw new NotFoundException('Player profile mismatch');
       }
+
+      await this.prisma.user.upsert({
+        where: { firebaseUid: authUid },
+        update: {
+          email: input.email ?? firebaseUser?.email ?? `${authUid}@bootstrap.local`,
+          name: `${input.firstName} ${input.lastName}`.trim(),
+          role: 'player',
+          companyId: resolvedCompanyId,
+        },
+        create: {
+          firebaseUid: authUid,
+          email: input.email ?? firebaseUser?.email ?? `${authUid}@bootstrap.local`,
+          name: `${input.firstName} ${input.lastName}`.trim(),
+          role: 'player',
+          companyId: resolvedCompanyId,
+        },
+      });
     }
 
     const existing = await this.prisma.player.findFirst({
