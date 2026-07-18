@@ -19,4 +19,15 @@ export class UsersController {
 
     return this.usersService.listByCompany(typedReq.companyId);
   }
+
+  @Get('me')
+  async me(@Req() req: unknown) {
+    const typedReq = req as RequestWithAuth;
+
+    if (!typedReq.auth?.uid) {
+      throw new UnauthorizedException('Missing auth context');
+    }
+
+    return this.usersService.getByFirebaseUid(typedReq.auth.uid);
+  }
 }

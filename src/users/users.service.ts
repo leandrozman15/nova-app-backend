@@ -21,4 +21,20 @@ export class UsersService {
       },
     });
   }
+
+  getByFirebaseUid(firebaseUid: string) {
+    return this.prisma.user.findUnique({
+      where: { firebaseUid },
+      select: {
+        id: true,
+        firebaseUid: true,
+        email: true,
+        name: true,
+        role: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
 }

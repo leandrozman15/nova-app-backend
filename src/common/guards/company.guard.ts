@@ -22,6 +22,12 @@ export class CompanyGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<RequestWithAuth>();
+    const requestUrl = request.originalUrl || request.url || '';
+
+    if (requestUrl.includes('/users/me')) {
+      return true;
+    }
+
     const rawCompanyId = request.headers['x-company-id'];
     const companyId = Array.isArray(rawCompanyId) ? rawCompanyId[0] : rawCompanyId;
 
