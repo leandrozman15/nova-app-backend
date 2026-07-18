@@ -182,6 +182,8 @@ model Team {
 
 model Player {
   id        String    @id @default(cuid())
+  authUid   String?   @unique
+  email     String?   @unique
   firstName String
   lastName  String
   dni       String?
@@ -204,6 +206,7 @@ model Player {
 
   @@index([companyId])
   @@index([companyId, clubId])
+  @@index([authUid])
   @@index([teamId])
   @@unique([companyId, dni])
 }

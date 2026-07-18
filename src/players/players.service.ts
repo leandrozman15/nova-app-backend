@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
+import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 
 @Injectable()
 export class PlayersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly firebaseAdminService: FirebaseAdminService,
+  ) {}
 
   list(companyId: string) {
     return this.prisma.player.findMany({
@@ -29,10 +33,25 @@ export class PlayersService {
     return player;
   }
 
+  async getByAuthUid(companyId: string, authUid: string) {
+    const player = await this.prisma.player.findFirst({
+      where: { companyId, authUid },
+      include: { club: true, team: true },
+    });
+
+    if (!player) {
+      throw new NotFoundException('Player not found');
+    }
+
+    return player;
+  }
+
   create(companyId: string, dto: CreatePlayerDto) {
     return this.prisma.player.create({
       data: {
         companyId,
+        authUid: dto.authUid,
+        email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
         clubId: dto.clubId,
@@ -51,6 +70,8 @@ export class PlayersService {
     return this.prisma.player.update({
       where: { id },
       data: {
+        authUid: dto.authUid,
+        email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
         clubId: dto.clubId,
@@ -69,5 +90,83 @@ export class PlayersService {
     await this.prisma.player.delete({ where: { id } });
 
     return { ok: true };
+  }
+
+  async provisionProfile(input: CreatePlayerDto & { companyId?: string }) {
+    const resolvedCompanyId =
+      input.companyId ||
+      (await this.prisma.club.findUnique({
+        where: { id: input.clubId },
+        select: { companyId: true },
+      }))?.companyId;
+
+    if (!resolvedCompanyId) {
+      throw new NotFoundException('Club not found');
+    }
+
+    const existing = await this.prisma.player.findFirst({
+      where: {
+        companyId: resolvedCompanyId,
+        OR: [
+          input.authUid ? { authUid: input.authUid } : undefined,
+          input.email ? { email: input.email } : undefined,
+        ].filter(Boolean) as Array<{ authUid?: string; email?: string }>,
+      },
+    });
+
+    const player = existing
+      ? await this.prisma.player.update({
+          where: { id: existing.id },
+          data: {
+            authUid: input.authUid,
+            email: input.email,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            clubId: input.clubId,
+            teamId: input.teamId,
+            dni: input.dni,
+            position: input.position,
+            birthDate: input.birthDate,
+            active: input.active,
+          },
+        })
+      : await this.prisma.player.create({
+          data: {
+            companyId: resolvedCompanyId,
+            authUid: input.authUid,
+            email: input.email,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            clubId: input.clubId,
+            teamId: input.teamId,
+            dni: input.dni,
+            position: input.position,
+            birthDate: input.birthDate,
+            active: input.active,
+          },
+        });
+
+    if (input.authUid) {
+      const claims: Record<string, unknown> = {
+        email: input.email,
+        name: `${input.firstName} ${input.lastName}`.trim(),
+        role: 'player',
+        roles: ['player'],
+        companyId: resolvedCompanyId,
+        clubId: input.clubId,
+        teamId: input.teamId,
+        isFan: false,
+      };
+
+      Object.keys(claims).forEach((key) => {
+        if (claims[key] === undefined) {
+          delete claims[key];
+        }
+      });
+
+      await this.firebaseAdminService.auth.setCustomUserClaims(input.authUid, claims);
+    }
+
+    return player;
   }
 }

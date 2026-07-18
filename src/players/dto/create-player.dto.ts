@@ -2,6 +2,14 @@ import { Type } from 'class-transformer';
 import { IsBoolean, IsDate, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreatePlayerDto {
+  @IsOptional()
+  @IsString()
+  authUid?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
   @IsString()
   @MaxLength(120)
   firstName!: string;

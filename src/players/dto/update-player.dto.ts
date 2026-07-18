@@ -4,6 +4,14 @@ import { IsBoolean, IsDate, IsOptional, IsString, MaxLength } from 'class-valida
 export class UpdatePlayerDto {
   @IsOptional()
   @IsString()
+  authUid?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   firstName?: string;
 
