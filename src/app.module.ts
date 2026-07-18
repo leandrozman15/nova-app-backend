@@ -7,6 +7,7 @@ import { FirebaseAuthGuard } from './common/guards/firebase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FirebaseModule } from './firebase/firebase.module';
 import { FinanceTransactionsModule } from './finance-transactions/finance-transactions.module';
+import { FacilitiesModule } from './facilities/facilities.module';
 import { HealthModule } from './health/health.module';
 import { InjuriesModule } from './injuries/injuries.module';
 import { ClubsModule } from './clubs/clubs.module';
@@ -36,6 +37,7 @@ import { UsersModule } from './users/users.module';
     StandingsModule,
     ShopModule,
     FinanceTransactionsModule,
+    FacilitiesModule,
     PlayerPaymentsModule,
     TrainingSessionsModule,
     InjuriesModule,

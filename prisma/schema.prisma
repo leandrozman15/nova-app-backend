@@ -88,6 +88,7 @@ model Company {
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
   shopOrders            ShopOrder[]
+  facilities            Facility[]
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
@@ -125,6 +126,7 @@ model Club {
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
   shopOrders            ShopOrder[]
+  facilities            Facility[]
   trainingSessions      TrainingSession[]
   injuryReports         InjuryReport[]
 
@@ -382,6 +384,33 @@ model ShopOrder {
   @@index([companyId, clubId])
   @@index([companyId, customerExternalId])
   @@index([companyId, status])
+}
+
+model Facility {
+  id           String   @id @default(cuid())
+  companyId    String
+  clubId       String
+  name         String
+  type         String
+  typeLabel    String?
+  status       String
+  statusLabel  String?
+  photoUrl     String?
+  address      String?
+  neighborhood String?
+  surfaceType  String?
+  services     Json?
+  capacity     Json?
+  meta         Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([clubId])
+  @@index([companyId, clubId])
 }
 
 model TrainingSession {
