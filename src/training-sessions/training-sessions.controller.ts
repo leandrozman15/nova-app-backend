@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
+import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
 import { requireCompanyId } from '../common/http/request-context';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { SetTrainingAttendanceDto } from './dto/set-training-attendance.dto';
@@ -19,12 +20,17 @@ export class TrainingSessionsController {
     @Query('teamId') teamId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('withMeta') withMeta?: string,
   ) {
     return this.trainingSessionsService.list(requireCompanyId(req), {
       clubId,
       teamId,
       from,
       to,
+      ...parsePagination(limit, offset),
+      withMeta: parseBooleanFlag(withMeta),
     });
   }
 

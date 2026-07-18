@@ -11,14 +11,44 @@ import { UpdateShopProductDto } from './dto/update-shop-product.dto';
 export class ShopService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listProducts(companyId: string, filters?: { clubId?: string }) {
-    return this.prisma.shopProduct.findMany({
-      where: {
-        companyId,
-        ...(filters?.clubId ? { clubId: filters.clubId } : {}),
+  async listProducts(
+    companyId: string,
+    filters?: { clubId?: string; skip?: number; take?: number; withMeta?: boolean },
+  ) {
+    const where = {
+      companyId,
+      ...(filters?.clubId ? { clubId: filters.clubId } : {}),
+    };
+
+    const baseQuery = {
+      where,
+      orderBy: { createdAt: 'desc' as const },
+      skip: filters?.skip,
+      take: filters?.take,
+    };
+
+    if (!filters?.withMeta) {
+      return this.prisma.shopProduct.findMany(baseQuery);
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.shopProduct.findMany(baseQuery),
+      this.prisma.shopProduct.count({ where }),
+    ]);
+
+    const offset = filters?.skip ?? 0;
+    const limit = filters?.take ?? null;
+    const hasMore = filters?.take ? offset + items.length < total : false;
+
+    return {
+      items,
+      meta: {
+        total,
+        offset,
+        limit,
+        hasMore,
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    };
   }
 
   createProduct(companyId: string, dto: CreateShopProductDto) {
@@ -63,16 +93,63 @@ export class ShopService {
     return { ok: true };
   }
 
-  listOrders(companyId: string, filters?: { clubId?: string; customerExternalId?: string }) {
-    return this.prisma.shopOrder.findMany({
-      where: {
-        companyId,
-        ...(filters?.clubId ? { clubId: filters.clubId } : {}),
-        ...(filters?.customerExternalId ? { customerExternalId: filters.customerExternalId } : {}),
+  async listOrders(
+    companyId: string,
+    filters?: {
+      clubId?: string;
+      customerExternalId?: string;
+      skip?: number;
+      take?: number;
+      withMeta?: boolean;
+    },
+  ) {
+    const where = {
+      companyId,
+      ...(filters?.clubId ? { clubId: filters.clubId } : {}),
+      ...(filters?.customerExternalId ? { customerExternalId: filters.customerExternalId } : {}),
+    };
+
+    const baseQuery = {
+      where,
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            images: true,
+            category: true,
+            status: true,
+          },
+        },
+        club: { select: { id: true, name: true } },
       },
-      include: { product: true, club: true },
-      orderBy: { createdAt: 'desc' },
-    });
+      orderBy: { createdAt: 'desc' as const },
+      skip: filters?.skip,
+      take: filters?.take,
+    };
+
+    if (!filters?.withMeta) {
+      return this.prisma.shopOrder.findMany(baseQuery);
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.shopOrder.findMany(baseQuery),
+      this.prisma.shopOrder.count({ where }),
+    ]);
+
+    const offset = filters?.skip ?? 0;
+    const limit = filters?.take ?? null;
+    const hasMore = filters?.take ? offset + items.length < total : false;
+
+    return {
+      items,
+      meta: {
+        total,
+        offset,
+        limit,
+        hasMore,
+      },
+    };
   }
 
   async createOrder(companyId: string, dto: CreateShopOrderDto) {

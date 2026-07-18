@@ -186,4 +186,12 @@ export class PlayersService {
 
     return player;
   }
+
+  approveRegistration(companyId: string, dto: CreatePlayerDto) {
+    return this.provisionProfile({
+      ...dto,
+      companyId,
+      active: dto.active ?? true,
+    });
+  }
 }

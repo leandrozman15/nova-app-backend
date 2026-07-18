@@ -57,12 +57,40 @@ export class FinanceTransactionsService {
     };
   }
 
-  list(companyId: string) {
-    return this.prisma.financialTransaction.findMany({
-      where: { companyId },
-      include: { club: true },
-      orderBy: { occurredAt: 'desc' },
-    });
+  async list(companyId: string, pagination?: { skip?: number; take?: number; withMeta?: boolean }) {
+    const where = { companyId };
+    const baseQuery = {
+      where,
+      include: {
+        club: { select: { id: true, name: true } },
+      },
+      orderBy: { occurredAt: 'desc' as const },
+      skip: pagination?.skip,
+      take: pagination?.take,
+    };
+
+    if (!pagination?.withMeta) {
+      return this.prisma.financialTransaction.findMany(baseQuery);
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.financialTransaction.findMany(baseQuery),
+      this.prisma.financialTransaction.count({ where }),
+    ]);
+
+    const offset = pagination?.skip ?? 0;
+    const limit = pagination?.take ?? null;
+    const hasMore = pagination?.take ? offset + items.length < total : false;
+
+    return {
+      items,
+      meta: {
+        total,
+        offset,
+        limit,
+        hasMore,
+      },
+    };
   }
 
   async getById(companyId: string, id: string) {

@@ -9,19 +9,59 @@ import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
 export class PlayerPaymentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(companyId: string, filters?: { clubId?: string; playerId?: string }) {
-    return this.prisma.playerPayment.findMany({
-      where: {
-        companyId,
-        ...(filters?.clubId ? { clubId: filters.clubId } : {}),
-        ...(filters?.playerId ? { playerId: filters.playerId } : {}),
-      },
+  async list(
+    companyId: string,
+    filters?: { clubId?: string; playerId?: string; skip?: number; take?: number; withMeta?: boolean },
+  ) {
+    const where = {
+      companyId,
+      ...(filters?.clubId ? { clubId: filters.clubId } : {}),
+      ...(filters?.playerId ? { playerId: filters.playerId } : {}),
+    };
+
+    const baseQuery = {
+      where,
       include: {
-        club: true,
-        player: true,
+        club: { select: { id: true, name: true } },
+        player: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            photoUrl: true,
+            clubId: true,
+            teamId: true,
+            active: true,
+          },
+        },
       },
-      orderBy: [{ year: 'desc' }, { month: 'desc' }, { createdAt: 'desc' }],
-    });
+      orderBy: [{ year: 'desc' as const }, { month: 'desc' as const }, { createdAt: 'desc' as const }],
+      skip: filters?.skip,
+      take: filters?.take,
+    };
+
+    if (!filters?.withMeta) {
+      return this.prisma.playerPayment.findMany(baseQuery);
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.playerPayment.findMany(baseQuery),
+      this.prisma.playerPayment.count({ where }),
+    ]);
+
+    const offset = filters?.skip ?? 0;
+    const limit = filters?.take ?? null;
+    const hasMore = filters?.take ? offset + items.length < total : false;
+
+    return {
+      items,
+      meta: {
+        total,
+        offset,
+        limit,
+        hasMore,
+      },
+    };
   }
 
   async getById(companyId: string, id: string) {

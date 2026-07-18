@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
 
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -16,6 +16,35 @@ export class UsersController {
   }
 
   @Public()
+  @Post('bootstrap-admin')
+  async bootstrapAdmin(@Req() req: unknown) {
+    const typedReq = req as RequestWithAuth & { body?: any };
+    const body = typedReq.body ?? {};
+
+    if (!body.uid) {
+      throw new UnauthorizedException('Missing user id');
+    }
+
+    return this.usersService.bootstrapFirstAdmin({
+      uid: body.uid,
+      email: body.email,
+      name: body.name,
+    });
+  }
+
+  @Roles(
+    'admin',
+    'fed_admin',
+    'league_admin',
+    'municipal_secretary',
+    'municipal_admin',
+    'club_admin',
+    'coordinator',
+    'coach_lvl1',
+    'coach_lvl2',
+    'coach',
+    'manager',
+  )
   @Post('provision-profile')
   async provisionProfile(@Req() req: unknown) {
     const typedReq = req as RequestWithAuth & { body?: any };
@@ -61,5 +90,17 @@ export class UsersController {
     }
 
     return this.usersService.getByFirebaseUid(typedReq.auth.uid);
+  }
+
+  @Roles('admin', 'manager')
+  @Delete(':firebaseUid')
+  async removeByFirebaseUid(@Req() req: unknown, @Param('firebaseUid') firebaseUid: string) {
+    const typedReq = req as RequestWithAuth;
+
+    if (!typedReq.companyId) {
+      throw new UnauthorizedException('Missing tenant in request');
+    }
+
+    return this.usersService.removeByFirebaseUid(typedReq.companyId, firebaseUid);
   }
 }

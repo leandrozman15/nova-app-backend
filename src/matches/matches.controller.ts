@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
+import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
 import { requireCompanyId } from '../common/http/request-context';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
@@ -17,8 +18,16 @@ export class MatchesController {
 
   @Roles('admin', 'manager', 'coach')
   @Get()
-  list(@Req() req: unknown) {
-    return this.matchesService.list(requireCompanyId(req));
+  list(
+    @Req() req: unknown,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('withMeta') withMeta?: string,
+  ) {
+    return this.matchesService.list(requireCompanyId(req), {
+      ...parsePagination(limit, offset),
+      withMeta: parseBooleanFlag(withMeta),
+    });
   }
 
   @Roles('admin', 'manager', 'coach')

@@ -29,10 +29,15 @@ export class CompanyGuard implements CanActivate {
     }
 
     const rawCompanyId = request.headers['x-company-id'];
-    const companyId = Array.isArray(rawCompanyId) ? rawCompanyId[0] : rawCompanyId;
+    const headerCompanyId = Array.isArray(rawCompanyId) ? rawCompanyId[0] : rawCompanyId;
+    const companyId = headerCompanyId || request.auth?.companyId;
 
     if (!companyId || typeof companyId !== 'string') {
       throw new UnauthorizedException('Missing X-Company-Id header');
+    }
+
+    if (request.auth?.companyId && request.auth.companyId !== companyId) {
+      throw new UnauthorizedException('Tenant header does not match token claims');
     }
 
     request.companyId = companyId;

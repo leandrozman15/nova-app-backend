@@ -14,16 +14,42 @@ import { UpdateMatchDto } from './dto/update-match.dto';
 export class MatchesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(companyId: string) {
-    return this.prisma.match.findMany({
-      where: { companyId },
+  async list(companyId: string, pagination?: { skip?: number; take?: number; withMeta?: boolean }) {
+    const where = { companyId };
+    const baseQuery = {
+      where,
       include: {
-        league: true,
-        homeTeam: true,
-        awayTeam: true,
+        league: { select: { id: true, name: true, season: true } },
+        homeTeam: { select: { id: true, name: true } },
+        awayTeam: { select: { id: true, name: true } },
       },
-      orderBy: { scheduledAt: 'desc' },
-    });
+      orderBy: { scheduledAt: 'desc' as const },
+      skip: pagination?.skip,
+      take: pagination?.take,
+    };
+
+    if (!pagination?.withMeta) {
+      return this.prisma.match.findMany(baseQuery);
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.match.findMany(baseQuery),
+      this.prisma.match.count({ where }),
+    ]);
+
+    const offset = pagination?.skip ?? 0;
+    const limit = pagination?.take ?? null;
+    const hasMore = pagination?.take ? offset + items.length < total : false;
+
+    return {
+      items,
+      meta: {
+        total,
+        offset,
+        limit,
+        hasMore,
+      },
+    };
   }
 
   async getById(companyId: string, id: string) {
@@ -74,7 +100,7 @@ export class MatchesService {
   }
 
   async update(companyId: string, id: string, dto: UpdateMatchDto) {
-    await this.getById(companyId, id);
+    await this.ensureMatchExists(companyId, id);
 
     if (dto.homeTeamId && dto.awayTeamId && dto.homeTeamId === dto.awayTeamId) {
       throw new BadRequestException('Home and away teams must be different');
@@ -97,7 +123,7 @@ export class MatchesService {
   }
 
   async setResult(companyId: string, id: string, dto: SetMatchResultDto) {
-    await this.getById(companyId, id);
+    await this.ensureMatchExists(companyId, id);
 
     return this.prisma.match.update({
       where: { id },
@@ -110,7 +136,7 @@ export class MatchesService {
   }
 
   async listEvents(companyId: string, matchId: string) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     return this.prisma.matchEvent.findMany({
       where: { companyId, matchId },
@@ -120,7 +146,7 @@ export class MatchesService {
   }
 
   async addEvent(companyId: string, matchId: string, dto: CreateMatchEventDto) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     return this.prisma.matchEvent.create({
       data: {
@@ -136,7 +162,7 @@ export class MatchesService {
   }
 
   async listCallups(companyId: string, matchId: string) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     return this.prisma.matchCallup.findMany({
       where: { companyId, matchId },
@@ -145,7 +171,7 @@ export class MatchesService {
   }
 
   async setCallup(companyId: string, matchId: string, dto: SetMatchCallupDto) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     return this.prisma.matchCallup.upsert({
       where: {
@@ -176,10 +202,11 @@ export class MatchesService {
     callupId: string,
     dto: UpdateMatchCallupStatusDto,
   ) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     const callup = await this.prisma.matchCallup.findFirst({
       where: { companyId, matchId, id: callupId },
+      select: { id: true },
     });
 
     if (!callup) {
@@ -195,10 +222,11 @@ export class MatchesService {
   }
 
   async removeCallup(companyId: string, matchId: string, callupId: string) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     const callup = await this.prisma.matchCallup.findFirst({
       where: { companyId, matchId, id: callupId },
+      select: { id: true },
     });
 
     if (!callup) {
@@ -211,7 +239,7 @@ export class MatchesService {
   }
 
   async publishCallups(companyId: string, matchId: string) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
     const publishedAt = new Date();
 
     await this.prisma.$transaction([
@@ -229,7 +257,7 @@ export class MatchesService {
   }
 
   async updateOperations(companyId: string, matchId: string, dto: UpdateMatchOperationsDto) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     return this.prisma.match.update({
       where: { id: matchId },
@@ -241,7 +269,7 @@ export class MatchesService {
   }
 
   async submitLineup(companyId: string, matchId: string) {
-    await this.getById(companyId, matchId);
+    await this.ensureMatchExists(companyId, matchId);
 
     return this.prisma.match.update({
       where: { id: matchId },
@@ -280,10 +308,21 @@ export class MatchesService {
   }
 
   async remove(companyId: string, id: string) {
-    await this.getById(companyId, id);
+    await this.ensureMatchExists(companyId, id);
 
     await this.prisma.match.delete({ where: { id } });
 
     return { ok: true };
+  }
+
+  private async ensureMatchExists(companyId: string, id: string) {
+    const match = await this.prisma.match.findFirst({
+      where: { companyId, id },
+      select: { id: true },
+    });
+
+    if (!match) {
+      throw new NotFoundException('Match not found');
+    }
   }
 }

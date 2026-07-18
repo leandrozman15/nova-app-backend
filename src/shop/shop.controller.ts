@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
+import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
 import { requireCompanyId } from '../common/http/request-context';
 import { CreateShopOrderDto } from './dto/create-shop-order.dto';
 import { CreateShopProductDto } from './dto/create-shop-product.dto';
@@ -14,8 +15,18 @@ export class ShopController {
 
   @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get('products')
-  listProducts(@Req() req: unknown, @Query('clubId') clubId?: string) {
-    return this.shopService.listProducts(requireCompanyId(req), { clubId });
+  listProducts(
+    @Req() req: unknown,
+    @Query('clubId') clubId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('withMeta') withMeta?: string,
+  ) {
+    return this.shopService.listProducts(requireCompanyId(req), {
+      clubId,
+      ...parsePagination(limit, offset),
+      withMeta: parseBooleanFlag(withMeta),
+    });
   }
 
   @Roles('admin', 'manager')
@@ -42,8 +53,16 @@ export class ShopController {
     @Req() req: unknown,
     @Query('clubId') clubId?: string,
     @Query('customerExternalId') customerExternalId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('withMeta') withMeta?: string,
   ) {
-    return this.shopService.listOrders(requireCompanyId(req), { clubId, customerExternalId });
+    return this.shopService.listOrders(requireCompanyId(req), {
+      clubId,
+      customerExternalId,
+      ...parsePagination(limit, offset),
+      withMeta: parseBooleanFlag(withMeta),
+    });
   }
 
   @Roles('admin', 'manager', 'coach', 'player', 'member')

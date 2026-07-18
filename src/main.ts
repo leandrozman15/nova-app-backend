@@ -9,17 +9,19 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
+      forbidNonWhitelisted: true,
       transform: true,
-      forbidUnknownValues: false,
+      forbidUnknownValues: true,
     }),
   );
 
   const config = app.get(ConfigService);
   const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
+  const allowCredentials = corsOrigin !== '*';
 
   app.enableCors({
     origin: corsOrigin,
-    credentials: true,
+    credentials: allowCredentials,
   });
 
   const port = Number(config.get<string>('PORT', '3001'));

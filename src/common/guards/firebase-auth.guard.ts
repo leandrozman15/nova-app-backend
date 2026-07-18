@@ -39,6 +39,7 @@ export class FirebaseAuthGuard implements CanActivate {
       request.auth = {
         uid: decoded.uid,
         email: decoded.email,
+        companyId: typeof decoded.companyId === 'string' ? decoded.companyId : undefined,
       };
       return true;
     } catch {

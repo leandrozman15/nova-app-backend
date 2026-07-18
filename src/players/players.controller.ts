@@ -1,6 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UnauthorizedException } from '@nestjs/common';
 
-import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireCompanyId } from '../common/http/request-context';
 import { CreatePlayerDto } from './dto/create-player.dto';
@@ -35,10 +34,28 @@ export class PlayersController {
     return this.playersService.getById(requireCompanyId(req), id);
   }
 
-  @Public()
+  @Roles(
+    'admin',
+    'fed_admin',
+    'league_admin',
+    'municipal_secretary',
+    'municipal_admin',
+    'club_admin',
+    'coordinator',
+    'coach_lvl1',
+    'coach_lvl2',
+    'coach',
+    'manager',
+  )
   @Post('provision-profile')
   provisionProfile(@Body() dto: CreatePlayerDto & { companyId?: string }) {
     return this.playersService.provisionProfile(dto);
+  }
+
+  @Roles('admin', 'manager', 'club_admin', 'coach', 'coordinator')
+  @Post('approve-registration')
+  approveRegistration(@Req() req: unknown, @Body() dto: CreatePlayerDto) {
+    return this.playersService.approveRegistration(requireCompanyId(req), dto);
   }
 
   @Roles('admin', 'manager')

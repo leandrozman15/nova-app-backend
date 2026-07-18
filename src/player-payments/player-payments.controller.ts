@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
+import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
 import { requireCompanyId } from '../common/http/request-context';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
@@ -16,8 +17,16 @@ export class PlayerPaymentsController {
     @Req() req: unknown,
     @Query('clubId') clubId?: string,
     @Query('playerId') playerId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('withMeta') withMeta?: string,
   ) {
-    return this.playerPaymentsService.list(requireCompanyId(req), { clubId, playerId });
+    return this.playerPaymentsService.list(requireCompanyId(req), {
+      clubId,
+      playerId,
+      ...parsePagination(limit, offset),
+      withMeta: parseBooleanFlag(withMeta),
+    });
   }
 
   @Roles('admin', 'manager', 'coach', 'player', 'member')
