@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
 
@@ -21,7 +21,20 @@ export class FirebaseAdminService implements OnModuleInit {
       throw new Error('Missing FIREBASE_ADMIN_CREDENTIALS_PATH');
     }
 
-    const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
+    let serviceAccount: Record<string, unknown>;
+
+    // Render commonly passes a mounted file path, while some environments pass raw JSON.
+    if (existsSync(serviceAccountPath)) {
+      serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
+    } else {
+      try {
+        serviceAccount = JSON.parse(serviceAccountPath);
+      } catch {
+        throw new Error(
+          'Invalid Firebase Admin credentials. Set FIREBASE_ADMIN_CREDENTIALS_PATH to a valid file path or JSON string.',
+        );
+      }
+    }
 
     initializeApp({
       credential: cert(serviceAccount),
