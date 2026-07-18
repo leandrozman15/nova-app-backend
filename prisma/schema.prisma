@@ -147,6 +147,7 @@ model Club {
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   municipality Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
   league       League?       @relation("LeagueClubs", fields: [leagueId], references: [id], onDelete: SetNull)
+  primaryLeagues League[]    @relation("ClubPrimaryLeague")
   teams        Team[]
   players      Player[]
   financialTransactions FinancialTransaction[]
@@ -175,7 +176,7 @@ model League {
   updatedAt DateTime @updatedAt
 
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  club         Club?         @relation(fields: [clubId], references: [id], onDelete: SetNull)
+  club         Club?         @relation("ClubPrimaryLeague", fields: [clubId], references: [id], onDelete: SetNull)
   municipality Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
   clubs        Club[]        @relation("LeagueClubs")
   teams        Team[]
