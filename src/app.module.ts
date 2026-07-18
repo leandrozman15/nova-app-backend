@@ -6,11 +6,14 @@ import { CompanyGuard } from './common/guards/company.guard';
 import { FirebaseAuthGuard } from './common/guards/firebase-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FirebaseModule } from './firebase/firebase.module';
+import { FinanceTransactionsModule } from './finance-transactions/finance-transactions.module';
 import { HealthModule } from './health/health.module';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
+import { MatchesModule } from './matches/matches.module';
 import { PlayersModule } from './players/players.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { StandingsModule } from './standings/standings.module';
 import { TeamsModule } from './teams/teams.module';
 import { UsersModule } from './users/users.module';
 
@@ -25,6 +28,9 @@ import { UsersModule } from './users/users.module';
     LeaguesModule,
     TeamsModule,
     PlayersModule,
+    MatchesModule,
+    StandingsModule,
+    FinanceTransactionsModule,
   ],
   providers: [
     {
