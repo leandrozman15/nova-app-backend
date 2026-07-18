@@ -105,6 +105,18 @@ export class PlayersService {
       throw new NotFoundException('Club not found');
     }
 
+    if (authUid) {
+      const firebaseUser = await this.firebaseAdminService.auth.getUser(authUid).catch(() => null);
+
+      if (!firebaseUser) {
+        throw new NotFoundException('Player auth user not found');
+      }
+
+      if (firebaseUser && input.email && firebaseUser.email && firebaseUser.email !== input.email) {
+        throw new NotFoundException('Player profile mismatch');
+      }
+    }
+
     const existing = await this.prisma.player.findFirst({
       where: {
         companyId: resolvedCompanyId,
