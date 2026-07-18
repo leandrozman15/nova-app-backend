@@ -14,6 +14,10 @@ export class CreatePlayerDto {
   @IsString()
   email?: string;
 
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
   @IsString()
   @MaxLength(120)
   firstName!: string;

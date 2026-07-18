@@ -16,6 +16,10 @@ export class UpdatePlayerDto {
 
   @IsOptional()
   @IsString()
+  photoUrl?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   firstName?: string;
 

@@ -52,6 +52,7 @@ export class PlayersService {
         companyId,
         authUid: dto.authUid ?? dto.uid,
         email: dto.email,
+        photoUrl: dto.photoUrl,
         firstName: dto.firstName,
         lastName: dto.lastName,
         clubId: dto.clubId,
@@ -72,6 +73,7 @@ export class PlayersService {
       data: {
         authUid: dto.authUid ?? dto.uid,
         email: dto.email,
+        photoUrl: dto.photoUrl,
         firstName: dto.firstName,
         lastName: dto.lastName,
         clubId: dto.clubId,
@@ -133,6 +135,7 @@ export class PlayersService {
           data: {
             authUid,
             email: input.email,
+            photoUrl: input.photoUrl,
             firstName: input.firstName,
             lastName: input.lastName,
             clubId: input.clubId,
@@ -148,6 +151,7 @@ export class PlayersService {
             companyId: resolvedCompanyId,
             authUid,
             email: input.email,
+            photoUrl: input.photoUrl,
             firstName: input.firstName,
             lastName: input.lastName,
             clubId: input.clubId,

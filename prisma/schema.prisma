@@ -184,6 +184,7 @@ model Player {
   id        String    @id @default(cuid())
   authUid   String?   @unique
   email     String?   @unique
+  photoUrl  String?
   firstName String
   lastName  String
   dni       String?
