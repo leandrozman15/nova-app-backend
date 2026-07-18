@@ -10,13 +10,13 @@ import { TeamsService } from './teams.service';
 export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get()
   list(@Req() req: unknown) {
     return this.teamsService.list(requireCompanyId(req));
   }
 
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get(':id')
   getById(@Req() req: unknown, @Param('id') id: string) {
     return this.teamsService.getById(requireCompanyId(req), id);

@@ -16,7 +16,7 @@ export class PlayersController {
     return this.playersService.list(requireCompanyId(req));
   }
 
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get(':id')
   getById(@Req() req: unknown, @Param('id') id: string) {
     return this.playersService.getById(requireCompanyId(req), id);
