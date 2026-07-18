@@ -18,7 +18,11 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
+  users   User[]
+  clubs   Club[]
+  leagues League[]
+  teams   Team[]
+  players Player[]
 }
 
 model User {
@@ -35,4 +39,83 @@ model User {
 
   @@index([companyId])
   @@index([companyId, role])
+}
+
+model Club {
+  id               String   @id @default(cuid())
+  name             String
+  municipalityName String?
+  companyId        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  leagues League[]
+  teams   Team[]
+  players Player[]
+
+  @@index([companyId])
+  @@index([companyId, name])
+}
+
+model League {
+  id        String   @id @default(cuid())
+  name      String
+  season    String?
+  companyId String
+  clubId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club?   @relation(fields: [clubId], references: [id], onDelete: SetNull)
+  teams   Team[]
+
+  @@index([companyId])
+  @@index([companyId, name])
+  @@index([clubId])
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  category  String?
+  companyId String
+  clubId    String
+  leagueId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  league  League? @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+  players Player[]
+
+  @@index([companyId])
+  @@index([companyId, clubId])
+  @@index([leagueId])
+}
+
+model Player {
+  id        String    @id @default(cuid())
+  firstName String
+  lastName  String
+  dni       String?
+  position  String?
+  birthDate DateTime?
+  active    Boolean   @default(true)
+  companyId String
+  clubId    String
+  teamId    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  team    Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([companyId, clubId])
+  @@index([teamId])
+  @@unique([companyId, dni])
 }
