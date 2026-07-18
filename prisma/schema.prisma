@@ -28,6 +28,12 @@ enum MatchEventType {
   note
 }
 
+enum MatchCallupStatus {
+  pending
+  confirmed
+  unavailable
+}
+
 enum FinancialTransactionType {
   income
   expense
@@ -63,6 +69,7 @@ model Company {
   players               Player[]
   matches               Match[]
   matchEvents           MatchEvent[]
+  matchCallups          MatchCallup[]
   financialTransactions FinancialTransaction[]
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
@@ -187,6 +194,10 @@ model Match {
   homeScore   Int         @default(0)
   awayScore   Int         @default(0)
   venue       String?
+  busDepartureTime String?
+  jersey      String?
+  callupsPublishedAt DateTime?
+  lineupSubmittedAt DateTime?
   notes       String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -196,12 +207,36 @@ model Match {
   homeTeam  Team    @relation("HomeTeamMatches", fields: [homeTeamId], references: [id], onDelete: Cascade)
   awayTeam  Team    @relation("AwayTeamMatches", fields: [awayTeamId], references: [id], onDelete: Cascade)
   events    MatchEvent[]
+  callups   MatchCallup[]
 
   @@index([companyId])
   @@index([leagueId])
   @@index([homeTeamId])
   @@index([awayTeamId])
   @@index([companyId, status])
+}
+
+model MatchCallup {
+  id               String           @id @default(cuid())
+  companyId        String
+  matchId          String
+  playerExternalId String
+  playerName       String
+  playerPhoto      String?
+  status           MatchCallupStatus @default(pending)
+  publishedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  match   Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerExternalId])
+  @@index([companyId])
+  @@index([matchId])
+  @@index([playerExternalId])
+  @@index([companyId, playerExternalId])
+  @@index([companyId, publishedAt])
 }
 
 model MatchEvent {

@@ -22,6 +22,16 @@ export class CreateMatchDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(10)
+  busDepartureTime?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  jersey?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(400)
   notes?: string;
 }

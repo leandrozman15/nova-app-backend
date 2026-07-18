@@ -1,10 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { MatchEventType, MatchStatus } from '@prisma/client';
+import { MatchCallupStatus, MatchEventType, MatchStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
+import { SetMatchCallupDto } from './dto/set-match-callup.dto';
 import { SetMatchResultDto } from './dto/set-match-result.dto';
+import { UpdateMatchCallupStatusDto } from './dto/update-match-callup-status.dto';
+import { UpdateMatchOperationsDto } from './dto/update-match-operations.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 
 @Injectable()
@@ -30,6 +33,9 @@ export class MatchesService {
         league: true,
         homeTeam: true,
         awayTeam: true,
+        callups: {
+          orderBy: { createdAt: 'asc' },
+        },
         events: {
           include: {
             team: true,
@@ -61,6 +67,8 @@ export class MatchesService {
         scheduledAt: dto.scheduledAt,
         venue: dto.venue,
         notes: dto.notes,
+        busDepartureTime: dto.busDepartureTime,
+        jersey: dto.jersey,
       },
     });
   }
@@ -81,6 +89,8 @@ export class MatchesService {
         scheduledAt: dto.scheduledAt,
         venue: dto.venue,
         notes: dto.notes,
+        busDepartureTime: dto.busDepartureTime,
+        jersey: dto.jersey,
         status: dto.status as MatchStatus | undefined,
       },
     });
@@ -121,6 +131,150 @@ export class MatchesService {
         minute: dto.minute,
         type: dto.type as MatchEventType,
         note: dto.note,
+      },
+    });
+  }
+
+  async listCallups(companyId: string, matchId: string) {
+    await this.getById(companyId, matchId);
+
+    return this.prisma.matchCallup.findMany({
+      where: { companyId, matchId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async setCallup(companyId: string, matchId: string, dto: SetMatchCallupDto) {
+    await this.getById(companyId, matchId);
+
+    return this.prisma.matchCallup.upsert({
+      where: {
+        matchId_playerExternalId: {
+          matchId,
+          playerExternalId: dto.playerExternalId,
+        },
+      },
+      create: {
+        companyId,
+        matchId,
+        playerExternalId: dto.playerExternalId,
+        playerName: dto.playerName,
+        playerPhoto: dto.playerPhoto,
+        status: (dto.status as MatchCallupStatus | undefined) ?? MatchCallupStatus.pending,
+      },
+      update: {
+        playerName: dto.playerName,
+        playerPhoto: dto.playerPhoto,
+        status: dto.status as MatchCallupStatus | undefined,
+      },
+    });
+  }
+
+  async updateCallupStatus(
+    companyId: string,
+    matchId: string,
+    callupId: string,
+    dto: UpdateMatchCallupStatusDto,
+  ) {
+    await this.getById(companyId, matchId);
+
+    const callup = await this.prisma.matchCallup.findFirst({
+      where: { companyId, matchId, id: callupId },
+    });
+
+    if (!callup) {
+      throw new NotFoundException('Match callup not found');
+    }
+
+    return this.prisma.matchCallup.update({
+      where: { id: callupId },
+      data: {
+        status: dto.status as MatchCallupStatus,
+      },
+    });
+  }
+
+  async removeCallup(companyId: string, matchId: string, callupId: string) {
+    await this.getById(companyId, matchId);
+
+    const callup = await this.prisma.matchCallup.findFirst({
+      where: { companyId, matchId, id: callupId },
+    });
+
+    if (!callup) {
+      throw new NotFoundException('Match callup not found');
+    }
+
+    await this.prisma.matchCallup.delete({ where: { id: callupId } });
+
+    return { ok: true };
+  }
+
+  async publishCallups(companyId: string, matchId: string) {
+    await this.getById(companyId, matchId);
+    const publishedAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.match.update({
+        where: { id: matchId },
+        data: { callupsPublishedAt: publishedAt },
+      }),
+      this.prisma.matchCallup.updateMany({
+        where: { companyId, matchId },
+        data: { publishedAt },
+      }),
+    ]);
+
+    return this.getById(companyId, matchId);
+  }
+
+  async updateOperations(companyId: string, matchId: string, dto: UpdateMatchOperationsDto) {
+    await this.getById(companyId, matchId);
+
+    return this.prisma.match.update({
+      where: { id: matchId },
+      data: {
+        busDepartureTime: dto.busDepartureTime,
+        jersey: dto.jersey,
+      },
+    });
+  }
+
+  async submitLineup(companyId: string, matchId: string) {
+    await this.getById(companyId, matchId);
+
+    return this.prisma.match.update({
+      where: { id: matchId },
+      data: {
+        lineupSubmittedAt: new Date(),
+      },
+    });
+  }
+
+  async listPlayerCallups(companyId: string, playerExternalId: string) {
+    if (!playerExternalId) {
+      throw new BadRequestException('Missing player uid');
+    }
+
+    return this.prisma.matchCallup.findMany({
+      where: {
+        companyId,
+        playerExternalId,
+        publishedAt: { not: null },
+      },
+      include: {
+        match: {
+          include: {
+            homeTeam: true,
+            awayTeam: true,
+            league: true,
+          },
+        },
+      },
+      orderBy: {
+        match: {
+          scheduledAt: 'asc',
+        },
       },
     });
   }
