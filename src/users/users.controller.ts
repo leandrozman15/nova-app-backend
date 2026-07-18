@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Req, UnauthorizedException } from '@nestjs/common';
 
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -13,6 +13,31 @@ export class UsersController {
   @Get('bootstrap')
   async bootstrap() {
     return { hasAdminUsers: await this.usersService.hasAdminUsers() };
+  }
+
+  @Public()
+  @Post('provision-profile')
+  async provisionProfile(@Req() req: unknown) {
+    const typedReq = req as RequestWithAuth & { body?: any };
+    const body = typedReq.body ?? {};
+
+    if (!body.uid || !body.role) {
+      throw new UnauthorizedException('Missing profile data');
+    }
+
+    return this.usersService.provisionProfileClaims({
+      uid: body.uid,
+      email: body.email,
+      name: body.name,
+      role: body.role,
+      roles: Array.isArray(body.roles) ? body.roles : undefined,
+      companyId: body.companyId,
+      clubId: body.clubId,
+      leagueId: body.leagueId,
+      municipalityId: body.municipalityId,
+      teamId: body.teamId,
+      isFan: body.isFan,
+    });
   }
 
   @Roles('admin', 'manager')
