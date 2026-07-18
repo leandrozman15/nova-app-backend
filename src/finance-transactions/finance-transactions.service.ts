@@ -9,6 +9,54 @@ import { UpdateFinanceTransactionDto } from './dto/update-finance-transaction.dt
 export class FinanceTransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async summary(companyId: string, filters?: { from?: string; to?: string; clubId?: string }) {
+    const where = {
+      companyId,
+      ...(filters?.clubId ? { clubId: filters.clubId } : {}),
+      ...(filters?.from || filters?.to
+        ? {
+            occurredAt: {
+              ...(filters?.from ? { gte: new Date(filters.from) } : {}),
+              ...(filters?.to ? { lte: new Date(filters.to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [incomeAgg, expenseAgg, totalCount] = await Promise.all([
+      this.prisma.financialTransaction.aggregate({
+        where: {
+          ...where,
+          type: FinancialTransactionType.income,
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.financialTransaction.aggregate({
+        where: {
+          ...where,
+          type: FinancialTransactionType.expense,
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.financialTransaction.count({ where }),
+    ]);
+
+    const income = Number(incomeAgg._sum.amount ?? 0);
+    const expense = Number(expenseAgg._sum.amount ?? 0);
+
+    return {
+      totalIncome: income,
+      totalExpense: expense,
+      balance: income - expense,
+      transactionCount: totalCount,
+      filters: {
+        from: filters?.from ?? null,
+        to: filters?.to ?? null,
+        clubId: filters?.clubId ?? null,
+      },
+    };
+  }
+
   list(companyId: string) {
     return this.prisma.financialTransaction.findMany({
       where: { companyId },

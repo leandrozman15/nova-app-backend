@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireCompanyId } from '../common/http/request-context';
@@ -9,6 +9,21 @@ import { FinanceTransactionsService } from './finance-transactions.service';
 @Controller('finance/transactions')
 export class FinanceTransactionsController {
   constructor(private readonly financeTransactionsService: FinanceTransactionsService) {}
+
+  @Roles('admin', 'manager')
+  @Get('summary')
+  summary(
+    @Req() req: unknown,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('clubId') clubId?: string,
+  ) {
+    return this.financeTransactionsService.summary(requireCompanyId(req), {
+      from,
+      to,
+      clubId,
+    });
+  }
 
   @Roles('admin', 'manager')
   @Get()
