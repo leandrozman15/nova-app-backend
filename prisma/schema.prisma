@@ -33,6 +33,23 @@ enum FinancialTransactionType {
   expense
 }
 
+enum TrainingSessionStatus {
+  scheduled
+  completed
+  canceled
+}
+
+enum AttendanceStatus {
+  going
+  not_going
+  unknown
+}
+
+enum InjuryStatus {
+  active
+  recovered
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -47,6 +64,9 @@ model Company {
   matches               Match[]
   matchEvents           MatchEvent[]
   financialTransactions FinancialTransaction[]
+  trainingSessions      TrainingSession[]
+  trainingAttendances   TrainingAttendance[]
+  injuryReports         InjuryReport[]
 }
 
 model User {
@@ -78,6 +98,8 @@ model Club {
   teams   Team[]
   players Player[]
   financialTransactions FinancialTransaction[]
+  trainingSessions      TrainingSession[]
+  injuryReports         InjuryReport[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -119,6 +141,8 @@ model Team {
   homeMatches Match[] @relation("HomeTeamMatches")
   awayMatches Match[] @relation("AwayTeamMatches")
   matchEvents MatchEvent[]
+  trainingSessions TrainingSession[]
+  injuryReports InjuryReport[]
 
   @@index([companyId])
   @@index([companyId, clubId])
@@ -143,6 +167,8 @@ model Player {
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   team    Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
   matchEvents MatchEvent[]
+  trainingAttendances TrainingAttendance[]
+  injuryReports InjuryReport[]
 
   @@index([companyId])
   @@index([companyId, clubId])
@@ -221,4 +247,75 @@ model FinancialTransaction {
   @@index([clubId])
   @@index([companyId, type])
   @@index([companyId, occurredAt])
+}
+
+model TrainingSession {
+  id          String                @id @default(cuid())
+  companyId   String
+  clubId      String
+  teamId      String?
+  title       String
+  scheduledAt DateTime
+  status      TrainingSessionStatus @default(scheduled)
+  location    String?
+  notes       String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club        Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  team        Team?                 @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  attendances TrainingAttendance[]
+
+  @@index([companyId])
+  @@index([clubId])
+  @@index([teamId])
+  @@index([scheduledAt])
+  @@index([companyId, scheduledAt])
+}
+
+model TrainingAttendance {
+  id         String           @id @default(cuid())
+  companyId  String
+  sessionId  String
+  playerId   String
+  status     AttendanceStatus @default(unknown)
+  note       String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  session TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  player  Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, playerId])
+  @@index([companyId])
+  @@index([sessionId])
+  @@index([playerId])
+  @@index([companyId, status])
+}
+
+model InjuryReport {
+  id          String       @id @default(cuid())
+  companyId   String
+  clubId      String
+  teamId      String?
+  playerId    String
+  description String
+  status      InjuryStatus @default(active)
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  team    Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([clubId])
+  @@index([teamId])
+  @@index([playerId])
+  @@index([companyId, status])
 }

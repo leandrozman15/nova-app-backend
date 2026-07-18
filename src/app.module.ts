@@ -8,6 +8,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { FirebaseModule } from './firebase/firebase.module';
 import { FinanceTransactionsModule } from './finance-transactions/finance-transactions.module';
 import { HealthModule } from './health/health.module';
+import { InjuriesModule } from './injuries/injuries.module';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
 import { MatchesModule } from './matches/matches.module';
@@ -15,6 +16,7 @@ import { PlayersModule } from './players/players.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StandingsModule } from './standings/standings.module';
 import { TeamsModule } from './teams/teams.module';
+import { TrainingSessionsModule } from './training-sessions/training-sessions.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -31,6 +33,8 @@ import { UsersModule } from './users/users.module';
     MatchesModule,
     StandingsModule,
     FinanceTransactionsModule,
+    TrainingSessionsModule,
+    InjuriesModule,
   ],
   providers: [
     {
