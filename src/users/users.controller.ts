@@ -1,5 +1,6 @@
 import { Controller, Get, Req, UnauthorizedException } from '@nestjs/common';
 
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 import { UsersService } from './users.service';
@@ -7,6 +8,12 @@ import { UsersService } from './users.service';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Public()
+  @Get('bootstrap')
+  async bootstrap() {
+    return { hasAdminUsers: await this.usersService.hasAdminUsers() };
+  }
 
   @Roles('admin', 'manager')
   @Get()

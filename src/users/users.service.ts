@@ -37,4 +37,12 @@ export class UsersService {
       },
     });
   }
+
+  async hasAdminUsers() {
+    const count = await this.prisma.user.count({
+      where: { role: 'admin' },
+    });
+
+    return count > 0;
+  }
 }
