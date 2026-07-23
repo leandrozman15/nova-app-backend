@@ -22,4 +22,9 @@ export class CreateMunicipalityDto {
   @IsString()
   @MaxLength(40)
   status?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  primaryAdminEmail?: string;
 }
