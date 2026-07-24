@@ -94,6 +94,7 @@ model Company {
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
+  membershipPlans       MembershipPlan[]
 }
 
 model Municipality {
@@ -158,6 +159,7 @@ model Club {
   facilityRentals       FacilityRental[]
   trainingSessions      TrainingSession[]
   injuryReports         InjuryReport[]
+  membershipPlans       MembershipPlan[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -214,34 +216,51 @@ model Team {
 }
 
 model Player {
-  id        String    @id @default(cuid())
-  authUid   String?   @unique
-  email     String?   @unique
-  photoUrl  String?
-  firstName String
-  lastName  String
-  dni       String?
-  position  String?
-  birthDate DateTime?
-  active    Boolean   @default(true)
-  companyId String
-  clubId    String
-  teamId    String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  authUid            String?   @unique
+  email              String?   @unique
+  photoUrl           String?
+  firstName          String
+  lastName           String
+  dni                String?
+  position           String?
+  birthDate          DateTime?
+  phone              String?
+  address            String?
+  locality           String?
+  province           String?
+  active             Boolean   @default(true)
+  companyId          String
+  clubId             String
+  teamId             String?
+  // Membership
+  membershipTier     String?
+  membershipCategory String?
+  membershipPlanId   String?
+  isFamilyPlan       Boolean   @default(false)
+  parking            Boolean   @default(false)
+  paymentMethod      String?
+  notes              String?
+  facilitiesAccess   Json?
+  extrasAccess       Json?
+  familyMembers      Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  team    Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  matchEvents MatchEvent[]
-  playerPayments PlayerPayment[]
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club           Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  team           Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  membershipPlan MembershipPlan?  @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
+  matchEvents         MatchEvent[]
+  playerPayments      PlayerPayment[]
   trainingAttendances TrainingAttendance[]
-  injuryReports InjuryReport[]
+  injuryReports       InjuryReport[]
 
   @@index([companyId])
   @@index([companyId, clubId])
   @@index([authUid])
   @@index([teamId])
+  @@index([membershipPlanId])
   @@unique([companyId, dni])
 }
 
@@ -550,4 +569,28 @@ model InjuryReport {
   @@index([teamId])
   @@index([playerId])
   @@index([companyId, status])
+}
+
+model MembershipPlan {
+  id                String   @id @default(cuid())
+  companyId         String
+  clubId            String
+  name              String
+  description       String?
+  price             Decimal  @default(0) @db.Decimal(12, 2)
+  parkingPrice      Decimal  @default(0) @db.Decimal(12, 2)
+  familyMemberPrice Decimal  @default(0) @db.Decimal(12, 2)
+  facilities        Json?
+  extras            Json?
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  players Player[]
+
+  @@index([companyId])
+  @@index([clubId])
 }
