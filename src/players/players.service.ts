@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -107,6 +108,20 @@ export class PlayersService {
       throw new NotFoundException('Club not found');
     }
 
+    let resolvedTeamId: string | undefined;
+    if (input.teamId) {
+      const team = await this.prisma.team.findFirst({
+        where: {
+          id: input.teamId,
+          companyId: resolvedCompanyId,
+          clubId: input.clubId,
+        },
+        select: { id: true },
+      });
+
+      resolvedTeamId = team?.id;
+    }
+
     if (authUid) {
       const firebaseUser = await this.firebaseAdminService.auth.getUser(authUid).catch(() => null);
 
@@ -136,49 +151,68 @@ export class PlayersService {
       });
     }
 
-    const existing = await this.prisma.player.findFirst({
-      where: {
-        companyId: resolvedCompanyId,
-        OR: [
-          authUid ? { authUid } : undefined,
-          input.email ? { email: input.email } : undefined,
-        ].filter(Boolean) as Array<{ authUid?: string; email?: string }>,
-      },
-    });
+    const identityFilters = [authUid ? { authUid } : undefined, input.email ? { email: input.email } : undefined].filter(
+      Boolean,
+    ) as Array<{ authUid?: string; email?: string }>;
 
-    const player = existing
-      ? await this.prisma.player.update({
-          where: { id: existing.id },
-          data: {
-            authUid,
-            email: input.email,
-            photoUrl: input.photoUrl,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            clubId: input.clubId,
-            teamId: input.teamId,
-            dni: input.dni,
-            position: input.position,
-            birthDate: input.birthDate,
-            active: input.active,
-          },
-        })
-      : await this.prisma.player.create({
-          data: {
-            companyId: resolvedCompanyId,
-            authUid,
-            email: input.email,
-            photoUrl: input.photoUrl,
-            firstName: input.firstName,
-            lastName: input.lastName,
-            clubId: input.clubId,
-            teamId: input.teamId,
-            dni: input.dni,
-            position: input.position,
-            birthDate: input.birthDate,
-            active: input.active,
-          },
-        });
+    const existing =
+      identityFilters.length > 0
+        ? await this.prisma.player.findFirst({
+            where: {
+              companyId: resolvedCompanyId,
+              OR: identityFilters,
+            },
+          })
+        : null;
+
+    let player;
+    try {
+      player = existing
+        ? await this.prisma.player.update({
+            where: { id: existing.id },
+            data: {
+              authUid,
+              email: input.email,
+              photoUrl: input.photoUrl,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              clubId: input.clubId,
+              teamId: resolvedTeamId,
+              dni: input.dni,
+              position: input.position,
+              birthDate: input.birthDate,
+              active: input.active,
+            },
+          })
+        : await this.prisma.player.create({
+            data: {
+              companyId: resolvedCompanyId,
+              authUid,
+              email: input.email,
+              photoUrl: input.photoUrl,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              clubId: input.clubId,
+              teamId: resolvedTeamId,
+              dni: input.dni,
+              position: input.position,
+              birthDate: input.birthDate,
+              active: input.active,
+            },
+          });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('Player already exists with the same authUid/email/dni');
+        }
+
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Invalid relation in player registration payload');
+        }
+      }
+
+      throw error;
+    }
 
     if (authUid) {
       const claims: Record<string, unknown> = {
@@ -188,7 +222,7 @@ export class PlayersService {
         roles: ['player'],
         companyId: resolvedCompanyId,
         clubId: input.clubId,
-        teamId: input.teamId,
+        teamId: resolvedTeamId,
         isFan: false,
       };
 
