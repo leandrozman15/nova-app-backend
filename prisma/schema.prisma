@@ -82,6 +82,7 @@ model Company {
   leagues               League[]
   teams                 Team[]
   players               Player[]
+  members               Member[]
   matches               Match[]
   matchEvents           MatchEvent[]
   matchCallups          MatchCallup[]
@@ -151,6 +152,7 @@ model Club {
   primaryLeagues League[]    @relation("ClubPrimaryLeague")
   teams        Team[]
   players      Player[]
+  members      Member[]
   financialTransactions FinancialTransaction[]
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
@@ -261,6 +263,51 @@ model Player {
   @@index([authUid])
   @@index([teamId])
   @@index([membershipPlanId])
+  @@unique([companyId, dni])
+}
+
+model Member {
+  id                 String    @id @default(cuid())
+  authUid            String?   @unique
+  email              String?   @unique
+  photoUrl           String?
+  firstName          String
+  lastName           String
+  dni                String?
+  birthDate          DateTime?
+  phone              String?
+  address            String?
+  locality           String?
+  province           String?
+  isFan              Boolean   @default(false)
+  active             Boolean   @default(true)
+  status             String?   @default("active")
+  companyId          String
+  clubId             String
+  // Membership
+  membershipNumber   String?
+  membershipTier     String?
+  membershipCategory String?
+  membershipPlanId   String?
+  isFamilyPlan       Boolean   @default(false)
+  parking            Boolean   @default(false)
+  paymentMethod      String?
+  notes              String?
+  facilitiesAccess   Json?
+  extrasAccess       Json?
+  familyMembers      Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club           Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  membershipPlan MembershipPlan? @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([companyId, clubId])
+  @@index([authUid])
+  @@index([membershipPlanId])
+  @@index([isFan])
   @@unique([companyId, dni])
 }
 
@@ -590,6 +637,7 @@ model MembershipPlan {
   company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
   players Player[]
+  members Member[]
 
   @@index([companyId])
   @@index([clubId])
