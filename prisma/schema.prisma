@@ -136,10 +136,22 @@ model User {
 model Club {
   id               String   @id @default(cuid())
   name             String
+  legalName        String?
+  cuit             String?
+  foundationDate   DateTime?
   leagueId         String?
   municipalityId   String?
   municipalityName String?
   address          String?
+  city             String?
+  phone            String?
+  email            String?
+  billingEmail     String?
+  website          String?
+  instagram        String?
+  facebook         String?
+  logoUrl          String?
+  description      String?
   sport            String?
   status           String?
   companyId        String

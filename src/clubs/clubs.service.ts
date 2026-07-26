@@ -45,14 +45,28 @@ export class ClubsService {
   async update(companyId: string, id: string, dto: UpdateClubDto) {
     await this.getById(companyId, id);
 
+    const foundationDate = dto.foundationDate ? new Date(dto.foundationDate) : undefined;
+
     return this.prisma.club.update({
       where: { id },
       data: {
         name: dto.name,
+        legalName: dto.legalName,
+        cuit: dto.cuit,
+        foundationDate: foundationDate && !Number.isNaN(foundationDate.getTime()) ? foundationDate : undefined,
         municipalityId: dto.municipalityId,
         leagueId: dto.leagueId,
         municipalityName: dto.municipalityName,
         address: dto.address,
+        city: dto.city,
+        phone: dto.phone,
+        email: dto.email,
+        billingEmail: dto.billingEmail,
+        website: dto.website,
+        instagram: dto.instagram,
+        facebook: dto.facebook,
+        logoUrl: dto.logoUrl,
+        description: dto.description,
         sport: dto.sport,
         status: dto.status,
       },
