@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProvisionProfileActor, UsersService } from '../users/users.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 
@@ -11,6 +12,7 @@ export class PlayersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly firebaseAdminService: FirebaseAdminService,
+    private readonly usersService: UsersService,
   ) {}
 
   list(companyId: string) {
@@ -47,8 +49,8 @@ export class PlayersService {
     return player;
   }
 
-  create(companyId: string, dto: CreatePlayerDto) {
-    return this.prisma.player.create({
+  async create(companyId: string, dto: CreatePlayerDto, actor: ProvisionProfileActor) {
+    const player = await this.prisma.player.create({
       data: {
         companyId,
         authUid: dto.authUid ?? dto.uid,
@@ -64,12 +66,18 @@ export class PlayersService {
         active: dto.active,
       },
     });
+    await this.syncPlayerClaims(player, actor);
+    return player;
   }
 
-  async update(companyId: string, id: string, dto: UpdatePlayerDto) {
-    await this.getById(companyId, id);
+  async update(companyId: string, id: string, dto: UpdatePlayerDto, actor: ProvisionProfileActor) {
+    const existing = await this.getById(companyId, id);
+    const nextAuthUid = dto.authUid ?? dto.uid ?? existing.authUid;
+    if (existing.authUid && nextAuthUid && existing.authUid !== nextAuthUid) {
+      throw new BadRequestException('Changing a player authUid requires a dedicated identity transfer');
+    }
 
-    return this.prisma.player.update({
+    const player = await this.prisma.player.update({
       where: { id },
       data: {
         authUid: dto.authUid ?? dto.uid,
@@ -85,6 +93,8 @@ export class PlayersService {
         active: dto.active,
       },
     });
+    await this.syncPlayerClaims(player, actor);
+    return player;
   }
 
   async remove(companyId: string, id: string) {
@@ -95,7 +105,7 @@ export class PlayersService {
     return { ok: true };
   }
 
-  async provisionProfile(input: CreatePlayerDto & { companyId?: string }) {
+  async provisionProfile(input: CreatePlayerDto & { companyId?: string }, actor: ProvisionProfileActor) {
     const authUid = input.authUid ?? input.uid;
     const resolvedCompanyId =
       input.companyId ||
@@ -133,22 +143,6 @@ export class PlayersService {
         throw new NotFoundException('Player profile mismatch');
       }
 
-      await this.prisma.user.upsert({
-        where: { firebaseUid: authUid },
-        update: {
-          email: input.email ?? firebaseUser?.email ?? `${authUid}@bootstrap.local`,
-          name: `${input.firstName} ${input.lastName}`.trim(),
-          role: 'player',
-          companyId: resolvedCompanyId,
-        },
-        create: {
-          firebaseUid: authUid,
-          email: input.email ?? firebaseUser?.email ?? `${authUid}@bootstrap.local`,
-          name: `${input.firstName} ${input.lastName}`.trim(),
-          role: 'player',
-          companyId: resolvedCompanyId,
-        },
-      });
     }
 
     const identityFilters = [authUid ? { authUid } : undefined, input.email ? { email: input.email } : undefined].filter(
@@ -214,35 +208,35 @@ export class PlayersService {
       throw error;
     }
 
-    if (authUid) {
-      const claims: Record<string, unknown> = {
-        email: input.email,
-        name: `${input.firstName} ${input.lastName}`.trim(),
-        role: 'player',
-        roles: ['player'],
-        companyId: resolvedCompanyId,
-        clubId: input.clubId,
-        teamId: resolvedTeamId,
-        isFan: false,
-      };
-
-      Object.keys(claims).forEach((key) => {
-        if (claims[key] === undefined) {
-          delete claims[key];
-        }
-      });
-
-      await this.firebaseAdminService.auth.setCustomUserClaims(authUid, claims);
-    }
+    await this.syncPlayerClaims(player, actor, resolvedTeamId);
 
     return player;
   }
 
-  approveRegistration(companyId: string, dto: CreatePlayerDto) {
+  approveRegistration(companyId: string, dto: CreatePlayerDto, actor: ProvisionProfileActor) {
     return this.provisionProfile({
       ...dto,
       companyId,
       active: dto.active ?? true,
-    });
+    }, actor);
+  }
+
+  private async syncPlayerClaims(
+    player: { authUid?: string | null; email?: string | null; firstName: string; lastName: string; companyId: string; clubId: string; teamId?: string | null; active?: boolean },
+    actor: ProvisionProfileActor,
+    teamId = player.teamId ?? undefined,
+  ) {
+    if (!player.authUid) return;
+
+    await this.usersService.provisionProfileClaims({
+      uid: player.authUid,
+      email: player.email ?? undefined,
+      name: `${player.firstName} ${player.lastName}`.trim(),
+      role: 'player',
+      companyId: player.companyId,
+      clubId: player.clubId,
+      teamId,
+      isFan: false,
+    }, actor);
   }
 }

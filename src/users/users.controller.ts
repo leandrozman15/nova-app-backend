@@ -1,8 +1,9 @@
-import { Controller, Delete, Get, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
 
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
+import { SetActiveClubContextDto } from './dto/set-active-club-context.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -50,7 +51,7 @@ export class UsersController {
     const typedReq = req as RequestWithAuth & { body?: any };
     const body = typedReq.body ?? {};
 
-    if (!body.uid || !body.role) {
+    if (!body.uid || !body.role || !typedReq.auth?.uid || !typedReq.companyId) {
       throw new UnauthorizedException('Missing profile data');
     }
 
@@ -59,13 +60,16 @@ export class UsersController {
       email: body.email,
       name: body.name,
       role: body.role,
-      roles: Array.isArray(body.roles) ? body.roles : undefined,
       companyId: body.companyId ?? typedReq.companyId,
       clubId: body.clubId,
       leagueId: body.leagueId,
       municipalityId: body.municipalityId,
       teamId: body.teamId,
       isFan: body.isFan,
+    }, {
+      uid: typedReq.auth.uid,
+      companyId: typedReq.companyId,
+      clubId: typedReq.auth.clubId,
     });
   }
 
@@ -90,6 +94,15 @@ export class UsersController {
     }
 
     return this.usersService.getByFirebaseUid(typedReq.auth.uid);
+  }
+
+  @Post('me/active-club')
+  async switchActiveClub(@Req() req: unknown, @Body() dto: SetActiveClubContextDto) {
+    const typedReq = req as RequestWithAuth;
+    if (!typedReq.auth?.uid) {
+      throw new UnauthorizedException('Missing auth context');
+    }
+    return this.usersService.switchActiveClub(typedReq.auth.uid, dto.clubId);
   }
 
   @Roles('admin', 'manager')

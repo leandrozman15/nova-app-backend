@@ -5,6 +5,8 @@ export interface AuthContext {
   email?: string;
   role?: string;
   companyId?: string;
+  clubId?: string;
+  roles?: string[];
 }
 
 export interface RequestWithAuth extends Request {

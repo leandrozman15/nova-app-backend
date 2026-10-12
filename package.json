@@ -17,7 +17,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "claims:backfill": "node scripts/backfill-user-claims.mjs",
+    "firestore:audit-tenant-fields": "node scripts/audit-firestore-tenant-fields.mjs",
+    "firestore:backfill-club-company": "node scripts/backfill-legacy-club-company.mjs",
+    "seed:staging": "node scripts/seed-staging.mjs",
+    "test:claims": "node --test test/claims-plan.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

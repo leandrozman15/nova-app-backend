@@ -70,6 +70,13 @@ enum ShopOrderStatus {
   cancelled
 }
 
+enum ClubMembershipStatus {
+  SOLICITADA
+  ACTIVA
+  RECHAZADA
+  BAJA
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -78,6 +85,7 @@ model Company {
 
   municipalities        Municipality[]
   users                 User[]
+  clubMemberships       ClubMembership[]
   clubs                 Club[]
   leagues               League[]
   teams                 Team[]
@@ -128,6 +136,7 @@ model User {
   updatedAt   DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clubMemberships ClubMembership[]
 
   @@index([companyId])
   @@index([companyId, role])
@@ -165,6 +174,7 @@ model Club {
   teams        Team[]
   players      Player[]
   members      Member[]
+  memberships  ClubMembership[]
   financialTransactions FinancialTransaction[]
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
@@ -179,6 +189,25 @@ model Club {
   @@index([companyId, name])
   @@index([leagueId])
   @@index([municipalityId])
+}
+
+model ClubMembership {
+  id        String               @id @default(cuid())
+  userId    String
+  companyId String
+  clubId    String
+  status    ClubMembershipStatus @default(SOLICITADA)
+  role      String
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+  @@index([companyId, clubId, status])
+  @@index([userId, status])
 }
 
 model League {

@@ -24,7 +24,8 @@ export class CompanyGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<RequestWithAuth>();
     const requestUrl = request.originalUrl || request.url || '';
 
-    if (requestUrl.includes('/users/me')) {
+    const pathWithoutQuery = requestUrl.split('?')[0];
+    if (pathWithoutQuery === '/users/me' || pathWithoutQuery.startsWith('/users/me/')) {
       return true;
     }
 

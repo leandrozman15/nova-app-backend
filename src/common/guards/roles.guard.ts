@@ -20,6 +20,15 @@ const ROLE_ALIASES: Record<string, string[]> = {
   member: ['member', 'fan'],
 };
 
+const GLOBAL_ROLES = new Set([
+  'admin',
+  'fed_admin',
+  'league_admin',
+  'municipal_secretary',
+  'municipal_admin',
+  'municipal_inspector',
+]);
+
 function normalizeRoles(rawRole: string): string[] {
   const role = rawRole.trim();
   return ROLE_ALIASES[role] ?? [role];
@@ -58,16 +67,41 @@ export class RolesGuard implements CanActivate {
         firebaseUid: request.auth.uid,
         companyId: request.companyId,
       },
-      select: { role: true },
+      select: { id: true, role: true },
     });
 
     if (!user) {
       throw new UnauthorizedException('User not found for tenant');
     }
 
-    request.auth.role = user.role;
+    let effectiveRole = user.role.trim().toLowerCase();
+    if (!GLOBAL_ROLES.has(effectiveRole)) {
+      if (!request.auth.clubId) {
+        throw new UnauthorizedException('Missing active club claim');
+      }
 
-    const effectiveRoles = normalizeRoles(user.role);
+      const membership = await this.prisma.clubMembership.findFirst({
+        where: {
+          userId: user.id,
+          companyId: request.companyId,
+          clubId: request.auth.clubId,
+          status: 'ACTIVA',
+          club: { is: { companyId: request.companyId } },
+        },
+        select: { role: true },
+      });
+
+      if (!membership) {
+        throw new ForbiddenException('Active club membership required');
+      }
+
+      effectiveRole = membership.role.trim().toLowerCase();
+    }
+
+    request.auth.role = effectiveRole;
+    request.auth.roles = [effectiveRole];
+
+    const effectiveRoles = normalizeRoles(effectiveRole);
     const normalizedRequiredRoles = requiredRoles.flatMap((role) => normalizeRoles(role));
     const hasAccess = effectiveRoles.some((role) => normalizedRequiredRoles.includes(role));
 
