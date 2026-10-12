@@ -44,15 +44,28 @@ export type MpPayment = {
   date_approved?: string | null;
 };
 
+// Direcciones de producción por defecto: se pueden cambiar por variable de
+// entorno (staging, otro dominio), pero no hace falta cargarlas en Render.
+const DEFAULT_PUBLIC_API_URL = 'https://nova-app-backend.onrender.com';
+const DEFAULT_PUBLIC_APP_URL =
+  'https://studio--studio-9112699346-ecb8d.us-central1.hosted.app';
+
 export function mpConfig() {
+  const publicApiUrl = (
+    process.env.PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL
+  ).replace(/\/$/, '');
   return {
     clientId: process.env.MP_CLIENT_ID ?? '',
     clientSecret: process.env.MP_CLIENT_SECRET ?? '',
-    redirectUri: process.env.MP_REDIRECT_URI ?? '',
+    redirectUri:
+      process.env.MP_REDIRECT_URI ||
+      `${publicApiUrl}/payments/mercadopago/oauth/callback`,
     webhookSecret: process.env.MP_WEBHOOK_SECRET ?? '',
     testMode: process.env.MP_TEST_MODE === 'true',
-    publicApiUrl: (process.env.PUBLIC_API_URL ?? '').replace(/\/$/, ''),
-    publicAppUrl: (process.env.PUBLIC_APP_URL ?? '').replace(/\/$/, ''),
+    publicApiUrl,
+    publicAppUrl: (
+      process.env.PUBLIC_APP_URL || DEFAULT_PUBLIC_APP_URL
+    ).replace(/\/$/, ''),
   };
 }
 
