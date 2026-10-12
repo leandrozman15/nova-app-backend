@@ -69,6 +69,13 @@ export class ClubsService {
         description: dto.description,
         sport: dto.sport,
         status: dto.status,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        isPublic: dto.isPublic,
+        publicFacilities: dto.publicFacilities,
+        publicSchools: dto.publicSchools,
+        publicCoaches: dto.publicCoaches,
+        publicShop: dto.publicShop,
       },
     });
   }

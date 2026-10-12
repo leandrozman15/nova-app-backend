@@ -10,6 +10,7 @@ import { FinanceTransactionsModule } from './finance-transactions/finance-transa
 import { FacilitiesModule } from './facilities/facilities.module';
 import { HealthModule } from './health/health.module';
 import { InjuriesModule } from './injuries/injuries.module';
+import { JoinRequestsModule } from './join-requests/join-requests.module';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
 import { MatchesModule } from './matches/matches.module';
@@ -17,6 +18,7 @@ import { MunicipalitiesModule } from './municipalities/municipalities.module';
 import { PlayerPaymentsModule } from './player-payments/player-payments.module';
 import { PlayersModule } from './players/players.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { PublicModule } from './public/public.module';
 import { StandingsModule } from './standings/standings.module';
 import { ShopModule } from './shop/shop.module';
 import { TeamsModule } from './teams/teams.module';
@@ -43,6 +45,8 @@ import { UsersModule } from './users/users.module';
     PlayerPaymentsModule,
     TrainingSessionsModule,
     InjuriesModule,
+    JoinRequestsModule,
+    PublicModule,
   ],
   providers: [
     {

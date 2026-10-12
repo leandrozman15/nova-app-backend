@@ -9,6 +9,8 @@ import {
 
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateJoinRequestDto } from './dto/create-join-request.dto';
+import { RegisterFreeUserDto } from './dto/register-free-user.dto';
 
 export type ProvisionProfileActor = {
   uid: string;
@@ -87,17 +89,19 @@ export class UsersService {
     });
     if (!user) throw new UnauthorizedException('User profile not found');
 
+    // La empresa sale de la membresía, no del usuario: un usuario libre
+    // (sin companyId) puede tener membresías activas en clubes de varias empresas.
     const membership = await this.prisma.clubMembership.findFirst({
       where: {
         userId: user.id,
-        companyId: user.companyId,
         clubId,
         status: 'ACTIVA',
-        club: { is: { companyId: user.companyId } },
       },
-      select: { companyId: true, clubId: true, role: true },
+      select: { companyId: true, clubId: true, role: true, club: { select: { companyId: true } } },
     });
-    if (!membership) throw new ForbiddenException('Active club membership required');
+    if (!membership || membership.club.companyId !== membership.companyId) {
+      throw new ForbiddenException('Active club membership required');
+    }
 
     const role = membership.role.trim().toLowerCase();
     const claims: Record<string, unknown> = {
@@ -120,6 +124,124 @@ export class UsersService {
       clubId: membership.clubId,
       role,
     };
+  }
+
+  /**
+   * Alta del usuario libre desde la app pública: cuenta global, sin empresa
+   * ni club y sin claims de rol. Idempotente: si ya existe, no lo modifica
+   * (un usuario de staff que se "registra" de nuevo no pierde su empresa).
+   */
+  async registerFreeUser(firebaseUid: string, dto: RegisterFreeUserDto) {
+    const existing = await this.getByFirebaseUid(firebaseUid);
+    if (existing) return { created: false, user: existing };
+
+    const firebaseUser = await this.firebaseAdminService.auth.getUser(firebaseUid);
+    if (!firebaseUser.email) {
+      throw new BadRequestException('La cuenta necesita un email verificado');
+    }
+
+    const emailOwner = await this.prisma.user.findUnique({
+      where: { email: firebaseUser.email },
+      select: { id: true },
+    });
+    if (emailOwner) {
+      throw new ConflictException('Ya existe un perfil con ese email');
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        firebaseUid,
+        email: firebaseUser.email,
+        name: dto.name?.trim() || firebaseUser.displayName || null,
+        role: 'user',
+        companyId: null,
+      },
+      select: {
+        id: true,
+        firebaseUid: true,
+        email: true,
+        name: true,
+        role: true,
+        companyId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return { created: true, user };
+  }
+
+  async listMyMemberships(firebaseUid: string) {
+    const user = await this.requireUser(firebaseUid);
+    return this.prisma.clubMembership.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        clubId: true,
+        status: true,
+        role: true,
+        message: true,
+        reviewedAt: true,
+        createdAt: true,
+        club: { select: { id: true, name: true, logoUrl: true, city: true } },
+      },
+    });
+  }
+
+  async createJoinRequest(firebaseUid: string, dto: CreateJoinRequestDto) {
+    const user = await this.requireUser(firebaseUid);
+    const club = await this.prisma.club.findFirst({
+      where: { id: dto.clubId, isPublic: true },
+      select: { id: true, companyId: true },
+    });
+    if (!club) throw new NotFoundException('Club no encontrado');
+
+    const existing = await this.prisma.clubMembership.findUnique({
+      where: { userId_clubId: { userId: user.id, clubId: club.id } },
+      select: { id: true, status: true },
+    });
+    if (existing?.status === 'ACTIVA') {
+      throw new ConflictException('Ya sos parte de este club');
+    }
+    if (existing?.status === 'SOLICITADA') {
+      throw new ConflictException('Ya tenés una solicitud pendiente en este club');
+    }
+
+    const data = {
+      companyId: club.companyId,
+      role: dto.role,
+      status: 'SOLICITADA' as const,
+      message: dto.message?.trim() || null,
+      reviewedAt: null,
+      reviewedByUserId: null,
+      playerId: null,
+      memberId: null,
+    };
+    // Una solicitud RECHAZADA o una BAJA se puede volver a pedir.
+    return this.prisma.clubMembership.upsert({
+      where: { userId_clubId: { userId: user.id, clubId: club.id } },
+      update: data,
+      create: { ...data, userId: user.id, clubId: club.id },
+      select: { id: true, clubId: true, status: true, role: true, createdAt: true },
+    });
+  }
+
+  async cancelJoinRequest(firebaseUid: string, membershipId: string) {
+    const user = await this.requireUser(firebaseUid);
+    const result = await this.prisma.clubMembership.deleteMany({
+      where: { id: membershipId, userId: user.id, status: 'SOLICITADA' },
+    });
+    if (result.count === 0) throw new NotFoundException('Solicitud pendiente no encontrada');
+    return { ok: true };
+  }
+
+  private async requireUser(firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { firebaseUid },
+      select: { id: true, companyId: true },
+    });
+    if (!user) throw new UnauthorizedException('Perfil no registrado');
+    return user;
   }
 
   async hasAdminUsers() {
@@ -167,7 +289,7 @@ export class UsersService {
         : Promise.resolve(null),
       actor
         ? this.prisma.user.findFirst({
-            where: { firebaseUid: actor.uid, companyId: actor.companyId },
+            where: { firebaseUid: actor.uid },
             select: { id: true, role: true, companyId: true },
           })
         : Promise.resolve(null),
@@ -244,14 +366,16 @@ export class UsersService {
 
   private async assertActorCanProvision(
     actor: ProvisionProfileActor,
-    actorUser: { id: string; role: string; companyId: string },
+    actorUser: { id: string; role: string; companyId: string | null },
     targetCompanyId: string,
     targetClubId?: string,
     targetRole?: string,
   ) {
     const actorRole = actorUser.role.trim().toLowerCase();
-    const isPlatformRole = PLATFORM_ROLES.has(actorRole);
-    const isCompanyAuthority = GLOBAL_ROLES.has(actorRole);
+    // Los roles globales solo valen dentro de la empresa del usuario.
+    const actorOwnsTenant = actorUser.companyId === actor.companyId;
+    const isPlatformRole = actorOwnsTenant && PLATFORM_ROLES.has(actorRole);
+    const isCompanyAuthority = actorOwnsTenant && GLOBAL_ROLES.has(actorRole);
 
     if (!isPlatformRole && actor.companyId !== targetCompanyId) {
       throw new ForbiddenException('Cannot provision a user in another company');
@@ -272,10 +396,10 @@ export class UsersService {
     const membership = await this.prisma.clubMembership.findFirst({
       where: {
         userId: actorUser.id,
-        companyId: actorUser.companyId,
+        companyId: actor.companyId,
         clubId: targetClubId,
         status: 'ACTIVA',
-        club: { is: { companyId: actorUser.companyId } },
+        club: { is: { companyId: actor.companyId } },
         role: { in: [...new Set(allowedProvisionerRoles)] },
       },
       select: { id: true },

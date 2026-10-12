@@ -1,8 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
 
+import { NoTenant } from '../common/decorators/no-tenant.decorator';
+
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
+import { CreateJoinRequestDto } from './dto/create-join-request.dto';
+import { RegisterFreeUserDto } from './dto/register-free-user.dto';
 import { SetActiveClubContextDto } from './dto/set-active-club-context.dto';
 import { UsersService } from './users.service';
 
@@ -96,6 +100,32 @@ export class UsersController {
     return this.usersService.getByFirebaseUid(typedReq.auth.uid);
   }
 
+  /** Alta del usuario libre (app pública). Idempotente. */
+  @NoTenant()
+  @Post('me/register')
+  async registerFree(@Req() req: unknown, @Body() dto: RegisterFreeUserDto) {
+    const auth = requireAuth(req);
+    return this.usersService.registerFreeUser(auth.uid, dto);
+  }
+
+  @NoTenant()
+  @Get('me/memberships')
+  async myMemberships(@Req() req: unknown) {
+    return this.usersService.listMyMemberships(requireAuth(req).uid);
+  }
+
+  @NoTenant()
+  @Post('me/join-requests')
+  async createJoinRequest(@Req() req: unknown, @Body() dto: CreateJoinRequestDto) {
+    return this.usersService.createJoinRequest(requireAuth(req).uid, dto);
+  }
+
+  @NoTenant()
+  @Delete('me/join-requests/:id')
+  async cancelJoinRequest(@Req() req: unknown, @Param('id') id: string) {
+    return this.usersService.cancelJoinRequest(requireAuth(req).uid, id);
+  }
+
   @Post('me/active-club')
   async switchActiveClub(@Req() req: unknown, @Body() dto: SetActiveClubContextDto) {
     const typedReq = req as RequestWithAuth;
@@ -116,4 +146,10 @@ export class UsersController {
 
     return this.usersService.removeByFirebaseUid(typedReq.companyId, firebaseUid);
   }
+}
+
+function requireAuth(req: unknown) {
+  const auth = (req as RequestWithAuth).auth;
+  if (!auth?.uid) throw new UnauthorizedException('Missing auth context');
+  return auth;
 }

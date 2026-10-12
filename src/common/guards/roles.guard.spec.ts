@@ -66,7 +66,7 @@ describe('RolesGuard', () => {
   });
 
   it('keeps global roles sourced from the persisted user without requiring a club membership', async () => {
-    prisma.user.findFirst.mockResolvedValue({ id: 'platform-user', role: 'admin' });
+    prisma.user.findFirst.mockResolvedValue({ id: 'platform-user', role: 'admin', companyId: 'company-a' });
     reflector.getAllAndOverride.mockImplementation((key: string) =>
       key === 'isPublic' ? false : ['admin'],
     );
@@ -77,5 +77,44 @@ describe('RolesGuard', () => {
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
     expect(prisma.clubMembership.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('does not honor a global role outside the user own company', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'platform-user', role: 'admin', companyId: 'company-a' });
+    prisma.clubMembership.findFirst.mockResolvedValue(null);
+    reflector.getAllAndOverride.mockImplementation((key: string) =>
+      key === 'isPublic' ? false : ['admin'],
+    );
+    const request = {
+      auth: { uid: 'firebase-uid', companyId: 'company-b', clubId: 'club-b' },
+      companyId: 'company-b',
+    };
+
+    await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('authorizes a free user (no company) through an active membership in the tenant', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'free-user', role: 'user', companyId: null });
+    prisma.clubMembership.findFirst.mockResolvedValue({ role: 'coach' });
+    const request = {
+      auth: { uid: 'firebase-uid', companyId: 'company-a', clubId: 'club-a' },
+      companyId: 'company-a',
+    };
+
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(prisma.clubMembership.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: 'free-user', companyId: 'company-a', clubId: 'club-a', status: 'ACTIVA' }),
+    }));
+  });
+
+  it('rejects a free user without an active membership', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'free-user', role: 'user', companyId: null });
+    prisma.clubMembership.findFirst.mockResolvedValue(null);
+    const request = {
+      auth: { uid: 'firebase-uid', companyId: 'company-a', clubId: 'club-a' },
+      companyId: 'company-a',
+    };
+
+    await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

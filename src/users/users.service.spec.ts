@@ -134,6 +134,7 @@ describe('UsersService.provisionProfileClaims', () => {
       companyId: 'company-a',
       clubId: 'club-b',
       role: 'coach',
+      club: { companyId: 'company-a' },
     });
 
     await expect(service.switchActiveClub(targetAuthUser.uid, 'club-b')).resolves.toEqual({
@@ -145,7 +146,6 @@ describe('UsersService.provisionProfileClaims', () => {
     expect(prisma.clubMembership.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         userId: targetDbUser.id,
-        companyId: 'company-a',
         clubId: 'club-b',
         status: 'ACTIVA',
       }),
@@ -156,6 +156,32 @@ describe('UsersService.provisionProfileClaims', () => {
       role: 'coach',
       roles: ['coach'],
     }));
+  });
+
+  it('lets a free user (no company) switch into a club where the membership is active', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...targetDbUser, companyId: null });
+    prisma.clubMembership.findFirst.mockResolvedValue({
+      companyId: 'company-b',
+      clubId: 'club-x',
+      role: 'member',
+      club: { companyId: 'company-b' },
+    });
+
+    await expect(service.switchActiveClub(targetAuthUser.uid, 'club-x')).resolves.toEqual(
+      expect.objectContaining({ ok: true, companyId: 'company-b', clubId: 'club-x', role: 'member' }),
+    );
+  });
+
+  it('rejects switching when the membership company does not match the club company', async () => {
+    prisma.clubMembership.findFirst.mockResolvedValue({
+      companyId: 'company-a',
+      clubId: 'club-b',
+      role: 'coach',
+      club: { companyId: 'company-z' },
+    });
+
+    await expect(service.switchActiveClub(targetAuthUser.uid, 'club-b')).rejects.toThrow('Active club membership required');
+    expect(firebaseAdmin.auth.setCustomUserClaims).not.toHaveBeenCalled();
   });
 
   it('does not change claims when the target club has no active membership', async () => {

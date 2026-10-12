@@ -1,4 +1,5 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsLatitude, IsLongitude, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 
 export class UpdateClubDto {
   @IsOptional()
@@ -90,4 +91,37 @@ export class UpdateClubDto {
   @IsString()
   @MaxLength(40)
   status?: string;
+
+  // Vidriera pública. null borra la ubicación.
+  @ValidateIf((_, value) => value !== null)
+  @IsOptional()
+  @Type(() => Number)
+  @IsLatitude()
+  latitude?: number | null;
+
+  @ValidateIf((_, value) => value !== null)
+  @IsOptional()
+  @Type(() => Number)
+  @IsLongitude()
+  longitude?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  publicFacilities?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  publicSchools?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  publicCoaches?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  publicShop?: boolean;
 }

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
+import { NO_TENANT_KEY } from '../decorators/no-tenant.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { RequestWithAuth } from '../interfaces/request-with-auth.interface';
 
@@ -20,6 +21,12 @@ export class CompanyGuard implements CanActivate {
     ]);
 
     if (isPublic) return true;
+
+    const noTenant = this.reflector.getAllAndOverride<boolean>(NO_TENANT_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (noTenant) return true;
 
     const request = context.switchToHttp().getRequest<RequestWithAuth>();
     const requestUrl = request.originalUrl || request.url || '';

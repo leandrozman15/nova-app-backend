@@ -63,19 +63,20 @@ export class RolesGuard implements CanActivate {
     }
 
     const user = await this.prisma.user.findFirst({
-      where: {
-        firebaseUid: request.auth.uid,
-        companyId: request.companyId,
-      },
-      select: { id: true, role: true },
+      where: { firebaseUid: request.auth.uid },
+      select: { id: true, role: true, companyId: true },
     });
 
     if (!user) {
       throw new UnauthorizedException('User not found for tenant');
     }
 
+    // Un rol global solo rige dentro de la empresa del propio usuario. Fuera de
+    // ella (o para usuarios libres sin empresa) el permiso sale de la membresía.
     let effectiveRole = user.role.trim().toLowerCase();
-    if (!GLOBAL_ROLES.has(effectiveRole)) {
+    const hasGlobalRoleInTenant =
+      GLOBAL_ROLES.has(effectiveRole) && user.companyId === request.companyId;
+    if (!hasGlobalRoleInTenant) {
       if (!request.auth.clubId) {
         throw new UnauthorizedException('Missing active club claim');
       }

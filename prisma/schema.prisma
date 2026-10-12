@@ -131,11 +131,12 @@ model User {
   email       String   @unique
   name        String?
   role        String   @default("user")
-  companyId   String
+  // null = usuario libre (registrado desde la app pública, sin empresa).
+  companyId   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clubMemberships ClubMembership[]
 
   @@index([companyId])
@@ -163,6 +164,14 @@ model Club {
   description      String?
   sport            String?
   status           String?
+  // Vidriera pública: ubicación y qué secciones se muestran a usuarios libres.
+  latitude         Float?
+  longitude        Float?
+  isPublic         Boolean  @default(false)
+  publicFacilities Boolean  @default(false)
+  publicSchools    Boolean  @default(false)
+  publicCoaches    Boolean  @default(false)
+  publicShop       Boolean  @default(false)
   companyId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -189,6 +198,7 @@ model Club {
   @@index([companyId, name])
   @@index([leagueId])
   @@index([municipalityId])
+  @@index([isPublic])
 }
 
 model ClubMembership {
@@ -198,16 +208,27 @@ model ClubMembership {
   clubId    String
   status    ClubMembershipStatus @default(SOLICITADA)
   role      String
+  // Solicitud iniciada por el usuario libre y su revisión por el club.
+  message          String?
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  // Ficha existente del padrón vinculada al aprobar (evita duplicados).
+  playerId  String?
+  memberId  String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  player  Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  member  Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
   @@unique([userId, clubId])
   @@index([companyId, clubId, status])
   @@index([userId, status])
+  @@index([playerId])
+  @@index([memberId])
 }
 
 model League {
@@ -298,6 +319,7 @@ model Player {
   playerPayments      PlayerPayment[]
   trainingAttendances TrainingAttendance[]
   injuryReports       InjuryReport[]
+  clubMemberships     ClubMembership[]
 
   @@index([companyId])
   @@index([companyId, clubId])
@@ -343,6 +365,7 @@ model Member {
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club           Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
   membershipPlan MembershipPlan? @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
+  clubMemberships ClubMembership[]
 
   @@index([companyId])
   @@index([companyId, clubId])
