@@ -117,4 +117,55 @@ describe('RolesGuard', () => {
 
     await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  describe('legacy membership backfill', () => {
+    const legacyRequest = () => ({
+      auth: { uid: 'firebase-uid', companyId: 'company-a', clubId: 'club-a', role: 'club_admin' },
+      companyId: 'company-a',
+    });
+
+    beforeEach(() => {
+      prisma.user.findFirst.mockResolvedValue({ id: 'staff', role: 'user', companyId: 'company-a' });
+      prisma.clubMembership.findFirst.mockResolvedValue(null);
+      prisma.clubMembership.findUnique = jest.fn().mockResolvedValue(null);
+      prisma.clubMembership.create = jest.fn().mockResolvedValue({ role: 'club_admin' });
+      prisma.club = { findFirst: jest.fn().mockResolvedValue({ id: 'club-a' }) };
+    });
+
+    it('creates the active membership from signed claims of a pre-existing club user', async () => {
+      await expect(guard.canActivate(contextFor(legacyRequest()))).resolves.toBe(true);
+      expect(prisma.club.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'club-a', companyId: 'company-a' } }));
+      expect(prisma.clubMembership.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: { userId: 'staff', companyId: 'company-a', clubId: 'club-a', role: 'club_admin', status: 'ACTIVA' },
+      }));
+    });
+
+    it('never reactivates an existing (rejected, removed or pending) membership', async () => {
+      prisma.clubMembership.findUnique.mockResolvedValue({ id: 'old' });
+      await expect(guard.canActivate(contextFor(legacyRequest()))).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.clubMembership.create).not.toHaveBeenCalled();
+    });
+
+    it('does not apply to free users, other companies, foreign clubs or header-only tenants', async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: 'free', role: 'user', companyId: null });
+      await expect(guard.canActivate(contextFor(legacyRequest()))).rejects.toBeInstanceOf(ForbiddenException);
+
+      prisma.user.findFirst.mockResolvedValue({ id: 'staff', role: 'user', companyId: 'company-a' });
+      prisma.club.findFirst.mockResolvedValue(null);
+      await expect(guard.canActivate(contextFor(legacyRequest()))).rejects.toBeInstanceOf(ForbiddenException);
+
+      prisma.club.findFirst.mockResolvedValue({ id: 'club-a' });
+      const headerOnly = { auth: { uid: 'firebase-uid', clubId: 'club-a', role: 'club_admin' }, companyId: 'company-a' };
+      await expect(guard.canActivate(contextFor(headerOnly))).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prisma.clubMembership.create).not.toHaveBeenCalled();
+    });
+
+    it('ignores claim roles that are not club roles', async () => {
+      const request = legacyRequest();
+      request.auth.role = 'admin';
+      await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.clubMembership.create).not.toHaveBeenCalled();
+    });
+  });
 });
