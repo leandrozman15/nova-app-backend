@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { addDays, dayAbbr, todayIn } from '../bookings/booking-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { CreateFacilityRentalDto } from './dto/create-facility-rental.dto';
@@ -58,7 +60,51 @@ export class FacilitiesService {
     return rental;
   }
 
-  createRental(companyId: string, dto: CreateFacilityRentalDto) {
+  /**
+   * Un alquiler de mostrador ocupa ese día/hora todas las semanas. Si ya hay una
+   * reserva online activa (pagada o esperando pago) en ese turno, no se pisa:
+   * el club tiene que cancelarla primero (con devolución de la seña).
+   */
+  private async assertNoOnlineBookingConflict(
+    clubId: string,
+    facilityId: string,
+    day: string,
+    hour: number,
+  ) {
+    const club = await this.prisma.club.findUnique({
+      where: { id: clubId },
+      select: { timezone: true },
+    });
+    const today = todayIn(club?.timezone ?? 'America/Argentina/Buenos_Aires');
+    const upcoming = await this.prisma.booking.findMany({
+      where: {
+        clubId,
+        facilityId,
+        hour,
+        date: { gte: today, lte: addDays(today, 60) },
+        status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] },
+      },
+      select: { date: true },
+      orderBy: { date: 'asc' },
+    });
+    const clashing = upcoming.filter(
+      (booking) => dayAbbr(booking.date) === day,
+    );
+    if (clashing.length > 0) {
+      const dates = clashing.map((booking) => booking.date).join(', ');
+      throw new ConflictException(
+        `Ese turno tiene reservas online (${dates}). Cancelalas desde Reservas antes de cargar el alquiler.`,
+      );
+    }
+  }
+
+  async createRental(companyId: string, dto: CreateFacilityRentalDto) {
+    await this.assertNoOnlineBookingConflict(
+      dto.clubId,
+      dto.facilityId,
+      dto.day,
+      dto.hour,
+    );
     return this.prisma.facilityRental.create({
       data: {
         companyId,
@@ -91,7 +137,22 @@ export class FacilitiesService {
     id: string,
     dto: UpdateFacilityRentalDto,
   ) {
-    await this.getRentalById(companyId, id);
+    const current = await this.getRentalById(companyId, id);
+    const day = dto.day ?? current.day;
+    const hour = dto.hour ?? current.hour;
+    const facilityId = dto.facilityId ?? current.facilityId;
+    const moved =
+      day !== current.day ||
+      hour !== current.hour ||
+      facilityId !== current.facilityId;
+    if (moved) {
+      await this.assertNoOnlineBookingConflict(
+        dto.clubId ?? current.clubId,
+        facilityId,
+        day,
+        hour,
+      );
+    }
     return this.prisma.facilityRental.update({
       where: { id },
       data: {
