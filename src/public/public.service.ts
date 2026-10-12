@@ -15,6 +15,7 @@ const CLUB_CARD_SELECT = {
   id: true,
   name: true,
   logoUrl: true,
+  coverUrl: true,
   sport: true,
   city: true,
   address: true,
@@ -24,6 +25,13 @@ const CLUB_CARD_SELECT = {
   publicSchools: true,
   publicCoaches: true,
   publicShop: true,
+  // Portada de respaldo: primera instalación con foto (solo si las canchas son públicas).
+  facilities: {
+    where: { photoUrl: { not: null } },
+    select: { photoUrl: true },
+    orderBy: { name: 'asc' },
+    take: 1,
+  },
 } satisfies Prisma.ClubSelect;
 
 const CLUB_DETAIL_SELECT = {
@@ -40,6 +48,7 @@ const FACILITY_SELECT = {
   type: true,
   typeLabel: true,
   photoUrl: true,
+  photos: true,
   surfaceType: true,
   services: true,
   address: true,
@@ -83,10 +92,16 @@ function toCard<T extends ClubCard>(club: T) {
     publicSchools,
     publicCoaches,
     publicShop,
+    facilities,
+    coverUrl,
     ...rest
   } = club;
+  const fallbackCover = publicFacilities
+    ? (facilities[0]?.photoUrl ?? null)
+    : null;
   return {
     ...rest,
+    coverUrl: coverUrl ?? fallbackCover,
     sections: toSections({
       publicFacilities,
       publicSchools,

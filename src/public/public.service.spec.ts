@@ -16,6 +16,8 @@ const club = (overrides: Record<string, unknown> = {}) => ({
   publicSchools: false,
   publicCoaches: false,
   publicShop: false,
+  coverUrl: null,
+  facilities: [],
   ...overrides,
 });
 
@@ -69,6 +71,22 @@ describe('PublicService', () => {
       }),
     );
     expect(result[0]).not.toHaveProperty('publicFacilities');
+  });
+
+  it('falls back to a facility photo as cover only when facilities are public', async () => {
+    const photo = 'https://firebasestorage.googleapis.com/v0/b/x/o/f.webp';
+    prisma.club.findMany.mockResolvedValue([
+      club({ id: 'a', facilities: [{ photoUrl: photo }] }),
+      club({ id: 'b', publicFacilities: false, facilities: [{ photoUrl: photo }] }),
+      club({ id: 'c', coverUrl: 'https://firebasestorage.googleapis.com/cover.webp', facilities: [{ photoUrl: photo }] }),
+    ]);
+
+    const [a, b, c] = await service.listClubs({});
+
+    expect(a.coverUrl).toBe(photo);
+    expect(b.coverUrl).toBeNull();
+    expect(c.coverUrl).toBe('https://firebasestorage.googleapis.com/cover.webp');
+    expect(a).not.toHaveProperty('facilities');
   });
 
   it('returns 404 for a club that is not public', async () => {

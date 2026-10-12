@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import { IsBoolean, IsLatitude, IsLongitude, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 
+import { IsPublicMediaUrl } from '../../common/validation/public-media-url';
+
 export class UpdateClubDto {
   @IsOptional()
   @IsString()
@@ -124,4 +126,10 @@ export class UpdateClubDto {
   @IsOptional()
   @IsBoolean()
   publicShop?: boolean;
+
+  /** Portada de la ficha pública. null la quita. */
+  @ValidateIf((_, value) => value !== null)
+  @IsOptional()
+  @IsPublicMediaUrl()
+  coverUrl?: string | null;
 }

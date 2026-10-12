@@ -76,6 +76,7 @@ export class ClubsService {
         publicSchools: dto.publicSchools,
         publicCoaches: dto.publicCoaches,
         publicShop: dto.publicShop,
+        coverUrl: dto.coverUrl,
       },
     });
   }

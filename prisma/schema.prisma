@@ -161,6 +161,8 @@ model Club {
   instagram        String?
   facebook         String?
   logoUrl          String?
+  // Foto de portada de la ficha pública (Storage del club, https).
+  coverUrl         String?
   description      String?
   sport            String?
   status           String?
@@ -565,6 +567,8 @@ model Facility {
   status       String
   statusLabel  String?
   photoUrl     String?
+  // Galería pública (hasta 12 URLs https); photoUrl es la portada.
+  photos       String[] @default([])
   address      String?
   neighborhood String?
   surfaceType  String?

@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { CreateFacilityRentalDto } from './dto/create-facility-rental.dto';
+import { UpdateFacilityPhotosDto } from './dto/update-facility-photos.dto';
 import { UpdateFacilityDto } from './dto/update-facility.dto';
 import { UpdateFacilityRentalDto } from './dto/update-facility-rental.dto';
 
@@ -169,6 +170,20 @@ export class FacilitiesService {
         capacity: dto.capacity as Prisma.InputJsonValue | undefined,
         meta: dto.meta as Prisma.InputJsonValue | undefined,
       },
+    });
+  }
+
+  /** Reemplaza la galería pública y define la portada (photoUrl). */
+  async updatePhotos(companyId: string, id: string, dto: UpdateFacilityPhotosDto) {
+    const photos = [...new Set(dto.photos)];
+    if (dto.coverUrl && !photos.includes(dto.coverUrl)) {
+      throw new BadRequestException('La portada tiene que ser una de las fotos de la galería');
+    }
+    await this.getById(companyId, id);
+    return this.prisma.facility.update({
+      where: { id },
+      data: { photos, photoUrl: dto.coverUrl ?? photos[0] ?? null },
+      select: { id: true, photos: true, photoUrl: true },
     });
   }
 

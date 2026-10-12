@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
-import { requireCompanyId } from '../common/http/request-context';
+import { requireClubScope, requireCompanyId } from '../common/http/request-context';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { CreateFacilityRentalDto } from './dto/create-facility-rental.dto';
+import { UpdateFacilityPhotosDto } from './dto/update-facility-photos.dto';
 import { UpdateFacilityDto } from './dto/update-facility.dto';
 import { UpdateFacilityRentalDto } from './dto/update-facility-rental.dto';
 import { FacilitiesService } from './facilities.service';
@@ -68,6 +69,16 @@ export class FacilitiesController {
   @Patch(':id')
   update(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdateFacilityDto) {
     return this.facilitiesService.update(requireCompanyId(req), id, dto);
+  }
+
+  /** Galería pública de la instalación. Solo el club dueño (o un rol de empresa). */
+  @Roles('admin', 'manager')
+  @Put(':id/photos')
+  async updatePhotos(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdateFacilityPhotosDto) {
+    const companyId = requireCompanyId(req);
+    const facility = await this.facilitiesService.getById(companyId, id);
+    requireClubScope(req, facility.clubId);
+    return this.facilitiesService.updatePhotos(companyId, id, dto);
   }
 
   @Roles('admin', 'manager')
