@@ -1,4 +1,10 @@
-import { IsArray, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateFacilityDto {
   @IsString()

@@ -77,6 +77,8 @@ export class ClubsService {
         publicCoaches: dto.publicCoaches,
         publicShop: dto.publicShop,
         coverUrl: dto.coverUrl,
+        depositPercent: dto.depositPercent,
+        timezone: dto.timezone,
       },
     });
   }

@@ -1,13 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
 
 import { PublicController } from './public.controller';
 import { PublicService } from './public.service';
 
 @Module({
-  imports: [
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
-  ],
   controllers: [PublicController],
   providers: [PublicService],
 })

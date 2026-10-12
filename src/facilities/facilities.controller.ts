@@ -1,7 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+} from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
-import { requireClubScope, requireCompanyId } from '../common/http/request-context';
+import {
+  requireClubScope,
+  requireCompanyId,
+} from '../common/http/request-context';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { CreateFacilityRentalDto } from './dto/create-facility-rental.dto';
 import { UpdateFacilityPhotosDto } from './dto/update-facility-photos.dto';
@@ -18,9 +32,12 @@ export class FacilitiesController {
   listRentals(
     @Req() req: unknown,
     @Query('clubId') clubId?: string,
-    @Query('facilityId') facilityId?: string
+    @Query('facilityId') facilityId?: string,
   ) {
-    return this.facilitiesService.listRentals(requireCompanyId(req), { clubId, facilityId });
+    return this.facilitiesService.listRentals(requireCompanyId(req), {
+      clubId,
+      facilityId,
+    });
   }
 
   @Roles('admin', 'manager', 'coach', 'player', 'member')
@@ -37,7 +54,11 @@ export class FacilitiesController {
 
   @Roles('admin', 'manager')
   @Patch('rentals/:id')
-  updateRental(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdateFacilityRentalDto) {
+  updateRental(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: UpdateFacilityRentalDto,
+  ) {
     return this.facilitiesService.updateRental(requireCompanyId(req), id, dto);
   }
 
@@ -67,14 +88,22 @@ export class FacilitiesController {
 
   @Roles('admin', 'manager')
   @Patch(':id')
-  update(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdateFacilityDto) {
+  update(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: UpdateFacilityDto,
+  ) {
     return this.facilitiesService.update(requireCompanyId(req), id, dto);
   }
 
   /** Galería pública de la instalación. Solo el club dueño (o un rol de empresa). */
   @Roles('admin', 'manager')
   @Put(':id/photos')
-  async updatePhotos(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdateFacilityPhotosDto) {
+  async updatePhotos(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: UpdateFacilityPhotosDto,
+  ) {
     const companyId = requireCompanyId(req);
     const facility = await this.facilitiesService.getById(companyId, id);
     requireClubScope(req, facility.clubId);

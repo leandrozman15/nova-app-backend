@@ -138,6 +138,7 @@ model User {
 
   company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clubMemberships ClubMembership[]
+  bookings        Booking[]
 
   @@index([companyId])
   @@index([companyId, role])
@@ -174,6 +175,9 @@ model Club {
   publicSchools    Boolean  @default(false)
   publicCoaches    Boolean  @default(false)
   publicShop       Boolean  @default(false)
+  // Reservas online: zona horaria de los turnos y % de seña sobre el precio.
+  timezone         String   @default("America/Argentina/Buenos_Aires")
+  depositPercent   Int      @default(30)
   companyId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -195,6 +199,8 @@ model Club {
   trainingSessions      TrainingSession[]
   injuryReports         InjuryReport[]
   membershipPlans       MembershipPlan[]
+  bookings              Booking[]
+  paymentAccount        ClubPaymentAccount?
 
   @@index([companyId])
   @@index([companyId, name])
@@ -575,12 +581,16 @@ model Facility {
   services     Json?
   capacity     Json?
   meta         Json?
+  // Reservas online desde la app pública.
+  bookable     Boolean  @default(false)
+  hourlyPrice  Decimal? @db.Decimal(12, 2)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  rentals FacilityRental[]
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club     Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  rentals  FacilityRental[]
+  bookings Booking[]
 
   @@index([companyId])
   @@index([clubId])
@@ -709,4 +719,76 @@ model MembershipPlan {
 
   @@index([companyId])
   @@index([clubId])
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT // turno retenido mientras se paga la seña
+  CONFIRMED // seña aprobada por Mercado Pago
+  EXPIRED // no se pagó a tiempo; el turno se liberó
+  CANCELLED_BY_USER
+  CANCELLED_BY_CLUB
+}
+
+/// Reserva de un turno (fecha + hora) hecha desde la app pública.
+/// Un índice único parcial (en la migración) impide dos reservas activas
+/// (PENDING_PAYMENT o CONFIRMED) en la misma cancha, fecha y hora.
+model Booking {
+  id            String        @id @default(cuid())
+  companyId     String
+  clubId        String
+  facilityId    String
+  userId        String
+  /// Fecha local del club (YYYY-MM-DD) y hora de inicio (0-23).
+  date          String
+  hour          Int
+  startsAt      DateTime
+  status        BookingStatus @default(PENDING_PAYMENT)
+  currency      String        @default("ARS")
+  price         Decimal       @db.Decimal(12, 2)
+  depositAmount Decimal       @db.Decimal(12, 2)
+  holdExpiresAt DateTime
+  contactName   String?
+  contactPhone  String?
+  // Mercado Pago
+  mpPreferenceId  String?
+  mpPaymentId     String?
+  mpPaymentStatus String?
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  cancelReason    String?
+  cancelledAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, clubId, date])
+  @@index([facilityId, date])
+  @@index([userId, createdAt])
+  @@index([status, holdExpiresAt])
+  @@index([mpPaymentId])
+}
+
+/// Cuenta de Mercado Pago del club conectada por OAuth. Los tokens se guardan
+/// cifrados (AES-256-GCM, clave PAYMENT_TOKENS_KEY) y nunca salen de la API.
+model ClubPaymentAccount {
+  id                    String    @id @default(cuid())
+  companyId             String
+  clubId                String    @unique
+  provider              String    @default("mercadopago")
+  providerUserId        String
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  publicKey             String?
+  liveMode              Boolean   @default(false)
+  expiresAt             DateTime?
+  connectedByUserId     String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,7 +16,10 @@ import { UpdateFacilityRentalDto } from './dto/update-facility-rental.dto';
 export class FacilitiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listRentals(companyId: string, filters?: { clubId?: string; facilityId?: string }) {
+  listRentals(
+    companyId: string,
+    filters?: { clubId?: string; facilityId?: string },
+  ) {
     return this.prisma.facilityRental.findMany({
       where: {
         companyId,
@@ -79,7 +86,11 @@ export class FacilitiesService {
     });
   }
 
-  async updateRental(companyId: string, id: string, dto: UpdateFacilityRentalDto) {
+  async updateRental(
+    companyId: string,
+    id: string,
+    dto: UpdateFacilityRentalDto,
+  ) {
     await this.getRentalById(companyId, id);
     return this.prisma.facilityRental.update({
       where: { id },
@@ -125,7 +136,9 @@ export class FacilitiesService {
   }
 
   async getById(companyId: string, id: string) {
-    const facility = await this.prisma.facility.findFirst({ where: { companyId, id } });
+    const facility = await this.prisma.facility.findFirst({
+      where: { companyId, id },
+    });
     if (!facility) throw new NotFoundException('Facility not found');
     return facility;
   }
@@ -169,15 +182,23 @@ export class FacilitiesService {
         services: dto.services as Prisma.InputJsonValue | undefined,
         capacity: dto.capacity as Prisma.InputJsonValue | undefined,
         meta: dto.meta as Prisma.InputJsonValue | undefined,
+        bookable: dto.bookable,
+        hourlyPrice: dto.hourlyPrice,
       },
     });
   }
 
   /** Reemplaza la galería pública y define la portada (photoUrl). */
-  async updatePhotos(companyId: string, id: string, dto: UpdateFacilityPhotosDto) {
+  async updatePhotos(
+    companyId: string,
+    id: string,
+    dto: UpdateFacilityPhotosDto,
+  ) {
     const photos = [...new Set(dto.photos)];
     if (dto.coverUrl && !photos.includes(dto.coverUrl)) {
-      throw new BadRequestException('La portada tiene que ser una de las fotos de la galería');
+      throw new BadRequestException(
+        'La portada tiene que ser una de las fotos de la galería',
+      );
     }
     await this.getById(companyId, id);
     return this.prisma.facility.update({

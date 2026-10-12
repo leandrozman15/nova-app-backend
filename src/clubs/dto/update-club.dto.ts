@@ -1,7 +1,33 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsLatitude, IsLongitude, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  Validate,
+  ValidateIf,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+} from 'class-validator';
 
+import { isValidTimeZone } from '../../bookings/booking-time';
 import { IsPublicMediaUrl } from '../../common/validation/public-media-url';
+
+@ValidatorConstraint({ name: 'timeZone' })
+class TimeZoneConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown) {
+    return typeof value === 'string' && isValidTimeZone(value);
+  }
+
+  defaultMessage() {
+    return 'Zona horaria inválida';
+  }
+}
 
 export class UpdateClubDto {
   @IsOptional()
@@ -132,4 +158,19 @@ export class UpdateClubDto {
   @IsOptional()
   @IsPublicMediaUrl()
   coverUrl?: string | null;
+
+  /** % de seña sobre el precio del turno (0 a 100). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  depositPercent?: number;
+
+  /** Zona horaria IANA de los turnos (ej. America/Argentina/Buenos_Aires). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  @Validate(TimeZoneConstraint)
+  timezone?: string;
 }

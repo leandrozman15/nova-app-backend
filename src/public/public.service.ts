@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
+import { isMercadoPagoConfigured } from '../payments/mercadopago.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListPublicClubsDto } from './dto/list-public-clubs.dto';
 import { boundingBox, distanceKm } from './geo';
@@ -40,6 +41,8 @@ const CLUB_DETAIL_SELECT = {
   website: true,
   instagram: true,
   facebook: true,
+  depositPercent: true,
+  paymentAccount: { select: { id: true } },
 } satisfies Prisma.ClubSelect;
 
 const FACILITY_SELECT = {
@@ -49,6 +52,8 @@ const FACILITY_SELECT = {
   typeLabel: true,
   photoUrl: true,
   photos: true,
+  bookable: true,
+  hourlyPrice: true,
   surfaceType: true,
   services: true,
   address: true,
@@ -174,16 +179,29 @@ export class PublicService {
     const facilitiesCount = club.publicFacilities
       ? await this.prisma.facility.count({ where: { clubId } })
       : 0;
-    return { ...toCard(club), facilitiesCount };
+    const { paymentAccount, ...rest } = club;
+    return {
+      ...toCard(rest),
+      facilitiesCount,
+      // Reservas online: el club conectó Mercado Pago y la plataforma lo tiene habilitado.
+      onlineBooking:
+        club.publicFacilities &&
+        Boolean(paymentAccount) &&
+        isMercadoPagoConfigured(),
+    };
   }
 
   async listFacilities(clubId: string) {
     await this.requireSection(clubId, 'publicFacilities');
-    return this.prisma.facility.findMany({
+    const facilities = await this.prisma.facility.findMany({
       where: { clubId },
       select: FACILITY_SELECT,
       orderBy: { name: 'asc' },
     });
+    return facilities.map(({ hourlyPrice, ...facility }) => ({
+      ...facility,
+      hourlyPrice: hourlyPrice === null ? null : Number(hourlyPrice),
+    }));
   }
 
   /**
