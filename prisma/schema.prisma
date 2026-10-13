@@ -101,6 +101,7 @@ model Company {
   facilities            Facility[]
   facilityRentals       FacilityRental[]
   clubActivities        ClubActivity[]
+  clubTournaments       ClubTournament[]
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
@@ -145,6 +146,7 @@ model User {
   clubMemberships ClubMembership[]
   bookings        Booking[]
   activityInquiries ActivityInquiry[]
+  tournamentEntries TournamentEntry[]
 
   @@index([companyId])
   @@index([companyId, role])
@@ -213,6 +215,7 @@ model Club {
   paymentAccount        ClubPaymentAccount?
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
+  tournaments           ClubTournament[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -869,4 +872,84 @@ model ActivityInquiry {
 
   @@index([companyId, clubId, status])
   @@index([userId, activityId])
+}
+
+enum TournamentStatus {
+  DRAFT // borrador: solo lo ve el club
+  PUBLISHED // visible en la app; acepta inscripciones hasta la fecha límite o el cupo
+  CLOSED // visible, inscripciones cerradas
+  FINISHED // terminado (sale del listado de próximos)
+}
+
+/// Torneo abierto que el club organiza y publica en la app (distinto del fixture interno).
+model ClubTournament {
+  id                   String           @id @default(cuid())
+  companyId            String
+  clubId               String
+  name                 String
+  /// Familia de deporte (football, padel…) y variante opcional (futbol_5, padel…).
+  sport                String
+  variant              String?
+  /// "Libre +18", "Mixto", "Categoría 2010"…
+  category             String?
+  /// individual | pareja | equipo
+  entryType            String           @default("equipo")
+  description          String?
+  /// Días y horarios: [{ date: "2026-11-07", start: "09:00", end: "18:00" }]
+  days                 Json             @default("[]")
+  /// Sedes: [{ name, address }]
+  venues               Json             @default("[]")
+  organizers           String[]         @default([])
+  contactPhone         String?
+  contactEmail         String?
+  registrationFee      Decimal?         @db.Decimal(12, 2)
+  /// por equipo | por pareja | por persona
+  feeUnit              String?
+  registrationDeadline String?
+  maxEntries           Int?
+  prizes               String[]         @default([])
+  rules                String?
+  status               TournamentStatus @default(DRAFT)
+  /// Primer día del torneo (YYYY-MM-DD), derivado de days, para ordenar y filtrar.
+  startDate            String?
+  endDate              String?
+  publishedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  entries TournamentEntry[]
+
+  @@index([companyId, clubId])
+  @@index([status, sport, startDate])
+}
+
+enum TournamentEntryStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+/// Inscripción de un usuario de la app a un torneo (el club la acepta o rechaza).
+model TournamentEntry {
+  id           String                @id @default(cuid())
+  companyId    String
+  clubId       String
+  tournamentId String
+  userId       String
+  teamName     String?
+  message      String?
+  status       TournamentEntryStatus @default(PENDING)
+  reviewNote   String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  tournament ClubTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, status])
+  @@index([userId])
+  @@index([companyId, clubId])
 }
