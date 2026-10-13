@@ -25,7 +25,7 @@ export class CreateClubDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(60)
+  @MaxLength(400)
   sport?: string;
 
   @IsOptional()

@@ -114,9 +114,10 @@ export class UpdateClubDto {
   @IsString()
   description?: string;
 
+  /** Disciplinas del club separadas por coma ("football,hockey,boxeo"). */
   @IsOptional()
   @IsString()
-  @MaxLength(60)
+  @MaxLength(400)
   sport?: string;
 
   @IsOptional()
