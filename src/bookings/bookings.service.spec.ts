@@ -43,24 +43,20 @@ describe('BookingsService', () => {
         }),
       },
       facility: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValue({
-            id: 'f1',
-            name: 'Cancha 1',
-            bookable: true,
-            hourlyPrice: new Prisma.Decimal(20000),
-          }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'f1',
+          name: 'Cancha 1',
+          bookable: true,
+          hourlyPrice: new Prisma.Decimal(20000),
+        }),
       },
       user: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({
-            id: 'u1',
-            name: 'Ana',
-            email: 'ana@mail.com',
-            phone: '11 5555-1234',
-          }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'u1',
+          name: 'Ana',
+          email: 'ana@mail.com',
+          phone: '11 5555-1234',
+        }),
       },
       facilityRental: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -75,15 +71,16 @@ describe('BookingsService', () => {
         findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       },
+      financialTransaction: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
     };
     mp = {
-      createPreference: jest
-        .fn()
-        .mockResolvedValue({
-          id: 'pref-1',
-          init_point: 'https://mp/checkout',
-          sandbox_init_point: 'https://sandbox/checkout',
-        }),
+      createPreference: jest.fn().mockResolvedValue({
+        id: 'pref-1',
+        init_point: 'https://mp/checkout',
+        sandbox_init_point: 'https://sandbox/checkout',
+      }),
       getPayment: jest.fn(),
       refundPayment: jest.fn().mockResolvedValue({ id: 9, status: 'approved' }),
     };
@@ -297,6 +294,12 @@ describe('BookingsService', () => {
       currency: 'ARS',
       mpPaymentId: null,
       refundedAt: null,
+      companyId: 'company-a',
+      date: '2026-10-20',
+      hour: 18,
+      paidAt: null,
+      contactName: 'Ana',
+      facility: { name: 'Cancha 1' },
     };
     const approved = {
       id: 555,
@@ -323,6 +326,47 @@ describe('BookingsService', () => {
         }),
       );
       expect(mp.refundPayment).not.toHaveBeenCalled();
+    });
+
+    it('records the deposit and the Mercado Pago fee in the club treasury', async () => {
+      mp.getPayment.mockResolvedValue({
+        ...approved,
+        fee_details: [{ type: 'mercadopago_fee', amount: 399.6 }],
+      });
+      await service.applyPayment('b1', '555');
+
+      const { data, skipDuplicates } =
+        prisma.financialTransaction.createMany.mock.calls[0][0];
+      expect(skipDuplicates).toBe(true);
+      expect(data).toEqual([
+        expect.objectContaining({
+          companyId: 'company-a',
+          clubId: 'club-a',
+          type: 'income',
+          category: 'Reservas online',
+          amount: 6000,
+          reference: 'mp:555',
+          description: 'Seña de reserva · Cancha 1 · 2026-10-20 18:00 · Ana',
+        }),
+        expect.objectContaining({
+          type: 'expense',
+          category: 'Comisión Mercado Pago',
+          amount: 399.6,
+          reference: 'mp-fee:555',
+        }),
+      ]);
+    });
+
+    it('does not record twice when the booking was already confirmed by the webhook', async () => {
+      prisma.booking.updateMany.mockResolvedValue({ count: 0 });
+      prisma.booking.findUnique.mockResolvedValue({
+        ...pending,
+        status: 'CONFIRMED',
+        mpPaymentId: '554',
+      });
+      mp.getPayment.mockResolvedValue(approved);
+      await service.applyPayment('b1', '555');
+      expect(prisma.financialTransaction.createMany).not.toHaveBeenCalled();
     });
 
     it('rejects a payment that belongs to another booking', async () => {
@@ -415,6 +459,17 @@ describe('BookingsService', () => {
         mpPaymentId: '555',
         refundedAt: null,
       });
+      prisma.booking.findUnique.mockResolvedValue({
+        companyId: 'company-a',
+        clubId: 'club-a',
+        date: '2026-10-20',
+        hour: 18,
+        depositAmount: 6000,
+        currency: 'ARS',
+        paidAt: new Date('2026-10-19T12:00:00Z'),
+        contactName: 'Ana',
+        facility: { name: 'Cancha 1' },
+      });
       const result = await service.cancelByClub(
         'company-a',
         'club-a',
@@ -426,6 +481,15 @@ describe('BookingsService', () => {
       });
       expect(mp.refundPayment).toHaveBeenCalledWith('seller-token', '555');
       expect(result).toEqual({ ok: true, refunded: true });
+      // La devolución queda como gasto en Tesorería.
+      const { data } = prisma.financialTransaction.createMany.mock.calls[0][0];
+      expect(data[1]).toEqual(
+        expect.objectContaining({
+          type: 'expense',
+          category: 'Devolución de señas',
+          reference: 'mp-refund:555',
+        }),
+      );
     });
 
     it('cancels an unpaid hold without calling Mercado Pago', async () => {

@@ -522,6 +522,10 @@ export class BookingsService {
             : new Date(),
         },
       });
+      if (updated.count === 1) {
+        // Solo quien confirma registra el cobro (el webhook y la vuelta pueden llegar juntos).
+        await this.recordDepositInTreasury(booking.id, payment);
+      }
       if (updated.count === 0 && booking.status !== 'CONFIRMED') {
         // Fue cancelada mientras se pagaba: devolver.
         await this.refundAndCancel(
@@ -567,6 +571,129 @@ export class BookingsService {
         cancelledAt: new Date(),
       },
     });
+    await this.recordRefundInTreasury(bookingId, paymentId);
+  }
+
+  // ----- Tesorería -----
+
+  /**
+   * Seña cobrada → ingreso en Tesorería, y la comisión de Mercado Pago como
+   * gasto. Idempotente: la referencia mp:<pago> es única en la base.
+   */
+  private async recordDepositInTreasury(bookingId: string, payment: MpPayment) {
+    const booking = await this.treasuryContext(bookingId);
+    if (!booking) return;
+    const occurredAt = payment.date_approved
+      ? new Date(payment.date_approved)
+      : new Date();
+    const fee = roundMoney(
+      (payment.fee_details ?? []).reduce(
+        (sum, item) => sum + (Number(item.amount) || 0),
+        0,
+      ),
+    );
+    try {
+      await this.prisma.financialTransaction.createMany({
+        skipDuplicates: true,
+        data: [
+          {
+            companyId: booking.companyId,
+            clubId: booking.clubId,
+            type: 'income',
+            category: 'Reservas online',
+            amount: payment.transaction_amount,
+            currency: payment.currency_id,
+            occurredAt,
+            description: `Seña de reserva · ${booking.label}`,
+            reference: `mp:${payment.id}`,
+          },
+          ...(fee > 0
+            ? [
+                {
+                  companyId: booking.companyId,
+                  clubId: booking.clubId,
+                  type: 'expense' as const,
+                  category: 'Comisión Mercado Pago',
+                  amount: fee,
+                  currency: payment.currency_id,
+                  occurredAt,
+                  description: `Comisión por la seña · ${booking.label}`,
+                  reference: `mp-fee:${payment.id}`,
+                },
+              ]
+            : []),
+        ],
+      });
+    } catch (error) {
+      // Tesorería no debe frenar la confirmación de la reserva.
+      this.logger.error(
+        `No se registró en Tesorería el pago ${payment.id}: ${String(error)}`,
+      );
+    }
+  }
+
+  /** Devolución de una seña → gasto en Tesorería (y el ingreso, si no estaba). */
+  private async recordRefundInTreasury(bookingId: string, paymentId: string) {
+    const booking = await this.treasuryContext(bookingId);
+    if (!booking) return;
+    const base = {
+      companyId: booking.companyId,
+      clubId: booking.clubId,
+      amount: booking.depositAmount,
+      currency: booking.currency,
+    };
+    try {
+      await this.prisma.financialTransaction.createMany({
+        skipDuplicates: true,
+        data: [
+          {
+            ...base,
+            type: 'income',
+            category: 'Reservas online',
+            occurredAt: booking.paidAt ?? new Date(),
+            description: `Seña de reserva · ${booking.label}`,
+            reference: `mp:${paymentId}`,
+          },
+          {
+            ...base,
+            type: 'expense',
+            category: 'Devolución de señas',
+            occurredAt: new Date(),
+            description: `Devolución de seña · ${booking.label}`,
+            reference: `mp-refund:${paymentId}`,
+          },
+        ],
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se registró en Tesorería la devolución ${paymentId}: ${String(error)}`,
+      );
+    }
+  }
+
+  private async treasuryContext(bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        companyId: true,
+        clubId: true,
+        date: true,
+        hour: true,
+        depositAmount: true,
+        currency: true,
+        paidAt: true,
+        contactName: true,
+        facility: { select: { name: true } },
+      },
+    });
+    if (!booking) return null;
+    const when = `${booking.date} ${String(booking.hour).padStart(2, '0')}:00`;
+    return {
+      ...booking,
+      label: [booking.facility.name, when, booking.contactName]
+        .filter(Boolean)
+        .join(' · '),
+    };
   }
 
   // ----- Consola del club -----

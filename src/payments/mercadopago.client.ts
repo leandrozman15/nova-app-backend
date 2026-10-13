@@ -42,6 +42,8 @@ export type MpPayment = {
   transaction_amount: number;
   currency_id: string;
   date_approved?: string | null;
+  /** Costos que cobra Mercado Pago (comisión, financiación). */
+  fee_details?: { type?: string; amount?: number }[];
 };
 
 // Direcciones de producción por defecto: se pueden cambiar por variable de
