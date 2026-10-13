@@ -629,3 +629,15 @@ describe('BookingsService', () => {
     });
   });
 });
+
+describe('isAllowedLength', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isAllowedLength } = require('./bookings.service');
+  it('accepts the court durations and back-to-back turns up to 4 hours', () => {
+    expect(isAllowedLength(60, [60])).toBe(true);
+    expect(isAllowedLength(120, [60])).toBe(true);
+    expect(isAllowedLength(180, [90])).toBe(true);
+    expect(isAllowedLength(90, [60])).toBe(false);
+    expect(isAllowedLength(300, [60])).toBe(false);
+  });
+});

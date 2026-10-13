@@ -30,7 +30,7 @@ import {
   zonedMinuteToUtc,
 } from './booking-time';
 import { ensureOccurrences, isOverlapError } from './fixed-turns';
-import { CreateBookingDto } from './dto/booking.dto';
+import { CreateBookingDto, MAX_BOOKING_MINUTES } from './dto/booking.dto';
 
 export const HOLD_MINUTES = 15;
 const MAX_ACTIVE_HOLDS_PER_USER = 2;
@@ -51,6 +51,20 @@ export function effectiveBookingMode(club: {
   if (club.bookingMode === 'deposit')
     return isMercadoPagoConfigured() && club.paymentAccount ? 'deposit' : 'off';
   return 'off';
+}
+
+/**
+ * Largo válido de una reserva: una duración de la cancha, o varios turnos
+ * seguidos de una misma duración (p. ej. 2 × 60), hasta 4 horas.
+ */
+export function isAllowedLength(minutes: number, durations: number[]) {
+  if (
+    !Number.isInteger(minutes) ||
+    minutes <= 0 ||
+    minutes > MAX_BOOKING_MINUTES
+  )
+    return false;
+  return durations.some((base) => base > 0 && minutes % base === 0);
 }
 
 /** Duración por defecto: 60 si la cancha la ofrece, si no la primera. */
@@ -327,7 +341,7 @@ export class BookingsService {
       ? facility.slotDurations
       : [60];
     const duration = dto.durationMinutes ?? defaultDuration(durations);
-    if (!durations.includes(duration))
+    if (!isAllowedLength(duration, durations))
       throw new BadRequestException('Esa duración no está disponible.');
     const startMinute =
       dto.startMinute ?? (dto.hour !== undefined ? dto.hour * 60 : NaN);

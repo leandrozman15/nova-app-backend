@@ -10,6 +10,9 @@ import {
   Min,
 } from 'class-validator';
 
+/** Tope de un turno (o de varios seguidos) reservado desde la app. */
+export const MAX_BOOKING_MINUTES = 240;
+
 export class CreateBookingDto {
   @IsString()
   @MaxLength(60)
@@ -39,9 +42,12 @@ export class CreateBookingDto {
   @Max(1425)
   startMinute?: number;
 
+  /** Duración de la cancha o varios turnos seguidos (hasta 4 h, de a 30 min). */
   @IsOptional()
   @Type(() => Number)
-  @IsIn([30, 60, 90, 120])
+  @IsInt()
+  @Min(30)
+  @Max(MAX_BOOKING_MINUTES)
   durationMinutes?: number;
 
   @IsOptional()

@@ -48,19 +48,33 @@ function setup() {
   const prisma: any = {
     club: {
       findFirst: jest.fn().mockResolvedValue(club),
-      findUnique: jest.fn().mockResolvedValue({ companyId: 'co1', timezone: TZ }),
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ companyId: 'co1', timezone: TZ }),
       update: jest.fn(),
     },
     facility: {
-      findFirst: jest.fn().mockResolvedValue({ id: 'f1', name: 'Cancha 1', hourlyPrice: new Prisma.Decimal(24000), slotDurations: [60, 90] }),
-      findMany: jest.fn().mockResolvedValue([{ id: 'f1', name: 'Cancha 1', bookable: true }]),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'f1',
+        name: 'Cancha 1',
+        hourlyPrice: new Prisma.Decimal(24000),
+        slotDurations: [60, 90],
+      }),
+      findMany: jest
+        .fn()
+        .mockResolvedValue([{ id: 'f1', name: 'Cancha 1', bookable: true }]),
       findUnique: jest.fn().mockResolvedValue({ name: 'Cancha 1' }),
       update: jest.fn(),
     },
     recurringBooking: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
-      create: jest.fn().mockImplementation(({ data }) => ({ id: 'fx1', endDate: null, ...data, price: new Prisma.Decimal(data.price) })),
+      create: jest.fn().mockImplementation(({ data }) => ({
+        id: 'fx1',
+        endDate: null,
+        ...data,
+        price: new Prisma.Decimal(data.price),
+      })),
       update: jest.fn(),
       delete: jest.fn().mockResolvedValue({}),
     },
@@ -104,7 +118,11 @@ describe('AgendaService', () => {
     const { prisma, service } = setup();
     await service.markDeposit('co1', 'c1', 'b1', { method: 'cash' });
     expect(prisma.booking.updateMany).toHaveBeenCalledWith({
-      where: { id: 'b1', status: { in: ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'] }, depositPaidAt: null },
+      where: {
+        id: 'b1',
+        status: { in: ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'] },
+        depositPaidAt: null,
+      },
       data: expect.objectContaining({
         status: 'CONFIRMED',
         depositMethod: 'cash',
@@ -123,24 +141,44 @@ describe('AgendaService', () => {
     });
 
     prisma.booking.updateMany.mockResolvedValue({ count: 0 });
-    await expect(service.markDeposit('co1', 'c1', 'b1', { method: 'transfer' })).rejects.toThrow(/cambió/);
+    await expect(
+      service.markDeposit('co1', 'c1', 'b1', { method: 'transfer' }),
+    ).rejects.toThrow(/cambió/);
   });
 
   it('charges the rest of the turn and marks that they came', async () => {
     const { prisma, service } = setup();
-    prisma.booking.findFirst.mockResolvedValue({ ...(await prisma.booking.findFirst()), status: 'CONFIRMED' });
-    await service.registerPayment('co1', 'c1', 'b1', { method: 'transfer', amount: 12000 });
+    prisma.booking.findFirst.mockResolvedValue({
+      ...(await prisma.booking.findFirst()),
+      status: 'CONFIRMED',
+    });
+    await service.registerPayment('co1', 'c1', 'b1', {
+      method: 'transfer',
+      amount: 12000,
+    });
     expect(prisma.booking.update).toHaveBeenCalledWith({
       where: { id: 'b1' },
-      data: { paidAmount: { increment: 12000 }, paymentMethod: 'transfer', attendance: 'SHOWED' },
+      data: {
+        paidAmount: { increment: 12000 },
+        paymentMethod: 'transfer',
+        attendance: 'SHOWED',
+      },
     });
-    expect(prisma.financialTransaction.create.mock.calls[0][0].data.reference).toMatch(/^turno-pago:b1:/);
+    expect(
+      prisma.financialTransaction.create.mock.calls[0][0].data.reference,
+    ).toMatch(/^turno-pago:b1:/);
   });
 
   it('explains which turn blocks a manual booking', async () => {
     const { prisma, service } = setup();
-    prisma.booking.create.mockRejectedValue(new Error('conflicting key value violates exclusion constraint "Booking_no_overlap"'));
-    prisma.booking.findMany.mockResolvedValue([{ startMinute: 1260, durationMinutes: 90, contactName: 'Los Pibes' }]);
+    prisma.booking.create.mockRejectedValue(
+      new Error(
+        'conflicting key value violates exclusion constraint "Booking_no_overlap"',
+      ),
+    );
+    prisma.booking.findMany.mockResolvedValue([
+      { startMinute: 1260, durationMinutes: 90, contactName: 'Los Pibes' },
+    ]);
     await expect(
       service.createBooking('uid', 'co1', 'c1', {
         facilityId: 'f1',
@@ -155,7 +193,12 @@ describe('AgendaService', () => {
   it('does not allow two fixed turns that overlap on the same court and day', async () => {
     const { prisma, service } = setup();
     prisma.recurringBooking.findMany.mockResolvedValueOnce([
-      { clientName: 'Los Pibes', startMinute: 1260, durationMinutes: 60, endDate: null },
+      {
+        clientName: 'Los Pibes',
+        startMinute: 1260,
+        durationMinutes: 60,
+        endDate: null,
+      },
     ]);
     await expect(
       service.createRecurring('uid', 'co1', 'c1', {
@@ -171,32 +214,61 @@ describe('AgendaService', () => {
 
   it('ending a fixed turn only removes untouched future turns', async () => {
     const { prisma, service } = setup();
-    prisma.recurringBooking.findFirst.mockResolvedValue({ id: 'fx1', startDate: '2026-01-01' });
+    prisma.recurringBooking.findFirst.mockResolvedValue({
+      id: 'fx1',
+      startDate: '2026-01-01',
+    });
     await service.endRecurring('co1', 'c1', 'fx1', '2026-10-27');
-    expect(prisma.recurringBooking.update).toHaveBeenCalledWith({ where: { id: 'fx1' }, data: { endDate: '2026-10-26' } });
+    expect(prisma.recurringBooking.update).toHaveBeenCalledWith({
+      where: { id: 'fx1' },
+      data: { endDate: '2026-10-26' },
+    });
     expect(prisma.booking.deleteMany).toHaveBeenCalledWith({
-      where: { recurringId: 'fx1', date: { gte: '2026-10-27' }, paidAmount: 0, attendance: null, depositPaidAt: null },
+      where: {
+        recurringId: 'fx1',
+        date: { gte: '2026-10-27' },
+        paidAmount: 0,
+        attendance: null,
+        depositPaidAt: null,
+      },
     });
   });
 
   it('computes the occupancy of the night window per court', async () => {
     const { prisma, service } = setup();
     prisma.booking.findMany.mockResolvedValue([
-      { facilityId: 'f1', startMinute: 1200, durationMinutes: 60, attendance: null },
-      { facilityId: 'f1', startMinute: 1050, durationMinutes: 60, attendance: 'NO_SHOW' },
+      {
+        facilityId: 'f1',
+        startMinute: 1200,
+        durationMinutes: 60,
+        attendance: null,
+      },
+      {
+        facilityId: 'f1',
+        startMinute: 1050,
+        durationMinutes: 60,
+        attendance: 'NO_SHOW',
+      },
     ]);
     const result = await service.occupancy('co1', 'c1', '2026-09');
     // Septiembre: 30 noches de 18 a 24 = 10.800 min; ocupados 60 + 30 (la mitad que cae en la franja).
-    expect(result.facilities[0]).toMatchObject({ available: 10800, occupied: 90, percent: 0.8 });
+    expect(result.facilities[0]).toMatchObject({
+      available: 10800,
+      occupied: 90,
+      percent: 0.8,
+    });
     expect(result.total.noShows).toBe(1);
     expect(result.previous.month).toBe('2026-08');
   });
 
   it('lists the dates of a fixed turn inside its validity', () => {
-    expect(occurrenceDates({ weekday: 2, startDate: '2026-10-14', endDate: '2026-10-27' }, '2026-10-01', '2026-10-31')).toEqual([
-      '2026-10-20',
-      '2026-10-27',
-    ]);
+    expect(
+      occurrenceDates(
+        { weekday: 2, startDate: '2026-10-14', endDate: '2026-10-27' },
+        '2026-10-01',
+        '2026-10-31',
+      ),
+    ).toEqual(['2026-10-20', '2026-10-27']);
     expect(previousMonth('2026-01')).toBe('2025-12');
   });
 });
