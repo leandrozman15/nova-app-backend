@@ -1511,3 +1511,25 @@ model Division {
   @@index([clubId, sport])
   @@index([companyId])
 }
+
+/// Documentos que vivían en Firestore (planteles, eventos, asistencias, tablas, rivales, novedades, staff…),
+/// guardados por su ruta. Etapa 2 de la salida de Firestore: misma forma, misma ruta, en Postgres.
+model StoreDocument {
+  id         String   @id @default(cuid())
+  /// Ruta completa: "clubs/c1/divisions/d1/teams/t1" o "users/uid".
+  path       String   @unique
+  /// Ruta de la colección: "clubs/c1/divisions/d1/teams".
+  parentPath String
+  /// Nombre de la colección ("teams"), para consultas de grupo.
+  collection String
+  docId      String
+  clubId     String?
+  companyId  String?
+  data       Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([parentPath])
+  @@index([clubId, collection])
+  @@index([collection])
+}
