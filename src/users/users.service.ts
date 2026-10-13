@@ -9,6 +9,7 @@ import {
 
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import { CreateJoinRequestDto } from './dto/create-join-request.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterFreeUserDto } from './dto/register-free-user.dto';
@@ -41,7 +42,12 @@ const CLUB_ROLES = new Set([
 ]);
 const CLUB_MANAGERS = new Set(['club_admin', 'manager', 'coordinator']);
 const CLUB_PLAYER_PROVISIONERS = new Set([
-  'club_admin', 'manager', 'coordinator', 'coach', 'coach_lvl1', 'coach_lvl2',
+  'club_admin',
+  'manager',
+  'coordinator',
+  'coach',
+  'coach_lvl1',
+  'coach_lvl2',
 ]);
 
 const MY_PROFILE_SELECT = {
@@ -54,10 +60,13 @@ const MY_PROFILE_SELECT = {
   companyId: true,
 } as const;
 
-function withCompleteness<T extends { name: string | null; phone: string | null }>(
-  user: T,
-) {
-  return { ...user, complete: Boolean(user.name?.trim() && user.phone?.trim()) };
+function withCompleteness<
+  T extends { name: string | null; phone: string | null },
+>(user: T) {
+  return {
+    ...user,
+    complete: Boolean(user.name?.trim() && user.phone?.trim()),
+  };
 }
 
 @Injectable()
@@ -114,7 +123,12 @@ export class UsersService {
         clubId,
         status: 'ACTIVA',
       },
-      select: { companyId: true, clubId: true, role: true, club: { select: { companyId: true } } },
+      select: {
+        companyId: true,
+        clubId: true,
+        role: true,
+        club: { select: { companyId: true } },
+      },
     });
     if (!membership || membership.club.companyId !== membership.companyId) {
       throw new ForbiddenException('Active club membership required');
@@ -134,7 +148,10 @@ export class UsersService {
       if (claims[key] === undefined) delete claims[key];
     });
 
-    await this.firebaseAdminService.auth.setCustomUserClaims(firebaseUid, claims);
+    await this.firebaseAdminService.auth.setCustomUserClaims(
+      firebaseUid,
+      claims,
+    );
     return {
       ok: true,
       companyId: membership.companyId,
@@ -152,7 +169,8 @@ export class UsersService {
     const existing = await this.getByFirebaseUid(firebaseUid);
     if (existing) return { created: false, user: existing };
 
-    const firebaseUser = await this.firebaseAdminService.auth.getUser(firebaseUid);
+    const firebaseUser =
+      await this.firebaseAdminService.auth.getUser(firebaseUid);
     if (!firebaseUser.email) {
       throw new BadRequestException('La cuenta necesita un email verificado');
     }
@@ -236,7 +254,7 @@ export class UsersService {
   async createJoinRequest(firebaseUid: string, dto: CreateJoinRequestDto) {
     const user = await this.requireUser(firebaseUid);
     const club = await this.prisma.club.findFirst({
-      where: { id: dto.clubId, isPublic: true },
+      where: { id: dto.clubId, isPublic: true, ...CLUB_IN_GOOD_STANDING },
       select: { id: true, companyId: true },
     });
     if (!club) throw new NotFoundException('Club no encontrado');
@@ -249,7 +267,9 @@ export class UsersService {
       throw new ConflictException('Ya sos parte de este club');
     }
     if (existing?.status === 'SOLICITADA') {
-      throw new ConflictException('Ya tenés una solicitud pendiente en este club');
+      throw new ConflictException(
+        'Ya tenés una solicitud pendiente en este club',
+      );
     }
 
     const data = {
@@ -267,7 +287,13 @@ export class UsersService {
       where: { userId_clubId: { userId: user.id, clubId: club.id } },
       update: data,
       create: { ...data, userId: user.id, clubId: club.id },
-      select: { id: true, clubId: true, status: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        clubId: true,
+        status: true,
+        role: true,
+        createdAt: true,
+      },
     });
   }
 
@@ -276,7 +302,8 @@ export class UsersService {
     const result = await this.prisma.clubMembership.deleteMany({
       where: { id: membershipId, userId: user.id, status: 'SOLICITADA' },
     });
-    if (result.count === 0) throw new NotFoundException('Solicitud pendiente no encontrada');
+    if (result.count === 0)
+      throw new NotFoundException('Solicitud pendiente no encontrada');
     return { ok: true };
   }
 
@@ -297,18 +324,22 @@ export class UsersService {
     return count > 0;
   }
 
-  async provisionProfileClaims(input: {
-    uid: string;
-    email?: string;
-    name?: string;
-    role: string;
-    companyId?: string;
-    clubId?: string;
-    leagueId?: string;
-    municipalityId?: string;
-    teamId?: string;
-    isFan?: boolean;
-  }, actor?: ProvisionProfileActor, allowFirstAdminBootstrap = false) {
+  async provisionProfileClaims(
+    input: {
+      uid: string;
+      email?: string;
+      name?: string;
+      role: string;
+      companyId?: string;
+      clubId?: string;
+      leagueId?: string;
+      municipalityId?: string;
+      teamId?: string;
+      isFan?: boolean;
+    },
+    actor?: ProvisionProfileActor,
+    allowFirstAdminBootstrap = false,
+  ) {
     const normalizedRole = input.role.trim().toLowerCase();
     if (!GLOBAL_ROLES.has(normalizedRole) && !CLUB_ROLES.has(normalizedRole)) {
       throw new BadRequestException('Unsupported profile role');
@@ -317,10 +348,14 @@ export class UsersService {
     const companyId = input.companyId ?? actor?.companyId;
     if (!companyId) throw new BadRequestException('Missing company');
     if (input.clubId && !CLUB_ROLES.has(normalizedRole)) {
-      throw new BadRequestException('Global roles cannot be assigned to a club membership');
+      throw new BadRequestException(
+        'Global roles cannot be assigned to a club membership',
+      );
     }
     if (CLUB_ROLES.has(normalizedRole) && !input.clubId) {
-      throw new BadRequestException('Club-scoped roles require a club membership');
+      throw new BadRequestException(
+        'Club-scoped roles require a club membership',
+      );
     }
 
     const [firebaseUser, company, targetClub, actorUser] = await Promise.all([
@@ -341,19 +376,32 @@ export class UsersService {
     ]);
 
     if (!company) throw new NotFoundException('Company not found');
-    if (input.clubId && !targetClub) throw new NotFoundException('Club not found');
+    if (input.clubId && !targetClub)
+      throw new NotFoundException('Club not found');
     if (targetClub && targetClub.companyId !== companyId) {
-      throw new ConflictException('Club does not belong to the requested company');
+      throw new ConflictException(
+        'Club does not belong to the requested company',
+      );
     }
 
     if (!allowFirstAdminBootstrap) {
-      if (!actor || !actorUser) throw new UnauthorizedException('Provisioning actor not found');
-      await this.assertActorCanProvision(actor, actorUser, companyId, input.clubId, normalizedRole);
+      if (!actor || !actorUser)
+        throw new UnauthorizedException('Provisioning actor not found');
+      await this.assertActorCanProvision(
+        actor,
+        actorUser,
+        companyId,
+        input.clubId,
+        normalizedRole,
+      );
     }
 
-    const email = input.email ?? firebaseUser.email ?? `${input.uid}@bootstrap.local`;
+    const email =
+      input.email ?? firebaseUser.email ?? `${input.uid}@bootstrap.local`;
     const name = input.name ?? firebaseUser.displayName ?? null;
-    const storedGlobalRole = GLOBAL_ROLES.has(normalizedRole) ? normalizedRole : undefined;
+    const storedGlobalRole = GLOBAL_ROLES.has(normalizedRole)
+      ? normalizedRole
+      : undefined;
     const user = await this.prisma.$transaction(async (transaction) => {
       const savedUser = await transaction.user.upsert({
         where: { firebaseUid: input.uid },
@@ -374,7 +422,9 @@ export class UsersService {
 
       if (input.clubId) {
         await transaction.clubMembership.upsert({
-          where: { userId_clubId: { userId: savedUser.id, clubId: input.clubId } },
+          where: {
+            userId_clubId: { userId: savedUser.id, clubId: input.clubId },
+          },
           update: { companyId, role: normalizedRole, status: 'ACTIVA' },
           create: {
             userId: savedUser.id,
@@ -405,7 +455,10 @@ export class UsersService {
       if (claims[key] === undefined) delete claims[key];
     });
 
-    await this.firebaseAdminService.auth.setCustomUserClaims(user.firebaseUid, claims);
+    await this.firebaseAdminService.auth.setCustomUserClaims(
+      user.firebaseUid,
+      claims,
+    );
     return { ok: true, userId: user.id };
   }
 
@@ -423,20 +476,28 @@ export class UsersService {
     const isCompanyAuthority = actorOwnsTenant && GLOBAL_ROLES.has(actorRole);
 
     if (!isPlatformRole && actor.companyId !== targetCompanyId) {
-      throw new ForbiddenException('Cannot provision a user in another company');
+      throw new ForbiddenException(
+        'Cannot provision a user in another company',
+      );
     }
     if (!targetClubId) {
-      if (!isCompanyAuthority) throw new ForbiddenException('Global profiles require an authority role');
+      if (!isCompanyAuthority)
+        throw new ForbiddenException(
+          'Global profiles require an authority role',
+        );
       return;
     }
     if (isCompanyAuthority) return;
     if (!actor.clubId || actor.clubId !== targetClubId) {
-      throw new ForbiddenException('Actor cannot provision users for this club');
+      throw new ForbiddenException(
+        'Actor cannot provision users for this club',
+      );
     }
 
-    const allowedProvisionerRoles = targetRole === 'player' || targetRole === 'member'
-      ? [...CLUB_MANAGERS, ...CLUB_PLAYER_PROVISIONERS]
-      : [...CLUB_MANAGERS];
+    const allowedProvisionerRoles =
+      targetRole === 'player' || targetRole === 'member'
+        ? [...CLUB_MANAGERS, ...CLUB_PLAYER_PROVISIONERS]
+        : [...CLUB_MANAGERS];
 
     const membership = await this.prisma.clubMembership.findFirst({
       where: {
@@ -449,10 +510,15 @@ export class UsersService {
       },
       select: { id: true },
     });
-    if (!membership) throw new ForbiddenException('Active club manager membership required');
+    if (!membership)
+      throw new ForbiddenException('Active club manager membership required');
   }
 
-  async bootstrapFirstAdmin(input: { uid: string; email?: string; name?: string }) {
+  async bootstrapFirstAdmin(input: {
+    uid: string;
+    email?: string;
+    name?: string;
+  }) {
     const hasAdmins = await this.hasAdminUsers();
 
     if (hasAdmins) {
@@ -460,18 +526,24 @@ export class UsersService {
     }
 
     const company =
-      (await this.prisma.company.findFirst({ orderBy: { createdAt: 'asc' } })) ||
+      (await this.prisma.company.findFirst({
+        orderBy: { createdAt: 'asc' },
+      })) ||
       (await this.prisma.company.create({
         data: { name: 'Fluxion Sport' },
       }));
 
-    return this.provisionProfileClaims({
-      uid: input.uid,
-      email: input.email,
-      name: input.name,
-      role: 'admin',
-      companyId: company.id,
-    }, undefined, true);
+    return this.provisionProfileClaims(
+      {
+        uid: input.uid,
+        email: input.email,
+        name: input.name,
+        role: 'admin',
+        companyId: company.id,
+      },
+      undefined,
+      true,
+    );
   }
 
   async removeByFirebaseUid(companyId: string, firebaseUid: string) {
@@ -490,13 +562,15 @@ export class UsersService {
       }),
     ]);
 
-    await this.firebaseAdminService.auth.deleteUser(firebaseUid).catch((error: unknown) => {
-      const code = (error as { code?: string } | null)?.code;
+    await this.firebaseAdminService.auth
+      .deleteUser(firebaseUid)
+      .catch((error: unknown) => {
+        const code = (error as { code?: string } | null)?.code;
 
-      if (code !== 'auth/user-not-found') {
-        throw error;
-      }
-    });
+        if (code !== 'auth/user-not-found') {
+          throw error;
+        }
+      });
 
     return {
       ok: true,

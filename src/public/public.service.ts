@@ -11,6 +11,7 @@ import {
   facilitySportsOf,
 } from '../facilities/facility-sports';
 import { PrismaService } from '../prisma/prisma.service';
+import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import { ListPublicClubsDto } from './dto/list-public-clubs.dto';
 import { boundingBox, distanceKm } from './geo';
 
@@ -171,7 +172,10 @@ export class PublicService {
   async listClubs(query: ListPublicClubsDto) {
     const limit = query.limit ?? DEFAULT_LIMIT;
     const hasPoint = query.lat !== undefined && query.lng !== undefined;
-    const where: Prisma.ClubWhereInput = { isPublic: true };
+    const where: Prisma.ClubWhereInput = {
+      isPublic: true,
+      ...CLUB_IN_GOOD_STANDING,
+    };
 
     const and: Prisma.ClubWhereInput[] = [];
     if (query.sport) and.push(sportFilter(query.sport));
@@ -222,7 +226,7 @@ export class PublicService {
 
   async getClub(clubId: string) {
     const club = await this.prisma.club.findFirst({
-      where: { id: clubId, isPublic: true },
+      where: { id: clubId, isPublic: true, ...CLUB_IN_GOOD_STANDING },
       select: CLUB_DETAIL_SELECT,
     });
     if (!club) throw new NotFoundException('Club no encontrado');
@@ -303,7 +307,12 @@ export class PublicService {
       'publicFacilities' | 'publicSchools' | 'publicCoaches' | 'publicShop',
   ) {
     const club = await this.prisma.club.findFirst({
-      where: { id: clubId, isPublic: true, [section]: true },
+      where: {
+        id: clubId,
+        isPublic: true,
+        [section]: true,
+        ...CLUB_IN_GOOD_STANDING,
+      },
       select: { id: true },
     });
     if (!club) throw new NotFoundException('Sección no disponible');

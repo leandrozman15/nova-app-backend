@@ -217,6 +217,8 @@ model Club {
   activityInquiries     ActivityInquiry[]
   tournaments           ClubTournament[]
   platformCharges       PlatformCharge[]
+  subscription          ClubSubscription?
+  subscriptionInvoices  SubscriptionInvoice[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -995,4 +997,117 @@ model PlatformCharge {
 
   @@index([clubId, status])
   @@index([status, createdAt])
+}
+
+/// Administradores de la plataforma Fluxion (no confundir con el admin de una empresa).
+model PlatformAdmin {
+  id           String   @id @default(cuid())
+  firebaseUid  String   @unique
+  email        String
+  /// SUPERADMIN (todo) | SUPPORT (solo lectura)
+  role         String   @default("SUPERADMIN")
+  active       Boolean  @default(true)
+  createdByUid String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Registro inmutable de acciones de plataforma (un trigger impide editar o borrar).
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUid   String
+  actorEmail String?
+  /// p. ej. subscription.suspend, platform.settings.update, charge.mark
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([actorUid])
+}
+
+/// Plan de suscripción que Fluxion le vende a los clubes.
+model SubscriptionPlan {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  monthlyPrice Decimal  @db.Decimal(12, 2)
+  currency     String   @default("ARS")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions ClubSubscription[]
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+/// Suscripción de un club a Fluxion (una por club).
+model ClubSubscription {
+  id              String             @id @default(cuid())
+  companyId       String
+  clubId          String             @unique
+  planId          String
+  /// Precio pactado con el club (si está vacío se usa el del plan).
+  customPrice     Decimal?           @db.Decimal(12, 2)
+  status          SubscriptionStatus @default(ACTIVE)
+  /// Día del mes en que vence cada mensualidad (1-28).
+  billingDay      Int                @default(10)
+  startedAt       DateTime           @default(now())
+  trialEndsAt     DateTime?
+  suspendedAt     DateTime?
+  suspendedReason String?
+  cancelledAt     DateTime?
+  notes           String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  club     Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan      @relation(fields: [planId], references: [id])
+  invoices SubscriptionInvoice[]
+
+  @@index([status])
+}
+
+enum SubscriptionInvoiceStatus {
+  PENDING
+  PAID
+  VOID
+}
+
+/// Mensualidad de un club (una por suscripción y mes).
+model SubscriptionInvoice {
+  id             String                    @id @default(cuid())
+  subscriptionId String
+  companyId      String
+  clubId         String
+  /// Mes facturado: "2026-10"
+  period         String
+  amount         Decimal                   @db.Decimal(12, 2)
+  currency       String                    @default("ARS")
+  dueDate        DateTime
+  status         SubscriptionInvoiceStatus @default(PENDING)
+  paidAt         DateTime?
+  paymentMethod  String?
+  paymentRef     String?
+  notes          String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  subscription ClubSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  club         Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, period])
+  @@index([status, dueDate])
+  @@index([clubId, period])
 }

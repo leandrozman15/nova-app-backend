@@ -116,6 +116,9 @@ describe('UsersService (usuario libre)', () => {
       expect(prisma.club.findFirst.mock.calls[0][0].where).toEqual({
         id: 'private',
         isPublic: true,
+        NOT: {
+          subscription: { is: { status: { in: ['SUSPENDED', 'CANCELLED'] } } },
+        },
       });
     });
 

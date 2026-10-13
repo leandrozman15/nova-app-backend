@@ -16,6 +16,7 @@ import {
 } from '../payments/mercadopago.client';
 import { PaymentAccountsService } from '../payments/payment-accounts.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import {
   addDays,
   BOOKING_HOURS,
@@ -107,7 +108,12 @@ export class BookingsService {
     requestedDate?: string,
   ) {
     const club = await this.prisma.club.findFirst({
-      where: { id: clubId, isPublic: true, publicFacilities: true },
+      where: {
+        id: clubId,
+        isPublic: true,
+        publicFacilities: true,
+        ...CLUB_IN_GOOD_STANDING,
+      },
       select: {
         id: true,
         timezone: true,
@@ -198,7 +204,12 @@ export class BookingsService {
       );
     }
     const club = await this.prisma.club.findFirst({
-      where: { id: dto.clubId, isPublic: true, publicFacilities: true },
+      where: {
+        id: dto.clubId,
+        isPublic: true,
+        publicFacilities: true,
+        ...CLUB_IN_GOOD_STANDING,
+      },
       select: {
         id: true,
         companyId: true,

@@ -41,6 +41,11 @@ export class FirebaseAuthGuard implements CanActivate {
         uid: decoded.uid,
         email: decoded.email,
         emailVerified: decoded.email_verified === true,
+        // Sesión iniciada con segundo factor (MFA / TOTP de Identity Platform).
+        mfa: Boolean(
+          (decoded.firebase as { sign_in_second_factor?: string } | undefined)
+            ?.sign_in_second_factor,
+        ),
         companyId:
           typeof decoded.companyId === 'string' ? decoded.companyId : undefined,
         clubId: typeof decoded.clubId === 'string' ? decoded.clubId : undefined,

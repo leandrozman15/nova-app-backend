@@ -5,6 +5,12 @@ import {
   PlatformController,
   PlatformMeController,
 } from './platform.controller';
+import { AuditService } from './audit.service';
+import {
+  PlatformAccessService,
+  PlatformAdminGuard,
+} from './platform-admin.guard';
+import { PlatformAdminsService } from './platform-admins.service';
 import { PlatformOverviewService } from './platform-overview.service';
 import { PlatformService } from './platform.service';
 
@@ -14,7 +20,19 @@ import { PlatformService } from './platform.service';
     PlatformMeController,
     ClubPlatformController,
   ],
-  providers: [PlatformService, PlatformOverviewService],
-  exports: [PlatformService],
+  providers: [
+    PlatformService,
+    PlatformOverviewService,
+    PlatformAdminsService,
+    PlatformAccessService,
+    PlatformAdminGuard,
+    AuditService,
+  ],
+  exports: [
+    PlatformService,
+    PlatformAccessService,
+    PlatformAdminGuard,
+    AuditService,
+  ],
 })
 export class PlatformModule {}

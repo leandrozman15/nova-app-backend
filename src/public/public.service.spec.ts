@@ -107,6 +107,10 @@ describe('PublicService', () => {
     expect(prisma.club.findFirst.mock.calls[0][0].where).toEqual({
       id: 'private-club',
       isPublic: true,
+      // Un club suspendido por falta de pago tampoco se ve.
+      NOT: {
+        subscription: { is: { status: { in: ['SUSPENDED', 'CANCELLED'] } } },
+      },
     });
   });
 

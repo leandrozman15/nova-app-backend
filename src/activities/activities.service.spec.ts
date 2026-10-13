@@ -75,7 +75,11 @@ describe('ActivitiesService', () => {
       expect(activity.coaches).toEqual([]);
       expect(prisma.club.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'club-a', isPublic: true, publicSchools: true },
+          where: expect.objectContaining({
+            id: 'club-a',
+            isPublic: true,
+            publicSchools: true,
+          }),
         }),
       );
     });

@@ -11,6 +11,7 @@ import { addDays, todayIn } from '../bookings/booking-time';
 import { facilitySportFamily } from '../facilities/facility-sports';
 import { PlatformService } from '../platform/platform.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import {
   CreateEntryDto,
   CreateTournamentDto,
@@ -281,6 +282,7 @@ export class TournamentsService {
       where: {
         status: { in: VISIBLE },
         endDate: { gte: yesterday },
+        club: CLUB_IN_GOOD_STANDING,
         ...(query.sport && { sport: query.sport }),
         ...(query.clubId && { clubId: query.clubId }),
       },
@@ -311,7 +313,11 @@ export class TournamentsService {
 
   async getPublic(id: string) {
     const row = await this.prisma.clubTournament.findFirst({
-      where: { id, status: { in: [...VISIBLE, 'FINISHED'] } },
+      where: {
+        id,
+        status: { in: [...VISIBLE, 'FINISHED'] },
+        club: CLUB_IN_GOOD_STANDING,
+      },
       select: {
         ...TOURNAMENT_SELECT,
         club: {
@@ -364,7 +370,11 @@ export class TournamentsService {
       );
 
     const tournament = await this.prisma.clubTournament.findFirst({
-      where: { id: dto.tournamentId, status: { in: VISIBLE } },
+      where: {
+        id: dto.tournamentId,
+        status: { in: VISIBLE },
+        club: CLUB_IN_GOOD_STANDING,
+      },
       select: {
         id: true,
         companyId: true,

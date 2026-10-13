@@ -64,6 +64,7 @@ export class PlatformOverviewService {
       freeUsers,
       freeUsers30,
       freeSignups,
+      overdueInvoices,
     ] = await Promise.all([
       this.prisma.club.findMany({
         select: {
@@ -77,6 +78,13 @@ export class PlatformOverviewService {
           municipalityName: true,
           createdAt: true,
           company: { select: { id: true, name: true } },
+          subscription: {
+            select: {
+              status: true,
+              customPrice: true,
+              plan: { select: { name: true, monthlyPrice: true } },
+            },
+          },
         },
         orderBy: { name: 'asc' },
       }),
@@ -147,7 +155,19 @@ export class PlatformOverviewService {
         where: { companyId: null, createdAt: { gte: signupsSince } },
         select: { createdAt: true },
       }),
+      this.prisma.subscriptionInvoice.groupBy({
+        by: ['clubId'],
+        where: { status: 'PENDING', dueDate: { lt: new Date(now) } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
     ]);
+    const overdueBy = new Map(
+      overdueInvoices.map((row) => [
+        row.clubId,
+        { count: row._count._all, amount: Number(row._sum.amount ?? 0) },
+      ]),
+    );
 
     // Usuarios únicos de la app por club (membresía, reserva, torneo o consulta).
     const appUsers = new Map<string, Set<string>>();
@@ -227,6 +247,16 @@ export class PlatformOverviewService {
       newInquiries: inquiriesBy.get(club.id) ?? 0,
       chargesPending: pendingCharges.get(club.id) ?? 0,
       chargesPaid: paidCharges.get(club.id) ?? 0,
+      subscriptionStatus: club.subscription?.status ?? null,
+      planName: club.subscription?.plan.name ?? null,
+      monthlyPrice: club.subscription
+        ? Number(
+            club.subscription.customPrice ??
+              club.subscription.plan.monthlyPrice,
+          )
+        : null,
+      overdueInvoices: overdueBy.get(club.id)?.count ?? 0,
+      overdueAmount: overdueBy.get(club.id)?.amount ?? 0,
     }));
 
     const signupsByMonth = new Map(months.map((month) => [month, 0]));
@@ -254,6 +284,19 @@ export class PlatformOverviewService {
         tournamentsPublished: sum((row) => row.tournamentsPublished),
         chargesPending: sum((row) => row.chargesPending),
         chargesPaid: sum((row) => row.chargesPaid),
+        // Ingreso mensual recurrente: suscripciones activas a su precio pactado.
+        mrr: sum((row) =>
+          row.subscriptionStatus === 'ACTIVE' ? (row.monthlyPrice ?? 0) : 0,
+        ),
+        activeSubscriptions: rows.filter(
+          (row) => row.subscriptionStatus === 'ACTIVE',
+        ).length,
+        suspendedClubs: rows.filter(
+          (row) =>
+            row.subscriptionStatus === 'SUSPENDED' ||
+            row.subscriptionStatus === 'CANCELLED',
+        ).length,
+        overdueAmount: sum((row) => row.overdueAmount),
       },
       signupsByMonth: [...signupsByMonth.entries()].map(([month, count]) => ({
         month,

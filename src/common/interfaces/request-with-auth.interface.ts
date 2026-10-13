@@ -4,6 +4,7 @@ export interface AuthContext {
   uid: string;
   email?: string;
   emailVerified?: boolean;
+  mfa?: boolean;
   role?: string;
   companyId?: string;
   clubId?: string;

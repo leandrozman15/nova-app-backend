@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import {
   ClubDisciplinesService,
   DISCIPLINE_ID_PREFIX,
@@ -214,7 +215,12 @@ export class ActivitiesService {
    */
   async listPublic(clubId: string) {
     const club = await this.prisma.club.findFirst({
-      where: { id: clubId, isPublic: true, publicSchools: true },
+      where: {
+        id: clubId,
+        isPublic: true,
+        publicSchools: true,
+        ...CLUB_IN_GOOD_STANDING,
+      },
       select: { publicCoaches: true },
     });
     if (!club) throw new NotFoundException('Sección no disponible');
@@ -285,7 +291,11 @@ export class ActivitiesService {
             id: dto.activityId,
             disciplineId: null,
             isPublic: true,
-            club: { isPublic: true, publicSchools: true },
+            club: {
+              isPublic: true,
+              publicSchools: true,
+              ...CLUB_IN_GOOD_STANDING,
+            },
           },
           select: { id: true, clubId: true, companyId: true },
         });
@@ -357,7 +367,12 @@ export class ActivitiesService {
     if (!clubId)
       throw new BadRequestException('Falta el club de la disciplina.');
     const club = await this.prisma.club.findFirst({
-      where: { id: clubId, isPublic: true, publicSchools: true },
+      where: {
+        id: clubId,
+        isPublic: true,
+        publicSchools: true,
+        ...CLUB_IN_GOOD_STANDING,
+      },
       select: { id: true, companyId: true },
     });
     if (!club) return null;

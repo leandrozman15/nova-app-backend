@@ -1,10 +1,15 @@
 import { Prisma } from '@prisma/client';
 
-import { isPlatformAdmin } from './platform-admin.guard';
+import {
+  isBootstrapAdmin,
+  PlatformAccessService,
+  PlatformAdminGuard,
+} from './platform-admin.guard';
 import { PlatformService } from './platform.service';
 
 describe('PlatformService (cargos de Fluxion a clubes)', () => {
   let prisma: any;
+  let audit: any;
   let service: PlatformService;
   const source = {
     companyId: 'company-a',
@@ -37,7 +42,8 @@ describe('PlatformService (cargos de Fluxion a clubes)', () => {
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
-    service = new PlatformService(prisma);
+    audit = { record: jest.fn() };
+    service = new PlatformService(prisma, audit);
   });
 
   it('charges the publication with the current fee and records it in the club treasury', async () => {
@@ -114,7 +120,18 @@ describe('PlatformService (cargos de Fluxion a clubes)', () => {
       { id: 'ch1', status: 'PENDING' },
       { id: 'ch2', status: 'PENDING' },
     ]);
-    await service.markCharges({ ids: ['ch1', 'ch2'], status: 'PAID' });
+    await service.markCharges(
+      { ids: ['ch1', 'ch2'], status: 'PAID' },
+      { uid: 'boss' },
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      { uid: 'boss' },
+      'platform.charges.mark',
+      expect.anything(),
+      expect.objectContaining({
+        after: { status: 'PAID', ids: ['ch1', 'ch2'] },
+      }),
+    );
     expect(prisma.platformCharge.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['ch1', 'ch2'] } },
       data: { status: 'PAID', paidAt: expect.any(Date) },
@@ -148,29 +165,31 @@ describe('PlatformService (cargos de Fluxion a clubes)', () => {
   });
 });
 
-describe('isPlatformAdmin', () => {
+describe('isBootstrapAdmin', () => {
   afterEach(() => {
     delete process.env.PLATFORM_ADMIN_UIDS;
     delete process.env.PLATFORM_ADMIN_EMAILS;
   });
 
   it('accepts the Fluxion master account and rejects company admins', () => {
-    expect(isPlatformAdmin({ uid: 'gP2wfenUBpXxvD1BddK6YN5eivW2' })).toBe(true);
+    expect(isBootstrapAdmin({ uid: 'gP2wfenUBpXxvD1BddK6YN5eivW2' })).toBe(
+      true,
+    );
     expect(
-      isPlatformAdmin({ uid: 'other', role: 'admin', companyId: 'c' }),
+      isBootstrapAdmin({ uid: 'other', role: 'admin', companyId: 'c' }),
     ).toBe(false);
   });
 
   it('only trusts the email when it is verified', () => {
     expect(
-      isPlatformAdmin({
+      isBootstrapAdmin({
         uid: 'x',
         email: 'leozman15@gmail.com',
         emailVerified: true,
       }),
     ).toBe(true);
     expect(
-      isPlatformAdmin({
+      isBootstrapAdmin({
         uid: 'x',
         email: 'leozman15@gmail.com',
         emailVerified: false,
@@ -180,6 +199,96 @@ describe('isPlatformAdmin', () => {
 
   it('can be extended by environment', () => {
     process.env.PLATFORM_ADMIN_UIDS = 'socio-uid';
-    expect(isPlatformAdmin({ uid: 'socio-uid' })).toBe(true);
+    expect(isBootstrapAdmin({ uid: 'socio-uid' })).toBe(true);
+  });
+});
+
+describe('PlatformAdminGuard', () => {
+  const run = async (
+    admin: { role: string; active: boolean } | null,
+    auth: Record<string, unknown>,
+    method = 'GET',
+  ) => {
+    const prisma: any = {
+      platformAdmin: { findUnique: jest.fn().mockResolvedValue(admin) },
+    };
+    const guard = new PlatformAdminGuard(new PlatformAccessService(prisma));
+    const context: any = {
+      switchToHttp: () => ({ getRequest: () => ({ auth, method }) }),
+    };
+    return guard.canActivate(context);
+  };
+
+  afterEach(() => delete process.env.PLATFORM_REQUIRE_MFA);
+
+  it('lets in active platform admins and keeps company admins out', async () => {
+    await expect(
+      run({ role: 'SUPERADMIN', active: true }, { uid: 'socio' }, 'POST'),
+    ).resolves.toBe(true);
+    await expect(
+      run(null, { uid: 'admin-empresa', role: 'admin' }),
+    ).rejects.toThrow('Solo administradores');
+    await expect(
+      run({ role: 'SUPERADMIN', active: false }, { uid: 'ex' }),
+    ).rejects.toThrow('Solo administradores');
+  });
+
+  it('gives SUPPORT read-only access', async () => {
+    await expect(
+      run({ role: 'SUPPORT', active: true }, { uid: 's' }),
+    ).resolves.toBe(true);
+    await expect(
+      run({ role: 'SUPPORT', active: true }, { uid: 's' }, 'POST'),
+    ).rejects.toThrow('solo lectura');
+  });
+
+  it('requires a second factor when enabled, even for the master account', async () => {
+    process.env.PLATFORM_REQUIRE_MFA = 'true';
+    await expect(
+      run(null, { uid: 'gP2wfenUBpXxvD1BddK6YN5eivW2' }),
+    ).rejects.toThrow('dos pasos');
+    await expect(
+      run(null, { uid: 'gP2wfenUBpXxvD1BddK6YN5eivW2', mfa: true }),
+    ).resolves.toBe(true);
+  });
+});
+
+describe('settings audit', () => {
+  it('records before and after when the fees change', async () => {
+    let row = {
+      id: 'global',
+      tournamentPublishFee: new Prisma.Decimal(0),
+      tournamentEntryFee: new Prisma.Decimal(0),
+      currency: 'ARS',
+      updatedAt: new Date(),
+    };
+    const prisma: any = {
+      platformSettings: {
+        upsert: jest.fn().mockImplementation(({ update }) => {
+          if (update?.tournamentPublishFee !== undefined)
+            row = {
+              ...row,
+              tournamentPublishFee: new Prisma.Decimal(
+                update.tournamentPublishFee,
+              ),
+            };
+          return row;
+        }),
+      },
+    };
+    const audit: any = { record: jest.fn() };
+    await new PlatformService(prisma, audit).updateSettings(
+      { uid: 'boss', email: 'b@f.com' },
+      { tournamentPublishFee: 15000 },
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      { uid: 'boss', email: 'b@f.com' },
+      'platform.settings.update',
+      { type: 'PlatformSettings', id: 'global' },
+      {
+        before: { tournamentPublishFee: 0, tournamentEntryFee: 0 },
+        after: { tournamentPublishFee: 15000, tournamentEntryFee: 0 },
+      },
+    );
   });
 });

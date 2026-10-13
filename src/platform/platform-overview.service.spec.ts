@@ -31,6 +31,11 @@ describe('PlatformOverviewService', () => {
             municipalityName: 'San Miguel',
             createdAt: now,
             company: { id: 'co', name: 'Co' },
+            subscription: {
+              status: 'ACTIVE',
+              customPrice: null,
+              plan: { name: 'Club', monthlyPrice: new Prisma.Decimal(50000) },
+            },
           },
           {
             id: 'b',
@@ -116,6 +121,17 @@ describe('PlatformOverviewService', () => {
           .fn()
           .mockResolvedValue([{ clubId: 'a', _count: { _all: 120 } }]),
       },
+      subscriptionInvoice: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValue([
+            {
+              clubId: 'a',
+              _count: { _all: 2 },
+              _sum: { amount: new Prisma.Decimal(100000) },
+            },
+          ]),
+      },
       user: {
         count: jest.fn().mockResolvedValueOnce(25).mockResolvedValueOnce(6),
         findMany: jest
@@ -138,8 +154,15 @@ describe('PlatformOverviewService', () => {
         pendingBookingRequests: 1,
         newInquiries: 4,
         adminEmails: ['admin@a.com'],
+        subscriptionStatus: 'ACTIVE',
+        monthlyPrice: 50000,
+        overdueInvoices: 2,
+        overdueAmount: 100000,
       }),
     );
+    expect(
+      result.clubs.find((club) => club.id === 'b')!.subscriptionStatus,
+    ).toBeNull();
     const b = result.clubs.find((club) => club.id === 'b')!;
     expect(b).toEqual(
       expect.objectContaining({
@@ -158,6 +181,10 @@ describe('PlatformOverviewService', () => {
         appUsers: 25,
         appUsersLast30: 6,
         chargesPending: 15000,
+        mrr: 50000,
+        activeSubscriptions: 1,
+        suspendedClubs: 0,
+        overdueAmount: 100000,
       }),
     );
     expect(result.signupsByMonth).toHaveLength(6);

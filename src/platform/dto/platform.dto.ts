@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
+  IsEmail,
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
@@ -48,4 +50,35 @@ export class MarkChargesDto {
 
   @IsIn(['PAID', 'PENDING', 'VOIDED'])
   status!: 'PAID' | 'PENDING' | 'VOIDED';
+}
+
+export class AddPlatformAdminDto {
+  @IsEmail()
+  @MaxLength(160)
+  email!: string;
+
+  @IsIn(['SUPERADMIN', 'SUPPORT'])
+  role!: 'SUPERADMIN' | 'SUPPORT';
+}
+
+export class UpdatePlatformAdminDto {
+  @IsOptional()
+  @IsIn(['SUPERADMIN', 'SUPPORT'])
+  role?: 'SUPERADMIN' | 'SUPPORT';
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+export class ListAuditDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  entityType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  entityId?: string;
 }

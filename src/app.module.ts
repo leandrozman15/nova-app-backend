@@ -15,6 +15,8 @@ import { JoinRequestsModule } from './join-requests/join-requests.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { PlatformModule } from './platform/platform.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
 import { MatchesModule } from './matches/matches.module';
@@ -56,6 +58,7 @@ import { UsersModule } from './users/users.module';
     ActivitiesModule,
     TournamentsModule,
     PlatformModule,
+    SubscriptionsModule,
     PublicModule,
     PaymentsModule,
   ],
@@ -71,6 +74,11 @@ import { UsersModule } from './users/users.module';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      // Club suspendido: consola en solo lectura (va después de autenticar).
+      provide: APP_GUARD,
+      useExisting: SuspendedClubGuard,
     },
   ],
 })

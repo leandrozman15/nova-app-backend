@@ -323,10 +323,10 @@ describe('TournamentsService', () => {
       );
       expect(prisma.clubTournament.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: {
+          where: expect.objectContaining({
             id: 't-draft',
             status: { in: ['PUBLISHED', 'CLOSED', 'FINISHED'] },
-          },
+          }),
         }),
       );
     });

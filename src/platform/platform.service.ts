@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService, type AuditActor } from './audit.service';
 import {
   ListChargesDto,
   MarkChargesDto,
@@ -26,7 +27,10 @@ type ChargeSource = {
 export class PlatformService {
   private readonly logger = new Logger(PlatformService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async getSettings() {
     const settings = await this.prisma.platformSettings.upsert({
@@ -42,13 +46,30 @@ export class PlatformService {
     };
   }
 
-  async updateSettings(uid: string, dto: UpdatePlatformSettingsDto) {
+  async updateSettings(actor: AuditActor, dto: UpdatePlatformSettingsDto) {
+    const before = await this.getSettings();
     await this.prisma.platformSettings.upsert({
       where: { id: SETTINGS_ID },
-      create: { id: SETTINGS_ID, ...dto, updatedByUid: uid },
-      update: { ...dto, updatedByUid: uid },
+      create: { id: SETTINGS_ID, ...dto, updatedByUid: actor.uid },
+      update: { ...dto, updatedByUid: actor.uid },
     });
-    return this.getSettings();
+    const after = await this.getSettings();
+    await this.audit.record(
+      actor,
+      'platform.settings.update',
+      { type: 'PlatformSettings', id: SETTINGS_ID },
+      {
+        before: {
+          tournamentPublishFee: before.tournamentPublishFee,
+          tournamentEntryFee: before.tournamentEntryFee,
+        },
+        after: {
+          tournamentPublishFee: after.tournamentPublishFee,
+          tournamentEntryFee: after.tournamentEntryFee,
+        },
+      },
+    );
+    return after;
   }
 
   async listCharges(query: ListChargesDto) {
@@ -82,7 +103,7 @@ export class PlatformService {
    * Pagado / pendiente / anulado desde el panel de Fluxion. Un cargo anulado
    * sale de la Tesorería del club; si se reactiva, vuelve a figurar.
    */
-  async markCharges(dto: MarkChargesDto) {
+  async markCharges(dto: MarkChargesDto, actor?: AuditActor) {
     const charges = await this.prisma.platformCharge.findMany({
       where: { id: { in: dto.ids } },
       select: {
@@ -125,6 +146,26 @@ export class PlatformService {
           },
         });
       }
+    }
+    if (actor) {
+      await this.audit.record(
+        actor,
+        'platform.charges.mark',
+        {
+          type: 'PlatformCharge',
+          id: charges.length === 1 ? charges[0].id : null,
+        },
+        {
+          before: charges.map((charge) => ({
+            id: charge.id,
+            status: charge.status,
+          })),
+          after: {
+            status: dto.status,
+            ids: charges.map((charge) => charge.id),
+          },
+        },
+      );
     }
     return { updated: result.count };
   }
