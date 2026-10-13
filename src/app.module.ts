@@ -16,6 +16,7 @@ import { ActivitiesModule } from './activities/activities.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { PlatformModule } from './platform/platform.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { StoreModule } from './store/store.module';
 import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
@@ -59,6 +60,7 @@ import { UsersModule } from './users/users.module';
     TournamentsModule,
     PlatformModule,
     SubscriptionsModule,
+    StoreModule,
     PublicModule,
     PaymentsModule,
   ],

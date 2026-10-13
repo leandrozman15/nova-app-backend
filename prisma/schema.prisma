@@ -147,6 +147,8 @@ model User {
   bookings        Booking[]
   activityInquiries ActivityInquiry[]
   tournamentEntries TournamentEntry[]
+  merchantMemberships MerchantMember[]
+  storeOrders       StoreOrder[]
 
   @@index([companyId])
   @@index([companyId, role])
@@ -219,6 +221,9 @@ model Club {
   platformCharges       PlatformCharge[]
   subscription          ClubSubscription?
   subscriptionInvoices  SubscriptionInvoice[]
+  storeSettings         ClubStoreSettings?
+  storePickupOrders     StoreOrder[] @relation("StoreOrderPickupClub")
+  storeSellerOrders     StoreOrder[] @relation("StoreOrderSellerClub")
 
   @@index([companyId])
   @@index([companyId, name])
@@ -547,6 +552,7 @@ model ShopProduct {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   orders  ShopOrder[]
+  storeOrderItems StoreOrderItem[]
 
   @@index([companyId])
   @@index([clubId])
@@ -964,6 +970,11 @@ model PlatformSettings {
   tournamentPublishFee Decimal  @default(0) @db.Decimal(12, 2)
   /// Cargo de Fluxion al club por cada inscripción confirmada (0 = no se cobra).
   tournamentEntryFee   Decimal  @default(0) @db.Decimal(12, 2)
+  /// Rangos permitidos para las comisiones de la tienda (en %).
+  commissionPlatformMin Decimal @default(0) @db.Decimal(5, 2)
+  commissionPlatformMax Decimal @default(30) @db.Decimal(5, 2)
+  commissionClubMin     Decimal @default(0) @db.Decimal(5, 2)
+  commissionClubMax     Decimal @default(15) @db.Decimal(5, 2)
   currency             String   @default("ARS")
   updatedByUid         String?
   updatedAt            DateTime @updatedAt
@@ -1110,4 +1121,258 @@ model SubscriptionInvoice {
   @@unique([subscriptionId, period])
   @@index([status, dueDate])
   @@index([clubId, period])
+}
+
+// ─── Tienda: comercios, comisiones y pedidos ──────────────────────────────────
+
+enum MerchantStatus {
+  INVITADO
+  ACTIVO
+  SUSPENDIDO
+}
+
+enum MerchantRole {
+  ADMIN_COMERCIO
+  OPERADOR
+}
+
+/// Comercio que vende en la tienda de la app. Solo lo da de alta un administrador de Fluxion.
+model Merchant {
+  id                 String         @id @default(cuid())
+  /// Datos fiscales (los edita solo Fluxion).
+  legalName          String
+  tradeName          String
+  cuit               String         @unique
+  ivaCondition       String
+  /// Contacto y datos públicos (los completa el comercio).
+  contactName        String?
+  contactEmail       String
+  contactPhone       String?
+  address            String?
+  city               String?
+  description        String?
+  logoUrl            String?
+  /// Rubros (catálogo src/store/store-categories.ts).
+  categories         String[]       @default([])
+  status             MerchantStatus @default(INVITADO)
+  cuitVerifiedAt     DateTime?
+  cuitVerifiedByUid  String?
+  cuitVerificationNote String?
+  activatedAt        DateTime?
+  suspendedAt        DateTime?
+  suspendedReason    String?
+  createdByUid       String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  members        MerchantMember[]
+  invitations    MerchantInvitation[]
+  paymentAccount MerchantPaymentAccount?
+  products       StoreProduct[]
+  orders         StoreOrder[]
+
+  @@index([status])
+}
+
+model MerchantMember {
+  id         String       @id @default(cuid())
+  merchantId String
+  userId     String
+  role       MerchantRole @default(OPERADOR)
+  active     Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, userId])
+  @@index([userId])
+}
+
+/// Invitación de un solo uso: se guarda solo el hash del token.
+model MerchantInvitation {
+  id               String       @id @default(cuid())
+  merchantId       String
+  email            String
+  role             MerchantRole @default(ADMIN_COMERCIO)
+  tokenHash        String       @unique
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  revokedAt        DateTime?
+  createdByUid     String
+  createdAt        DateTime     @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+}
+
+/// Cuenta de cobro del comercio, independiente del proveedor.
+model MerchantPaymentAccount {
+  id          String    @id @default(cuid())
+  merchantId  String    @unique
+  /// transfer | mercadopago | otro
+  provider    String
+  /// PENDING | CONNECTED | DISABLED
+  status      String    @default("PENDING")
+  holderName  String?
+  /// Alias o identificador visible de la cuenta (nunca credenciales).
+  accountLabel String?
+  connectedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+}
+
+enum CommissionScope {
+  GLOBAL
+  CLUB
+  MERCHANT
+}
+
+/// Regla de comisión versionada. Una versión no se edita: se reemplaza por otra.
+/// platformPercent = X (lo que se descuenta al vendedor), clubPercent = Y (parte de X para el club de retiro).
+model CommissionRule {
+  id              String          @id @default(cuid())
+  scope           CommissionScope
+  clubId          String?
+  merchantId      String?
+  platformPercent Decimal?        @db.Decimal(5, 2)
+  clubPercent     Decimal?        @db.Decimal(5, 2)
+  version         Int
+  validFrom       DateTime        @default(now())
+  validTo         DateTime?
+  reason          String?
+  createdByUid    String
+  createdAt       DateTime        @default(now())
+
+  @@index([scope, clubId, merchantId])
+}
+
+/// Cómo participa un club en la tienda de la app.
+model ClubStoreSettings {
+  id                 String   @id @default(cuid())
+  clubId             String   @unique
+  companyId          String
+  /// El club acepta ser punto de retiro de pedidos de comercios.
+  acceptMerchants    Boolean  @default(false)
+  /// Rubros que el club no acepta.
+  excludedCategories String[] @default([])
+  pickupHours        String?
+  /// Pedidos por día como punto de retiro (null = sin límite).
+  dailyCapacity      Int?
+  paused             Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+}
+
+/// Producto de un comercio.
+model StoreProduct {
+  id          String   @id @default(cuid())
+  merchantId  String
+  name        String
+  description String?
+  category    String
+  price       Decimal  @db.Decimal(12, 2)
+  stock       Int      @default(0)
+  imageUrl    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  items    StoreOrderItem[]
+
+  @@index([merchantId, active])
+  @@index([category])
+}
+
+enum StoreOrderStatus {
+  PLACED
+  CONFIRMED
+  AT_CLUB
+  DELIVERED
+  CANCELLED
+}
+
+enum CommissionStatus {
+  PENDING
+  ACCRUED
+  VOID
+}
+
+/// Pedido de la tienda: un vendedor (comercio o club), retiro en un club.
+/// Guarda la foto de los porcentajes vigentes al comprar.
+model StoreOrder {
+  id               String           @id @default(cuid())
+  /// Código corto para hablar del pedido: "FX-7K2M9".
+  code             String           @unique
+  buyerUserId      String
+  /// MERCHANT | CLUB
+  sellerType       String
+  merchantId       String?
+  sellerClubId     String?
+  pickupClubId     String
+  pickupCompanyId  String
+  status           StoreOrderStatus @default(PLACED)
+  /// Código que muestra el comprador al retirar.
+  pickupCode       String
+  buyerName        String
+  buyerPhone       String?
+  notes            String?
+  subtotal         Decimal          @db.Decimal(12, 2)
+  currency         String           @default("ARS")
+  /// coordinated = se paga al comercio/club (hasta que haya cobro online).
+  paymentMode      String           @default("coordinated")
+  // Snapshot de comisión.
+  platformPercent  Decimal          @db.Decimal(5, 2)
+  clubPercent      Decimal          @db.Decimal(5, 2)
+  platformAmount   Decimal          @db.Decimal(12, 2)
+  clubAmount       Decimal          @db.Decimal(12, 2)
+  sellerAmount     Decimal          @db.Decimal(12, 2)
+  commissionRules  Json?
+  commissionStatus CommissionStatus @default(PENDING)
+  commissionAccruedAt DateTime?
+  confirmedAt      DateTime?
+  receivedAtClubAt DateTime?
+  deliveredAt      DateTime?
+  cancelledAt      DateTime?
+  cancelReason     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  buyer      User             @relation(fields: [buyerUserId], references: [id], onDelete: Restrict)
+  merchant   Merchant?        @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  pickupClub Club             @relation("StoreOrderPickupClub", fields: [pickupClubId], references: [id], onDelete: Restrict)
+  sellerClub Club?            @relation("StoreOrderSellerClub", fields: [sellerClubId], references: [id], onDelete: Restrict)
+  items      StoreOrderItem[]
+
+  @@index([buyerUserId, createdAt])
+  @@index([merchantId, status])
+  @@index([pickupClubId, status])
+  @@index([sellerClubId, status])
+  @@index([commissionStatus, createdAt])
+}
+
+model StoreOrderItem {
+  id             String   @id @default(cuid())
+  orderId        String
+  productId      String?
+  clubProductId  String?
+  name           String
+  size           String?
+  unitPrice      Decimal  @db.Decimal(12, 2)
+  quantity       Int
+  lineTotal      Decimal  @db.Decimal(12, 2)
+
+  order       StoreOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     StoreProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  clubProduct ShopProduct?  @relation(fields: [clubProductId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
 }
