@@ -1,7 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import compression from 'compression';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
@@ -11,8 +10,6 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   // Implantación de planillas de jugadores y fotos de productos: hasta 4 MB por pedido.
   app.useBodyParser('json', { limit: '4mb' });
-  // Respuestas JSON comprimidas (gzip): listas de clubes, agenda y productos pesan ~5 veces menos.
-  app.use(compression({ threshold: 1024 }));
 
   app.useGlobalPipes(
     new ValidationPipe({
