@@ -20,6 +20,7 @@ import {
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 import { PlatformAdminGuard } from '../platform/platform-admin.guard';
 import { FirestoreMigrationService } from './firestore-migration.service';
+import { PhotoMigrationService } from './photo-migration.service';
 import {
   DivisionsQueryDto,
   FieldsDto,
@@ -244,7 +245,16 @@ export class RosterController {
 @UseGuards(PlatformAdminGuard)
 @Controller('platform/firestore-migration')
 export class FirestoreMigrationController {
-  constructor(private readonly migration: FirestoreMigrationService) {}
+  constructor(
+    private readonly migration: FirestoreMigrationService,
+    private readonly photos: PhotoMigrationService,
+  ) {}
+
+  /** Pasa las fotos base64 a Storage (por tandas: repetir hasta remaining = 0). */
+  @Post('photos')
+  migratePhotos() {
+    return this.photos.run();
+  }
 
   @Post('stage1')
   stage1(@Body() dto: MigrationDto) {

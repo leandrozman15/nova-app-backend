@@ -248,9 +248,11 @@ describe('RosterService', () => {
         update: jest.fn().mockResolvedValue(own),
       },
     };
-    const service = new RosterService(prisma, {
-      ensureStage1: jest.fn(),
-    } as any);
+    const service = new RosterService(
+      prisma,
+      { ensureStage1: jest.fn() } as any,
+      { externalizeDeep: jest.fn(async (v: unknown) => v) } as any,
+    );
     await expect(
       service.listPlayers('co', 'c1', { uid: 'uid-1', role: 'player' }, {}),
     ).rejects.toThrow('Solo el staff');

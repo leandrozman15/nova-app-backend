@@ -10,6 +10,7 @@ import {
   FirestoreMigrationController,
   RosterController,
 } from './roster.controller';
+import { PhotoMigrationService } from './photo-migration.service';
 import { RosterService } from './roster.service';
 
 @Module({
@@ -20,7 +21,7 @@ import { RosterService } from './roster.service';
     RosterController,
     FirestoreMigrationController,
   ],
-  providers: [RosterService, FirestoreMigrationService],
+  providers: [RosterService, FirestoreMigrationService, PhotoMigrationService],
   exports: [RosterService, FirestoreMigrationService],
 })
 export class RosterModule {}

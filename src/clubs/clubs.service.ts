@@ -1,13 +1,30 @@
 import {
-  ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 
+import {
+  isDataImage,
+  MediaStorageService,
+} from '../firebase/media-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClubDto } from './dto/create-club.dto';
 import { UpdateClubDto } from './dto/update-club.dto';
 
 @Injectable()
 export class ClubsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly media?: MediaStorageService,
+  ) {}
+
+  /** El logo llega en base64 desde la consola: se sube a Storage y queda la URL. */
+  private async logo(value: string | undefined, clubId: string) {
+    if (!this.media || !isDataImage(value)) return value;
+    return this.media.externalize(value, `clubs/${clubId}/logo`);
+  }
 
   list(companyId: string) {
     return this.prisma.club.findMany({
@@ -57,7 +74,10 @@ export class ClubsService {
         );
     }
 
-    const foundationDate = dto.foundationDate ? new Date(dto.foundationDate) : undefined;
+    const foundationDate = dto.foundationDate
+      ? new Date(dto.foundationDate)
+      : undefined;
+    const logoUrl = await this.logo(dto.logoUrl, id);
 
     return this.prisma.club.update({
       where: { id },
@@ -65,7 +85,10 @@ export class ClubsService {
         name: dto.name,
         legalName: dto.legalName,
         cuit: dto.cuit,
-        foundationDate: foundationDate && !Number.isNaN(foundationDate.getTime()) ? foundationDate : undefined,
+        foundationDate:
+          foundationDate && !Number.isNaN(foundationDate.getTime())
+            ? foundationDate
+            : undefined,
         municipalityId: dto.municipalityId,
         leagueId: dto.leagueId,
         municipalityName: dto.municipalityName,
@@ -77,7 +100,7 @@ export class ClubsService {
         website: dto.website,
         instagram: dto.instagram,
         facebook: dto.facebook,
-        logoUrl: dto.logoUrl,
+        logoUrl,
         description: dto.description,
         sport: dto.sport,
         status: dto.status,

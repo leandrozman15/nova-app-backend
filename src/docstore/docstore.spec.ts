@@ -114,7 +114,21 @@ describe('DocStoreService', () => {
       },
     };
     const migration = { ensureStage2: jest.fn() };
-    return { prisma, service: new DocStoreService(prisma, migration as any) };
+    const media = {
+      hasDataImage: (v: unknown) =>
+        JSON.stringify(v ?? null).includes('"data:image/'),
+      externalizeDeep: jest.fn(async (v: Record<string, unknown>) => {
+        for (const k of Object.keys(v))
+          if (typeof v[k] === 'string' && v[k].startsWith('data:image/'))
+            v[k] = 'https://storage.test/foto.webp';
+        return v;
+      }),
+    };
+    return {
+      prisma,
+      media,
+      service: new DocStoreService(prisma, migration as any, media as any),
+    };
   }
 
   it('lists a collection for staff and refuses players', async () => {
@@ -147,6 +161,22 @@ describe('DocStoreService', () => {
     await expect(
       service.set(coach, 'clubs/c1/players/p1', { name: 'x' }),
     ).rejects.toThrow('padrón');
+  });
+
+  it('uploads base64 photos and stores only the link', async () => {
+    const { prisma, media, service } = setup();
+    await service.set(coach, 'clubs/c1/coaches/k1', {
+      name: 'Profe',
+      photoUrl: 'data:image/webp;base64,AAAA',
+    });
+    expect(media.externalizeDeep).toHaveBeenCalledWith(
+      expect.anything(),
+      'clubs/c1/coaches',
+    );
+    expect(prisma.storeDocument.upsert.mock.calls[0][0].create.data).toEqual({
+      name: 'Profe',
+      photoUrl: 'https://storage.test/foto.webp',
+    });
   });
 
   it('only shows staff users of the own club', async () => {

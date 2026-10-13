@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { MediaStorageService } from '../firebase/media-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FirestoreMigrationService } from './firestore-migration.service';
 import {
@@ -70,6 +71,7 @@ export class RosterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly migration: FirestoreMigrationService,
+    private readonly media: MediaStorageService,
   ) {}
 
   private async club(companyId: string, clubId: string) {
@@ -345,6 +347,7 @@ export class RosterService {
   async createPlayer(companyId: string, clubId: string, fields: Doc) {
     await this.club(companyId, clubId);
     const data = playerData(fields);
+    await this.media.externalizeDeep(data, `clubs/${clubId}/players`);
     if (!data.firstName || !data.lastName)
       throw new BadRequestException('Falta el nombre y apellido');
     await this.checkDivision(clubId, data);
@@ -384,6 +387,10 @@ export class RosterService {
       source = 'photoUrl' in fields ? { photoUrl: fields.photoUrl } : {};
     }
     const data = playerData(source, current.extra);
+    await this.media.externalizeDeep(
+      data,
+      `clubs/${clubId}/players/${current.id}`,
+    );
     await this.checkDivision(clubId, data);
     const updated = await this.write(() =>
       this.prisma.player.update({

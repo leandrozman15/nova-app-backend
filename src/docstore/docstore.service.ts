@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { MediaStorageService } from '../firebase/media-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DocStoreMigrationService } from './docstore-migration.service';
 import {
@@ -43,6 +44,7 @@ export class DocStoreService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly migration: DocStoreMigrationService,
+    private readonly media: MediaStorageService,
   ) {}
 
   private info(path: string): PathInfo {
@@ -376,6 +378,12 @@ export class DocStoreService {
   }
 
   private async save(viewer: Viewer, info: PathInfo, path: string, data: Doc) {
+    // Las fotos base64 se suben a Storage y en la base queda solo el enlace.
+    if (this.media.hasDataImage(data))
+      await this.media.externalizeDeep(
+        data,
+        path.split('/').slice(0, -1).join('/'),
+      );
     const segments = path.split('/');
     const parentPath = segments.slice(0, -1).join('/');
     const fields = {
