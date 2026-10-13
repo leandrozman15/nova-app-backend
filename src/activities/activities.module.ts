@@ -7,6 +7,7 @@ import {
   PublicActivitiesController,
 } from './activities.controller';
 import { ActivitiesService } from './activities.service';
+import { ClubDisciplinesService } from './club-disciplines.service';
 
 @Module({
   controllers: [
@@ -15,6 +16,6 @@ import { ActivitiesService } from './activities.service';
     PublicActivitiesController,
     MyInquiriesController,
   ],
-  providers: [ActivitiesService],
+  providers: [ActivitiesService, ClubDisciplinesService],
 })
 export class ActivitiesModule {}

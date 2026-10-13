@@ -24,6 +24,7 @@ import { ActivitiesService } from './activities.service';
 import {
   CreateActivityDto,
   CreateInquiryDto,
+  DisciplineSettingsDto,
   InquiryStatusDto,
   UpdateActivityDto,
 } from './dto/activity.dto';
@@ -56,6 +57,23 @@ export class ClubActivitiesController {
   ) {
     requireClubScope(req, clubId);
     return this.service.create(requireCompanyId(req), clubId, dto);
+  }
+
+  /** Configuración en la app de una disciplina de la consola ("disc_<id>"). */
+  @Patch('disciplines/:disciplineId')
+  saveDiscipline(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Param('disciplineId') disciplineId: string,
+    @Body() dto: DisciplineSettingsDto,
+  ) {
+    requireClubScope(req, clubId);
+    return this.service.saveDisciplineSettings(
+      requireCompanyId(req),
+      clubId,
+      disciplineId,
+      dto,
+    );
   }
 
   @Patch(':id')

@@ -9,8 +9,14 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ClubDisciplinesService,
+  DISCIPLINE_ID_PREFIX,
+  type PublicDiscipline,
+} from './club-disciplines.service';
+import {
   CreateActivityDto,
   CreateInquiryDto,
+  DisciplineSettingsDto,
   ScheduleSlotDto,
   UpdateActivityDto,
 } from './dto/activity.dto';
@@ -19,6 +25,7 @@ const MAX_OPEN_INQUIRIES_PER_USER = 10;
 
 const ACTIVITY_SELECT = {
   id: true,
+  disciplineId: true,
   name: true,
   sport: true,
   audience: true,
@@ -57,18 +64,80 @@ function toNumber(row: ActivityRow) {
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly disciplines: ClubDisciplinesService,
+  ) {}
 
   // ----- Consola del club -----
 
+  /**
+   * Pantalla única de la consola: las disciplinas del club (con su configuración
+   * en la app) y las actividades sueltas.
+   */
   async list(companyId: string, clubId: string) {
     await this.requireClub(companyId, clubId);
-    const rows = await this.prisma.clubActivity.findMany({
-      where: { companyId, clubId },
-      select: ACTIVITY_SELECT,
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    const [rows, disciplines] = await Promise.all([
+      this.prisma.clubActivity.findMany({
+        where: { companyId, clubId },
+        select: ACTIVITY_SELECT,
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      this.disciplines.listPublic(clubId, true),
+    ]);
+    const settings = new Map(
+      rows
+        .filter((row) => row.disciplineId)
+        .map((row) => [row.disciplineId, row]),
+    );
+    return {
+      disciplines: disciplines.map((discipline) => {
+        const row = settings.get(discipline.id);
+        return {
+          ...discipline,
+          settings: {
+            isPublic: row?.isPublic ?? true,
+            description: row?.description ?? null,
+            price: row?.price == null ? null : Number(row.price),
+            priceUnit: row?.priceUnit ?? null,
+            showPrice: row?.showPrice ?? false,
+          },
+        };
+      }),
+      activities: rows.filter((row) => !row.disciplineId).map(toNumber),
+    };
+  }
+
+  /** Visibilidad, valor y texto en la app de una disciplina de la consola. */
+  async saveDisciplineSettings(
+    companyId: string,
+    clubId: string,
+    disciplineId: string,
+    dto: DisciplineSettingsDto,
+  ) {
+    await this.requireClub(companyId, clubId);
+    const discipline = await this.disciplines.exists(clubId, disciplineId);
+    if (!discipline) throw new NotFoundException('Disciplina no encontrada');
+    const data = {
+      description: dto.description === '' ? null : dto.description,
+      price: dto.price,
+      priceUnit: dto.priceUnit,
+      showPrice: dto.showPrice,
+      isPublic: dto.isPublic,
+    };
+    await this.prisma.clubActivity.upsert({
+      where: { clubId_disciplineId: { clubId, disciplineId } },
+      create: {
+        companyId,
+        clubId,
+        disciplineId,
+        name: discipline.name,
+        sport: discipline.sport,
+        ...data,
+      },
+      update: { ...data, name: discipline.name },
     });
-    return rows.map(toNumber);
+    return { ok: true };
   }
 
   async create(companyId: string, clubId: string, dto: CreateActivityDto) {
@@ -138,29 +207,63 @@ export class ActivitiesService {
 
   // ----- App pública (usuarios con cuenta) -----
 
-  /** Actividades visibles: precio solo si el club lo muestra; profes solo si publica la sección. */
+  /**
+   * Actividades visibles en la app: primero las disciplinas de la consola (con
+   * horarios por plantel), después las actividades sueltas. Precio solo si el
+   * club lo muestra; profes solo si publica esa sección.
+   */
   async listPublic(clubId: string) {
     const club = await this.prisma.club.findFirst({
       where: { id: clubId, isPublic: true, publicSchools: true },
       select: { publicCoaches: true },
     });
     if (!club) throw new NotFoundException('Sección no disponible');
-    const rows = await this.prisma.clubActivity.findMany({
-      where: { clubId, isPublic: true },
-      select: ACTIVITY_SELECT,
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      sport: row.sport,
-      audience: row.audience,
-      description: row.description,
-      schedule: row.schedule,
-      coaches: club.publicCoaches ? row.coaches : [],
-      price: row.showPrice && row.price !== null ? Number(row.price) : null,
-      priceUnit: row.showPrice ? row.priceUnit : null,
-    }));
+    const [rows, disciplines] = await Promise.all([
+      this.prisma.clubActivity.findMany({
+        where: { clubId },
+        select: ACTIVITY_SELECT,
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      this.disciplines.listPublic(clubId, club.publicCoaches),
+    ]);
+    const settings = new Map(
+      rows
+        .filter((row) => row.disciplineId)
+        .map((row) => [row.disciplineId, row]),
+    );
+    const price = (row?: ActivityRow) =>
+      row?.showPrice && row.price !== null
+        ? { price: Number(row.price), priceUnit: row.priceUnit }
+        : { price: null, priceUnit: null };
+
+    const fromDisciplines = disciplines
+      .filter((discipline) => settings.get(discipline.id)?.isPublic !== false)
+      .map((discipline: PublicDiscipline) => {
+        const row = settings.get(discipline.id);
+        return {
+          ...discipline,
+          description: row?.description ?? discipline.description,
+          schedule: [],
+          ...price(row),
+        };
+      });
+    const standalone = rows
+      .filter((row) => !row.disciplineId && row.isPublic)
+      .map((row) => ({
+        id: row.id,
+        kind: 'activity' as const,
+        name: row.name,
+        sport: row.sport,
+        emoji: null,
+        season: null,
+        audience: row.audience,
+        description: row.description,
+        schedule: row.schedule,
+        groups: [],
+        coaches: club.publicCoaches ? row.coaches : [],
+        ...price(row),
+      }));
+    return [...fromDisciplines, ...standalone];
   }
 
   /** "Consultar disponibilidad": una consulta abierta por usuario y actividad. */
@@ -175,14 +278,17 @@ export class ActivitiesService {
         'Completá tu nombre y celular en tu perfil para que el club pueda responderte.',
       );
 
-    const activity = await this.prisma.clubActivity.findFirst({
-      where: {
-        id: dto.activityId,
-        isPublic: true,
-        club: { isPublic: true, publicSchools: true },
-      },
-      select: { id: true, clubId: true, companyId: true },
-    });
+    const activity = dto.activityId.startsWith(DISCIPLINE_ID_PREFIX)
+      ? await this.disciplineForInquiry(dto.activityId, dto.clubId)
+      : await this.prisma.clubActivity.findFirst({
+          where: {
+            id: dto.activityId,
+            disciplineId: null,
+            isPublic: true,
+            club: { isPublic: true, publicSchools: true },
+          },
+          select: { id: true, clubId: true, companyId: true },
+        });
     if (!activity) throw new NotFoundException('Actividad no encontrada');
 
     const open = await this.prisma.activityInquiry.findFirst({
@@ -224,7 +330,7 @@ export class ActivitiesService {
       select: { id: true },
     });
     if (!user) throw new UnauthorizedException('Perfil no registrado');
-    return this.prisma.activityInquiry.findMany({
+    const rows = await this.prisma.activityInquiry.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -234,10 +340,42 @@ export class ActivitiesService {
         createdAt: true,
         activityId: true,
         clubId: true,
-        activity: { select: { name: true } },
+        activity: { select: { name: true, disciplineId: true } },
         club: { select: { name: true } },
       },
     });
+    // La app identifica las disciplinas como "disc_<id>".
+    return rows.map(({ activity, ...row }) => ({
+      ...row,
+      activityId: activity.disciplineId ?? row.activityId,
+      activity: { name: activity.name },
+    }));
+  }
+
+  /** Fila de configuración de la disciplina (se crea al primer uso) para colgar la consulta. */
+  private async disciplineForInquiry(disciplineId: string, clubId?: string) {
+    if (!clubId)
+      throw new BadRequestException('Falta el club de la disciplina.');
+    const club = await this.prisma.club.findFirst({
+      where: { id: clubId, isPublic: true, publicSchools: true },
+      select: { id: true, companyId: true },
+    });
+    if (!club) return null;
+    const discipline = await this.disciplines.exists(clubId, disciplineId);
+    if (!discipline) return null;
+    const row = await this.prisma.clubActivity.upsert({
+      where: { clubId_disciplineId: { clubId, disciplineId } },
+      create: {
+        companyId: club.companyId,
+        clubId,
+        disciplineId,
+        name: discipline.name,
+        sport: discipline.sport,
+      },
+      update: {},
+      select: { id: true, clubId: true, companyId: true, isPublic: true },
+    });
+    return row.isPublic ? row : null;
   }
 
   // ----- helpers -----
@@ -269,7 +407,7 @@ export class ActivitiesService {
 
   private async requireActivity(companyId: string, clubId: string, id: string) {
     const activity = await this.prisma.clubActivity.findFirst({
-      where: { id, companyId, clubId },
+      where: { id, companyId, clubId, disciplineId: null },
       select: { id: true },
     });
     if (!activity) throw new NotFoundException('Actividad no encontrada');

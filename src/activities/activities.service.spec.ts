@@ -1,4 +1,9 @@
 import 'reflect-metadata';
+
+jest.mock('../firebase/firebase-admin.service', () => ({
+  FirebaseAdminService: class FirebaseAdminService {},
+}));
+
 import {
   BadRequestException,
   ConflictException,
@@ -13,9 +18,11 @@ import { CreateActivityDto } from './dto/activity.dto';
 
 describe('ActivitiesService', () => {
   let prisma: any;
+  let disciplines: any;
   let service: ActivitiesService;
   const row = {
     id: 'a1',
+    disciplineId: null,
     name: 'Escuelita de fútbol',
     sport: 'football',
     audience: 'Infantiles 6 a 12',
@@ -38,6 +45,12 @@ describe('ActivitiesService', () => {
         findMany: jest.fn().mockResolvedValue([row]),
         findFirst: jest.fn(),
         create: jest.fn().mockResolvedValue(row),
+        upsert: jest.fn().mockResolvedValue({
+          id: 'row-hockey',
+          clubId: 'club-a',
+          companyId: 'company-a',
+          isPublic: true,
+        }),
       },
       activityInquiry: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -46,7 +59,11 @@ describe('ActivitiesService', () => {
         update: jest.fn(),
       },
     };
-    service = new ActivitiesService(prisma);
+    disciplines = {
+      listPublic: jest.fn().mockResolvedValue([]),
+      exists: jest.fn(),
+    };
+    service = new ActivitiesService(prisma, disciplines);
   });
 
   describe('listPublic', () => {
@@ -79,6 +96,117 @@ describe('ActivitiesService', () => {
       await expect(service.listPublic('club-a')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('disciplines from the console', () => {
+    const hockey = {
+      id: 'disc_hockey',
+      kind: 'discipline',
+      name: 'Hockey',
+      sport: 'hockey',
+      emoji: '🏑',
+      season: '2025',
+      audience: 'Femenino · 9 a 40 años',
+      description: null,
+      coaches: ['Luciana Sosa'],
+      groups: [
+        {
+          name: 'Primera',
+          schedule: [{ day: 0, start: '18:30', end: '20:00' }],
+          coaches: [],
+        },
+      ],
+    };
+
+    it('lists console disciplines first, with the club price only when shown', async () => {
+      prisma.club.findFirst.mockResolvedValue({ publicCoaches: true });
+      disciplines.listPublic.mockResolvedValue([hockey]);
+      prisma.clubActivity.findMany.mockResolvedValue([
+        row,
+        {
+          ...row,
+          id: 'row-hockey',
+          disciplineId: 'disc_hockey',
+          showPrice: true,
+          description: 'Escuela para chicas',
+        },
+      ]);
+
+      const list = await service.listPublic('club-a');
+
+      expect(disciplines.listPublic).toHaveBeenCalledWith('club-a', true);
+      expect(list.map((item) => item.id)).toEqual(['disc_hockey', 'a1']);
+      expect(list[0]).toEqual(
+        expect.objectContaining({
+          kind: 'discipline',
+          price: 15000,
+          description: 'Escuela para chicas',
+          groups: hockey.groups,
+        }),
+      );
+    });
+
+    it('hides a discipline the club turned off', async () => {
+      prisma.club.findFirst.mockResolvedValue({ publicCoaches: false });
+      disciplines.listPublic.mockResolvedValue([hockey]);
+      prisma.clubActivity.findMany.mockResolvedValue([
+        { ...row, disciplineId: 'disc_hockey', isPublic: false },
+      ]);
+      expect(await service.listPublic('club-a')).toEqual([]);
+    });
+
+    it('saves app settings for a discipline without copying its data', async () => {
+      prisma.club.findFirst.mockResolvedValue({ id: 'club-a' });
+      disciplines.exists.mockResolvedValue(hockey);
+      await service.saveDisciplineSettings(
+        'company-a',
+        'club-a',
+        'disc_hockey',
+        {
+          price: 20000,
+          priceUnit: 'mes',
+          showPrice: true,
+        },
+      );
+      expect(prisma.clubActivity.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            clubId_disciplineId: {
+              clubId: 'club-a',
+              disciplineId: 'disc_hockey',
+            },
+          },
+          create: expect.objectContaining({ name: 'Hockey', price: 20000 }),
+        }),
+      );
+    });
+
+    it('hangs an inquiry about a discipline on its settings row', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        name: 'Ana',
+        phone: '11 5555-1234',
+      });
+      prisma.club.findFirst.mockResolvedValue({
+        id: 'club-a',
+        companyId: 'company-a',
+      });
+      disciplines.exists.mockResolvedValue(hockey);
+
+      await service.createInquiry('fb-ana', {
+        activityId: 'disc_hockey',
+        clubId: 'club-a',
+      });
+
+      expect(prisma.activityInquiry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ activityId: 'row-hockey' }),
+        }),
+      );
+      await expect(
+        service.createInquiry('fb-ana', { activityId: 'disc_hockey' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

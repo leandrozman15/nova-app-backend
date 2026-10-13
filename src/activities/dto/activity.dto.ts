@@ -124,9 +124,16 @@ export class UpdateActivityDto extends ActivityFieldsDto {
 }
 
 export class CreateInquiryDto {
+  /** Id de la actividad, o "disc_<id>" para una disciplina de la consola. */
+  @IsString()
+  @MaxLength(80)
+  activityId!: string;
+
+  /** Obligatorio para disciplinas (su id no es global). */
+  @IsOptional()
   @IsString()
   @MaxLength(40)
-  activityId!: string;
+  clubId?: string;
 
   @IsOptional()
   @Transform(trim)
@@ -138,4 +145,35 @@ export class CreateInquiryDto {
 export class InquiryStatusDto {
   @IsIn(['NEW', 'CONTACTED', 'CLOSED'])
   status!: 'NEW' | 'CONTACTED' | 'CLOSED';
+}
+
+/** Lo que el club define en la app para una disciplina de la consola. */
+export class DisciplineSettingsDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Transform(trim)
+  @IsString()
+  @MaxLength(1500)
+  description?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  price?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(PRICE_UNITS)
+  priceUnit?: (typeof PRICE_UNITS)[number] | null;
+
+  @IsOptional()
+  @IsBoolean()
+  showPrice?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
 }

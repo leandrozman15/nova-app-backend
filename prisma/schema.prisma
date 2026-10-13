@@ -814,6 +814,9 @@ model ClubActivity {
   id          String   @id @default(cuid())
   companyId   String
   clubId      String
+  /// Si está, la actividad es la configuración en la app de una disciplina de la
+  /// consola (Firestore available_disciplines/{id}): nombre y horarios salen de ahí.
+  disciplineId String?
   name        String
   /// Familia de deporte (football, padel…), opcional.
   sport       String?
@@ -837,6 +840,7 @@ model ClubActivity {
   club      Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
   inquiries ActivityInquiry[]
 
+  @@unique([clubId, disciplineId])
   @@index([companyId, clubId])
   @@index([clubId, isPublic])
 }

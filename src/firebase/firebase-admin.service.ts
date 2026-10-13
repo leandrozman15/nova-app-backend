@@ -1,8 +1,13 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { existsSync, readFileSync } from 'node:fs';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+
+/** Base de Firestore que usa la app web (no es la "(default)"). */
+const DEFAULT_FIRESTORE_DATABASE_ID =
+  'ai-studio-0867a4e6-d6f0-4ab1-84e3-aa53097594a7';
 
 @Injectable()
 export class FirebaseAdminService implements OnModuleInit {
@@ -44,5 +49,13 @@ export class FirebaseAdminService implements OnModuleInit {
 
   get auth(): Auth {
     return getAuth();
+  }
+
+  /** Firestore de la app (datos heredados: disciplinas, divisiones, planteles). */
+  get firestore(): Firestore {
+    const databaseId =
+      this.configService.get<string>('FIRESTORE_DATABASE_ID') ||
+      DEFAULT_FIRESTORE_DATABASE_ID;
+    return getFirestore(getApp(), databaseId);
   }
 }
