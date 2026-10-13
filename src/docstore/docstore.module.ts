@@ -13,6 +13,6 @@ import { DocStoreService } from './docstore.service';
   imports: [PlatformModule, RosterModule],
   controllers: [DocStoreController, DocStoreMigrationController],
   providers: [DocStoreService, DocStoreMigrationService],
-  exports: [DocStoreService],
+  exports: [DocStoreService, DocStoreMigrationService],
 })
 export class DocStoreModule {}

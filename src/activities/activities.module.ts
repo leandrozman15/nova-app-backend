@@ -9,9 +9,10 @@ import {
 import { ActivitiesService } from './activities.service';
 import { ClubDisciplinesService } from './club-disciplines.service';
 import { RosterModule } from '../roster/roster.module';
+import { DocStoreModule } from '../docstore/docstore.module';
 
 @Module({
-  imports: [RosterModule],
+  imports: [RosterModule, DocStoreModule],
   controllers: [
     ClubActivitiesController,
     ClubInquiriesController,

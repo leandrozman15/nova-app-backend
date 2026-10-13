@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FirestoreMigrationService } from '../roster/firestore-migration.service';
+import { DocStoreMigrationService } from '../docstore/docstore-migration.service';
 import { toDisciplineDoc } from '../roster/roster.mapper';
 
 /**
@@ -162,9 +162,9 @@ export class ClubDisciplinesService {
   >();
 
   constructor(
-    private readonly firebase: FirebaseAdminService,
     private readonly prisma: PrismaService,
     private readonly migration: FirestoreMigrationService,
+    private readonly docs: DocStoreMigrationService,
   ) {}
 
   /** Disciplinas activas del club. Si Firestore falla, la ficha sigue sin ellas. */
@@ -196,6 +196,7 @@ export class ClubDisciplinesService {
   private async load(clubId: string, includeCoaches: boolean) {
     // Disciplinas y ramas en Postgres; los planteles siguen en Firestore (etapa 2).
     await this.migration.ensureStage1(clubId);
+    await this.docs.ensureStage2(clubId);
     const [disciplines, divisions] = await Promise.all([
       this.prisma.clubDiscipline.findMany({ where: { clubId } }),
       this.prisma.division.findMany({
@@ -206,23 +207,33 @@ export class ClubDisciplinesService {
     const active = disciplines.filter((item) => !isInactive(item.status));
     if (active.length === 0) return [];
 
-    const club = this.firebase.firestore.collection('clubs').doc(clubId);
-    const teamsBySport = new Map<string, Doc[]>();
-    await Promise.all(
-      divisions.map(async (division) => {
-        const teams = await club
-          .collection('divisions')
-          .doc(division.id)
-          .collection('teams')
-          .get();
-        for (const team of teams.docs) {
-          const data = team.data();
-          const sport = text(data.sport, 40) ?? text(division.sport, 40);
-          if (!sport) continue;
-          teamsBySport.set(sport, [...(teamsBySport.get(sport) ?? []), data]);
-        }
-      }),
+    // Planteles en el almacén de documentos (etapa 2), bajo cada rama.
+    const teamRows = await this.prisma.storeDocument.findMany({
+      where: {
+        clubId,
+        collection: 'teams',
+        parentPath: {
+          in: divisions.map(
+            (division) => `clubs/${clubId}/divisions/${division.id}/teams`,
+          ),
+        },
+      },
+      select: { parentPath: true, data: true },
+    });
+    const sportOfDivision = new Map(
+      divisions.map((division) => [
+        `clubs/${clubId}/divisions/${division.id}/teams`,
+        division.sport,
+      ]),
     );
+    const teamsBySport = new Map<string, Doc[]>();
+    for (const row of teamRows) {
+      const data = (row.data ?? {}) as Doc;
+      const sport =
+        text(data.sport, 40) ?? text(sportOfDivision.get(row.parentPath), 40);
+      if (!sport) continue;
+      teamsBySport.set(sport, [...(teamsBySport.get(sport) ?? []), data]);
+    }
 
     return active
       .map((item) => {
