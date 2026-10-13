@@ -2,9 +2,9 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { todayIn } from '../bookings/booking-time';
-import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { AuditService, type AuditActor } from '../platform/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FirestoreMigrationService } from '../roster/firestore-migration.service';
 import type { ImportRowDto } from './player-import.dto';
 import {
   fold,
@@ -13,15 +13,6 @@ import {
   type Division,
   type RowResult,
 } from './player-import.rules';
-
-const INACTIVE = new Set(['inactive', 'inactivo', 'archived']);
-
-function chunks<T>(items: T[], size: number) {
-  const out: T[][] = [];
-  for (let index = 0; index < items.length; index += size)
-    out.push(items.slice(index, index + size));
-  return out;
-}
 
 /**
  * Implantación automática de jugadores de un club desde la plantilla Excel:
@@ -34,7 +25,7 @@ export class PlayerImportService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly firebase: FirebaseAdminService,
+    private readonly migration: FirestoreMigrationService,
     private readonly audit: AuditService,
   ) {}
 
@@ -125,7 +116,6 @@ export class PlayerImportService {
           })
         : Promise.resolve([] as Array<{ email: string | null }>),
     ]);
-    const firestoreDnis = await this.firestoreDnis(club.id, dnis);
 
     const known = new Map(byDni.map((player) => [player.dni, player]));
     const takenEmails = new Set(
@@ -134,12 +124,10 @@ export class PlayerImportService {
     for (const result of results) {
       if (!result.player) continue;
       const existing = known.get(result.player.dni);
-      if (existing || firestoreDnis.has(result.player.dni)) {
+      if (existing) {
         result.status = 'duplicate';
         result.errors.push(
-          existing
-            ? `Ya existe: ${existing.firstName} ${existing.lastName} (DNI ${result.player.dni})${existing.clubId === club.id ? '' : ' en otro club de la misma institución'}.`
-            : `Ya está en la consola del club (DNI ${result.player.dni}).`,
+          `Ya existe: ${existing.firstName} ${existing.lastName} (DNI ${result.player.dni})${existing.clubId === club.id ? '' : ' en otro club de la misma institución'}.`,
         );
         continue;
       }
@@ -153,40 +141,17 @@ export class PlayerImportService {
     }
   }
 
-  private async firestoreDnis(clubId: string, dnis: string[]) {
-    const found = new Set<string>();
-    try {
-      const players = this.firebase.firestore
-        .collection('clubs')
-        .doc(clubId)
-        .collection('players');
-      for (const group of chunks(dnis, 30)) {
-        const snap = await players.where('dni', 'in', group).get();
-        snap.docs.forEach((doc) => {
-          const value: unknown = doc.get('dni');
-          if (typeof value === 'string' || typeof value === 'number')
-            found.add(String(value));
-        });
-      }
-    } catch (error) {
-      this.logger.warn(`No se pudo revisar Firestore: ${String(error)}`);
-    }
-    return found;
-  }
-
   private async create(
     club: { id: string; name: string; companyId: string },
     rows: RowResult[],
     actor: AuditActor,
   ) {
     const batchId = `import-${Date.now()}`;
-    const now = new Date().toISOString();
-    const done: Array<{ id: string; result: RowResult }> = [];
-
+    let created = 0;
     for (const result of rows) {
       const player = result.player!;
       try {
-        const saved = await this.prisma.player.create({
+        await this.prisma.player.create({
           data: {
             companyId: club.companyId,
             clubId: club.id,
@@ -202,10 +167,23 @@ export class PlayerImportService {
             birthDate: new Date(`${player.birthDate}T12:00:00Z`),
             notes: player.notes,
             active: true,
+            status: 'active',
+            role: 'player',
+            sport: player.sport,
+            divisionId: player.divisionId,
+            branch: player.branch,
+            gender: player.gender,
+            membershipNumber: player.membershipNumber,
+            hasMedicalCert: player.hasMedicalCert,
+            hasMinorAuth: player.hasMinorAuth,
+            extra: {
+              importBatch: batchId,
+              importedBy: actor.email ?? actor.uid,
+            },
           },
           select: { id: true },
         });
-        done.push({ id: saved.id, result });
+        created += 1;
       } catch (error) {
         result.status = 'error';
         result.errors.push(
@@ -217,102 +195,34 @@ export class PlayerImportService {
         this.logger.warn(`Fila ${result.row}: ${String(error)}`);
       }
     }
-
-    // Ficha en la consola del club (mismos campos que la inscripción manual).
-    const collection = this.firebase.firestore
-      .collection('clubs')
-      .doc(club.id)
-      .collection('players');
-    for (const group of chunks(done, 400)) {
-      const batch = this.firebase.firestore.batch();
-      for (const { id, result } of group) {
-        const player = result.player!;
-        batch.set(collection.doc(id), {
-          id,
-          backendId: id,
-          firstName: player.firstName,
-          lastName: player.lastName,
-          dni: player.dni,
-          birthDate: player.birthDate,
-          gender: player.gender,
-          address: player.address ?? '',
-          locality: player.locality ?? '',
-          province: player.province ?? '',
-          photoUrl: '',
-          sport: player.sport,
-          divisionId: player.divisionId ?? '',
-          divisionName: player.divisionName ?? '',
-          branch: player.branch,
-          position: player.position ?? '',
-          membershipNumber: player.membershipNumber ?? '',
-          clubId: club.id,
-          clubName: club.name,
-          email: player.email ?? '',
-          phone: player.phone ?? '',
-          enableLogin: false,
-          hasMedicalCert: player.hasMedicalCert,
-          hasMinorAuth: player.hasMinorAuth,
-          notes: player.notes ?? '',
-          role: 'player',
-          roles: ['player'],
-          isFan: false,
-          status: 'active',
-          createdAt: now,
-          importedAt: now,
-          importBatch: batchId,
-          importedBy: actor.email ?? actor.uid,
-        });
-      }
-      try {
-        await batch.commit();
-      } catch (error) {
-        this.logger.error(
-          `No se escribieron ${group.length} fichas en Firestore: ${String(error)}`,
-        );
-        for (const { result } of group)
-          result.warnings.push(
-            'Se creó en el padrón pero no apareció en la consola: reintentá la implantación.',
-          );
-      }
-    }
-    return done.length;
+    return created;
   }
 
   private async clubLists(clubId: string) {
+    // Los datos del club ya viven en Postgres (se copian de Firestore la primera vez).
+    await this.migration.ensureStage1(clubId);
+    const [disciplineRows, divisionRows] = await Promise.all([
+      this.prisma.clubDiscipline.findMany({
+        where: {
+          clubId,
+          NOT: { status: { in: ['inactive', 'inactivo', 'archived'] } },
+        },
+        select: { sportId: true, name: true },
+      }),
+      this.prisma.division.findMany({
+        where: { clubId },
+        select: { id: true, name: true, sport: true },
+      }),
+    ]);
     const disciplines: Discipline[] = [];
-    const divisions: Division[] = [];
-    try {
-      const club = this.firebase.firestore.collection('clubs').doc(clubId);
-      const [disc, div] = await Promise.all([
-        club.collection('available_disciplines').get(),
-        club.collection('divisions').get(),
-      ]);
-      for (const doc of disc.docs) {
-        const status: unknown = doc.get('status');
-        if (typeof status === 'string' && INACTIVE.has(status.toLowerCase()))
-          continue;
-        const sportId = String(doc.get('sportId') ?? doc.id);
-        const name = String(
-          doc.get('customName') ?? doc.get('name') ?? sportId,
-        );
-        if (!disciplines.some((item) => fold(item.sportId) === fold(sportId)))
-          disciplines.push({ sportId, name });
-      }
-      for (const doc of div.docs) {
-        const name: unknown = doc.get('name');
-        if (typeof name !== 'string' || !name.trim()) continue;
-        const sport: unknown = doc.get('sport');
-        divisions.push({
-          id: doc.id,
-          name: name.trim(),
-          sport: typeof sport === 'string' ? sport : null,
-        });
-      }
-    } catch (error) {
-      this.logger.error(
-        `No se leyeron disciplinas del club ${clubId}: ${String(error)}`,
-      );
-    }
+    for (const item of disciplineRows)
+      if (!disciplines.some((d) => fold(d.sportId) === fold(item.sportId)))
+        disciplines.push({ sportId: item.sportId, name: item.name });
+    const divisions: Division[] = divisionRows.map((item) => ({
+      id: item.id,
+      name: item.name.trim(),
+      sport: item.sport,
+    }));
     disciplines.sort((a, b) => a.name.localeCompare(b.name, 'es'));
     divisions.sort((a, b) =>
       a.name.localeCompare(b.name, 'es', { numeric: true }),

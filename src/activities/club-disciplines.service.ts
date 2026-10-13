@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { FirestoreMigrationService } from '../roster/firestore-migration.service';
+import { toDisciplineDoc } from '../roster/roster.mapper';
 
 /**
  * Lee las disciplinas que el club ya cargó en la consola (Firestore:
@@ -158,7 +161,11 @@ export class ClubDisciplinesService {
     { at: number; data: PublicDiscipline[] }
   >();
 
-  constructor(private readonly firebase: FirebaseAdminService) {}
+  constructor(
+    private readonly firebase: FirebaseAdminService,
+    private readonly prisma: PrismaService,
+    private readonly migration: FirestoreMigrationService,
+  ) {}
 
   /** Disciplinas activas del club. Si Firestore falla, la ficha sigue sin ellas. */
   async listPublic(
@@ -187,26 +194,30 @@ export class ClubDisciplinesService {
   }
 
   private async load(clubId: string, includeCoaches: boolean) {
-    const club = this.firebase.firestore.collection('clubs').doc(clubId);
+    // Disciplinas y ramas en Postgres; los planteles siguen en Firestore (etapa 2).
+    await this.migration.ensureStage1(clubId);
     const [disciplines, divisions] = await Promise.all([
-      club.collection('available_disciplines').get(),
-      club.collection('divisions').get(),
+      this.prisma.clubDiscipline.findMany({ where: { clubId } }),
+      this.prisma.division.findMany({
+        where: { clubId },
+        select: { id: true, sport: true },
+      }),
     ]);
-
-    const active = disciplines.docs.filter(
-      (doc) => !isInactive(doc.get('status')),
-    );
+    const active = disciplines.filter((item) => !isInactive(item.status));
     if (active.length === 0) return [];
 
-    // Planteles de cada deporte, recorriendo las divisiones del club.
+    const club = this.firebase.firestore.collection('clubs').doc(clubId);
     const teamsBySport = new Map<string, Doc[]>();
     await Promise.all(
-      divisions.docs.map(async (division) => {
-        const divisionSport = text(division.get('sport'), 40);
-        const teams = await division.ref.collection('teams').get();
+      divisions.map(async (division) => {
+        const teams = await club
+          .collection('divisions')
+          .doc(division.id)
+          .collection('teams')
+          .get();
         for (const team of teams.docs) {
           const data = team.data();
-          const sport = text(data.sport, 40) ?? divisionSport;
+          const sport = text(data.sport, 40) ?? text(division.sport, 40);
           if (!sport) continue;
           teamsBySport.set(sport, [...(teamsBySport.get(sport) ?? []), data]);
         }
@@ -214,13 +225,12 @@ export class ClubDisciplinesService {
     );
 
     return active
-      .map((doc) => {
-        const data = doc.data();
-        const sport = text(data.sportId, 40) ?? doc.id;
+      .map((item) => {
+        const data = toDisciplineDoc(item);
         return toPublicDiscipline(
-          doc.id,
+          item.id,
           data,
-          teamsBySport.get(sport) ?? [],
+          teamsBySport.get(item.sportId) ?? [],
           includeCoaches,
         );
       })

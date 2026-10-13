@@ -208,6 +208,10 @@ model Club {
   primaryLeagues League[]    @relation("ClubPrimaryLeague")
   teams        Team[]
   players      Player[]
+  /// Etapas de la salida de Firestore ya copiadas para este club ({ "stage1": "2026-10-13T…" }).
+  firestoreMigration Json?
+  disciplines  ClubDiscipline[]
+  divisions    Division[]
   members      Member[]
   memberships  ClubMembership[]
   financialTransactions FinancialTransaction[]
@@ -346,12 +350,28 @@ model Player {
   facilitiesAccess   Json?
   extrasAccess       Json?
   familyMembers      Json?
+  /// Id de la ficha en Firestore (antes de la migración). La app lo sigue usando como id del jugador.
+  legacyId           String?   @unique
+  /// Disciplina (sportId del club), rama/categoría y datos deportivos.
+  sport              String?
+  divisionId         String?
+  branch             String?
+  gender             String?
+  membershipNumber   String?
+  hasMedicalCert     Boolean   @default(false)
+  hasMinorAuth       Boolean   @default(false)
+  isFan              Boolean   @default(false)
+  status             String    @default("active")
+  role               String?
+  /// Campos de la ficha que no tienen columna propia (equipo de Firestore, extras del formulario).
+  extra              Json?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club           Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
   team           Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  division       Division?        @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   membershipPlan MembershipPlan?  @relation(fields: [membershipPlanId], references: [id], onDelete: SetNull)
   matchEvents         MatchEvent[]
   playerPayments      PlayerPayment[]
@@ -364,6 +384,7 @@ model Player {
   @@index([authUid])
   @@index([teamId])
   @@index([membershipPlanId])
+  @@index([clubId, divisionId])
   @@unique([companyId, dni])
 }
 
@@ -1438,4 +1459,55 @@ model RecurringBooking {
 
   @@index([clubId, weekday])
   @@index([facilityId])
+}
+
+/// Disciplina habilitada en un club (antes clubs/{id}/available_disciplines en Firestore).
+model ClubDiscipline {
+  id              String   @id
+  companyId       String
+  clubId          String
+  sportId         String
+  name            String
+  emoji           String?
+  season          String?
+  coordinatorId   String?
+  coordinatorName String?
+  location        String?
+  gender          String?
+  minAge          Int?
+  maxAge          Int?
+  description     String?
+  status          String   @default("active")
+  extra           Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, sportId])
+  @@index([companyId])
+}
+
+/// Rama o categoría dentro de una disciplina (antes clubs/{id}/divisions en Firestore).
+model Division {
+  id            String   @id @default(cuid())
+  companyId     String
+  clubId        String
+  sport         String?
+  name          String
+  branch        String?
+  minAge        Int?
+  maxAge        Int?
+  coordinatorId String?
+  headCoachId   String?
+  status        String   @default("active")
+  extra         Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  club    Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  players Player[]
+
+  @@index([clubId, sport])
+  @@index([companyId])
 }

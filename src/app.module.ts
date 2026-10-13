@@ -18,6 +18,7 @@ import { PlatformModule } from './platform/platform.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { StoreModule } from './store/store.module';
 import { PlayerImportModule } from './player-import/player-import.module';
+import { RosterModule } from './roster/roster.module';
 import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
@@ -63,6 +64,7 @@ import { UsersModule } from './users/users.module';
     SubscriptionsModule,
     StoreModule,
     PlayerImportModule,
+    RosterModule,
     PublicModule,
     PaymentsModule,
   ],

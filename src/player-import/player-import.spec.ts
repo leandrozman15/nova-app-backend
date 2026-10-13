@@ -106,53 +106,6 @@ describe('reglas de la implantación', () => {
 
 describe('PlayerImportService', () => {
   function setup() {
-    const docs = (items: Array<Record<string, unknown> & { id: string }>) => ({
-      docs: items.map((item) => ({
-        id: item.id,
-        get: (key: string) => item[key],
-      })),
-    });
-    const batch = {
-      set: jest.fn(),
-      commit: jest.fn().mockResolvedValue(undefined),
-    };
-    const playersCollection = {
-      doc: jest.fn((id: string) => ({ id })),
-      where: jest.fn(() => ({
-        get: jest
-          .fn()
-          .mockResolvedValue(docs([{ id: 'fs1', dni: '30111222' }])),
-      })),
-    };
-    const clubDoc = {
-      collection: jest.fn((name: string) =>
-        name === 'available_disciplines'
-          ? {
-              get: jest
-                .fn()
-                .mockResolvedValue(
-                  docs([
-                    { id: 'x', sportId: 'football', customName: 'Fútbol' },
-                  ]),
-                ),
-            }
-          : name === 'divisions'
-            ? {
-                get: jest
-                  .fn()
-                  .mockResolvedValue(
-                    docs([{ id: 'd1', name: 'Sub 15', sport: 'football' }]),
-                  ),
-              }
-            : playersCollection,
-      ),
-    };
-    const firebase: any = {
-      firestore: {
-        collection: jest.fn(() => ({ doc: jest.fn(() => clubDoc) })),
-        batch: jest.fn(() => batch),
-      },
-    };
     const prisma: any = {
       club: {
         findUnique: jest.fn().mockResolvedValue({
@@ -162,6 +115,16 @@ describe('PlayerImportService', () => {
           companyId: 'co1',
           timezone: 'America/Argentina/Buenos_Aires',
         }),
+      },
+      clubDiscipline: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ sportId: 'football', name: 'Fútbol' }]),
+      },
+      division: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'd1', name: 'Sub 15', sport: 'football' }]),
       },
       player: {
         findMany: jest
@@ -180,43 +143,42 @@ describe('PlayerImportService', () => {
         })),
       },
     };
+    const migration = { ensureStage1: jest.fn().mockResolvedValue(undefined) };
     const audit = { record: jest.fn() };
     return {
       prisma,
-      firebase,
-      batch,
+      migration,
       audit,
-      service: new PlayerImportService(prisma, firebase, audit as any),
+      service: new PlayerImportService(prisma, migration as any, audit as any),
     };
   }
 
   const rows = [
     { row: 2, ...base, email: 'tomado@mail.com' },
     { row: 3, ...base, dni: '28999888' },
-    { row: 4, ...base, dni: '30111222' },
-    { row: 5, ...base, dni: '41000111', sport: 'hockey' },
+    { row: 4, ...base, dni: '41000111', sport: 'hockey' },
   ];
 
   it('previews without creating anything and flags existing players', async () => {
-    const { prisma, service } = setup();
+    const { prisma, migration, service } = setup();
     const result = await service.run({ uid: 'admin' }, 'c1', rows, true);
+    expect(migration.ensureStage1).toHaveBeenCalledWith('c1');
     expect(prisma.player.create).not.toHaveBeenCalled();
     expect(result.summary).toEqual({
-      total: 4,
+      total: 3,
       ok: 0,
       warning: 1,
       error: 1,
-      duplicate: 2,
+      duplicate: 1,
     });
     expect(result.results[0].warnings.join(' ')).toMatch(
       /ya está en otra ficha/,
     );
     expect(result.results[1].errors[0]).toMatch(/Ya existe: Ana Gómez/);
-    expect(result.results[2].errors[0]).toMatch(/consola del club/);
   });
 
-  it('creates the importable rows in the database and the club console, with audit', async () => {
-    const { prisma, batch, audit, service } = setup();
+  it('creates the importable rows in the club roster, with audit', async () => {
+    const { prisma, audit, service } = setup();
     const result = await service.run(
       { uid: 'admin', email: 'a@fluxion.app' },
       'c1',
@@ -231,27 +193,21 @@ describe('PlayerImportService', () => {
         dni: '45123456',
         email: null,
         firstName: 'Juan Carlos',
-      }),
-      select: { id: true },
-    });
-    expect(batch.set).toHaveBeenCalledWith(
-      { id: 'p1' },
-      expect.objectContaining({
         sport: 'football',
         divisionId: 'd1',
-        divisionName: 'Sub 15',
         gender: 'Masculino',
         branch: 'masculino',
         role: 'player',
         status: 'active',
       }),
-    );
+      select: { id: true },
+    });
     expect(audit.record).toHaveBeenCalledWith(
       { uid: 'admin', email: 'a@fluxion.app' },
       'players.import',
       { type: 'Club', id: 'c1' },
       expect.objectContaining({
-        after: expect.objectContaining({ created: 1, rows: 4 }),
+        after: expect.objectContaining({ created: 1, rows: 3 }),
       }),
     );
   });

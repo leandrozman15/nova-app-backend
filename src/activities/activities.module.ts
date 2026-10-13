@@ -8,8 +8,10 @@ import {
 } from './activities.controller';
 import { ActivitiesService } from './activities.service';
 import { ClubDisciplinesService } from './club-disciplines.service';
+import { RosterModule } from '../roster/roster.module';
 
 @Module({
+  imports: [RosterModule],
   controllers: [
     ClubActivitiesController,
     ClubInquiriesController,
