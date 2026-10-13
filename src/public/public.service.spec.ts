@@ -175,3 +175,31 @@ describe('distanceKm', () => {
     expect(distanceKm(1, 1, 1, 1)).toBe(0);
   });
 });
+
+describe('sportFilter', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { sportFilter } = require('./public.service');
+
+  it('matches a court variant only through public facilities', () => {
+    expect(sportFilter('futbol_5')).toEqual({
+      publicFacilities: true,
+      facilities: { some: { sport: { in: ['futbol_5'] } } },
+    });
+  });
+
+  it('matches a family by the club main sport or any public court of the family', () => {
+    const filter = sportFilter('football');
+    expect(filter.OR[0]).toEqual({
+      sport: { contains: 'football', mode: 'insensitive' },
+    });
+    expect(filter.OR[1].facilities.some.sport.in).toEqual(
+      expect.arrayContaining(['futbol_5', 'futbol_7', 'futbol_11', 'futsal']),
+    );
+  });
+
+  it('falls back to the club sport for families without courts', () => {
+    expect(sportFilter('rowing')).toEqual({
+      sport: { contains: 'rowing', mode: 'insensitive' },
+    });
+  });
+});

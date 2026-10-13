@@ -1,10 +1,14 @@
 import {
+  IsIn,
+  ValidateIf,
   IsArray,
   IsObject,
   IsOptional,
   IsString,
   MaxLength,
 } from 'class-validator';
+
+import { FACILITY_SPORT_IDS } from '../facility-sports';
 
 export class CreateFacilityDto {
   @IsString()
@@ -22,6 +26,12 @@ export class CreateFacilityDto {
   @IsString()
   @MaxLength(120)
   typeLabel?: string;
+
+  /** Deporte del catálogo (futbol_5, padel, …); null = sin deporte. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(FACILITY_SPORT_IDS, { message: 'Deporte no válido' })
+  sport?: string | null;
 
   @IsString()
   @MaxLength(40)

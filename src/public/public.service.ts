@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
 import { isMercadoPagoConfigured } from '../payments/mercadopago.client';
+import { FACILITY_SPORT_IDS, facilitySportsOf } from '../facilities/facility-sports';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListPublicClubsDto } from './dto/list-public-clubs.dto';
 import { boundingBox, distanceKm } from './geo';
@@ -50,6 +51,7 @@ const FACILITY_SELECT = {
   name: true,
   type: true,
   typeLabel: true,
+  sport: true,
   photoUrl: true,
   photos: true,
   bookable: true,
@@ -116,6 +118,25 @@ function toCard<T extends ClubCard>(club: T) {
   };
 }
 
+/**
+ * Filtro por deporte:
+ * - Variante (futbol_5): clubes con alguna cancha pública de esa variante.
+ * - Familia (football): deporte principal del club o alguna cancha pública de la familia.
+ * Las canchas solo cuentan si el club publica la sección de instalaciones.
+ */
+export function sportFilter(sport: string): Prisma.ClubWhereInput {
+  const viaFacilities = (ids: string[]): Prisma.ClubWhereInput => ({
+    publicFacilities: true,
+    facilities: { some: { sport: { in: ids } } },
+  });
+  if (FACILITY_SPORT_IDS.includes(sport)) return viaFacilities([sport]);
+  const variants = facilitySportsOf(sport).map((item) => item.id);
+  const byClub: Prisma.ClubWhereInput = {
+    sport: { contains: sport, mode: 'insensitive' },
+  };
+  return variants.length ? { OR: [byClub, viaFacilities(variants)] } : byClub;
+}
+
 @Injectable()
 export class PublicService {
   constructor(private readonly prisma: PrismaService) {}
@@ -125,14 +146,17 @@ export class PublicService {
     const hasPoint = query.lat !== undefined && query.lng !== undefined;
     const where: Prisma.ClubWhereInput = { isPublic: true };
 
-    if (query.sport)
-      where.sport = { contains: query.sport, mode: 'insensitive' };
+    const and: Prisma.ClubWhereInput[] = [];
+    if (query.sport) and.push(sportFilter(query.sport));
     if (query.q) {
-      where.OR = [
-        { name: { contains: query.q, mode: 'insensitive' } },
-        { city: { contains: query.q, mode: 'insensitive' } },
-      ];
+      and.push({
+        OR: [
+          { name: { contains: query.q, mode: 'insensitive' } },
+          { city: { contains: query.q, mode: 'insensitive' } },
+        ],
+      });
     }
+    if (and.length) where.AND = and;
 
     if (!hasPoint) {
       const clubs = await this.prisma.club.findMany({

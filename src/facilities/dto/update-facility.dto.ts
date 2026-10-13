@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsArray,
   IsBoolean,
   IsNumber,
@@ -11,6 +12,8 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+
+import { FACILITY_SPORT_IDS } from '../facility-sports';
 
 export class UpdateFacilityDto {
   @IsOptional()
@@ -31,6 +34,12 @@ export class UpdateFacilityDto {
   @IsString()
   @MaxLength(120)
   typeLabel?: string;
+
+  /** Deporte del catálogo (futbol_5, padel, …); null = sin deporte. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(FACILITY_SPORT_IDS, { message: 'Deporte no válido' })
+  sport?: string | null;
 
   @IsOptional()
   @IsString()

@@ -574,6 +574,8 @@ model Facility {
   name         String
   type         String
   typeLabel    String?
+  // Deporte de la cancha (catálogo src/facilities/facility-sports.ts), para filtros.
+  sport        String?
   status       String
   statusLabel  String?
   photoUrl     String?
@@ -599,6 +601,7 @@ model Facility {
   @@index([companyId])
   @@index([clubId])
   @@index([companyId, clubId])
+  @@index([sport])
 }
 
 model FacilityRental {
