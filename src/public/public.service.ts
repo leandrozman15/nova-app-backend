@@ -1,8 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
-import { isMercadoPagoConfigured } from '../payments/mercadopago.client';
-import { FACILITY_SPORT_IDS, facilitySportsOf } from '../facilities/facility-sports';
+import { effectiveBookingMode } from '../bookings/bookings.service';
+import {
+  CLUB_AMENITY_IDS,
+  FACILITY_SERVICE_TO_AMENITY,
+} from '../clubs/club-amenities';
+import {
+  FACILITY_SPORT_IDS,
+  facilitySportsOf,
+} from '../facilities/facility-sports';
 import { PrismaService } from '../prisma/prisma.service';
 import { ListPublicClubsDto } from './dto/list-public-clubs.dto';
 import { boundingBox, distanceKm } from './geo';
@@ -43,6 +50,8 @@ const CLUB_DETAIL_SELECT = {
   instagram: true,
   facebook: true,
   depositPercent: true,
+  bookingMode: true,
+  amenities: true,
   paymentAccount: { select: { id: true } },
 } satisfies Prisma.ClubSelect;
 
@@ -137,6 +146,24 @@ export function sportFilter(sport: string): Prisma.ClubWhereInput {
   return variants.length ? { OR: [byClub, viaFacilities(variants)] } : byClub;
 }
 
+export function mergeAmenities(
+  clubAmenities: string[],
+  facilityServices: unknown[],
+) {
+  const found = new Set(clubAmenities);
+  for (const services of facilityServices) {
+    if (!Array.isArray(services)) continue;
+    for (const service of services) {
+      const amenity =
+        typeof service === 'string'
+          ? FACILITY_SERVICE_TO_AMENITY[service]
+          : undefined;
+      if (amenity) found.add(amenity);
+    }
+  }
+  return CLUB_AMENITY_IDS.filter((id) => found.has(id));
+}
+
 @Injectable()
 export class PublicService {
   constructor(private readonly prisma: PrismaService) {}
@@ -200,18 +227,27 @@ export class PublicService {
     });
     if (!club) throw new NotFoundException('Club no encontrado');
 
-    const facilitiesCount = club.publicFacilities
-      ? await this.prisma.facility.count({ where: { clubId } })
-      : 0;
-    const { paymentAccount, ...rest } = club;
+    const facilities = club.publicFacilities
+      ? await this.prisma.facility.findMany({
+          where: { clubId },
+          select: { services: true },
+        })
+      : [];
+    const { paymentAccount, amenities, ...rest } = club;
+    const mode = club.publicFacilities
+      ? effectiveBookingMode({ bookingMode: club.bookingMode, paymentAccount })
+      : 'off';
     return {
       ...toCard(rest),
-      facilitiesCount,
-      // Reservas online: el club conectó Mercado Pago y la plataforma lo tiene habilitado.
-      onlineBooking:
-        club.publicFacilities &&
-        Boolean(paymentAccount) &&
-        isMercadoPagoConfigured(),
+      facilitiesCount: facilities.length,
+      // Servicios del club + los cargados en sus canchas (sin duplicados, orden del catálogo).
+      amenities: mergeAmenities(
+        amenities,
+        facilities.map((f) => f.services),
+      ),
+      bookingMode: mode,
+      onlineBooking: mode !== 'off',
+      depositPercent: mode === 'deposit' ? club.depositPercent : 0,
     };
   }
 

@@ -114,7 +114,10 @@ describe('PaymentAccountsService.handleCallback', () => {
       PAYMENT_TOKENS_KEY: Buffer.alloc(32, 3).toString('base64'),
     });
     prisma = {
-      club: { findFirst: jest.fn().mockResolvedValue({ id: 'club-a' }) },
+      club: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'club-a' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       user: { findUnique: jest.fn().mockResolvedValue({ id: 'u-admin' }) },
       clubPaymentAccount: { upsert: jest.fn().mockResolvedValue({}) },
     };
@@ -147,6 +150,11 @@ describe('PaymentAccountsService.handleCallback', () => {
     expect(saved.create.providerUserId).toBe('123');
     expect(saved.create.accessTokenEncrypted).not.toContain('APP_USR');
     expect(saved.create.refreshTokenEncrypted).not.toContain('TG-');
+    // Conectar Mercado Pago activa la seña si el club no recibía reservas.
+    expect(prisma.club.updateMany).toHaveBeenCalledWith({
+      where: { id: 'club-a', bookingMode: 'off' },
+      data: { bookingMode: 'deposit' },
+    });
   });
 
   it('rejects forged or expired states before calling Mercado Pago', async () => {

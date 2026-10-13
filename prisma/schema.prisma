@@ -100,6 +100,7 @@ model Company {
   shopOrders            ShopOrder[]
   facilities            Facility[]
   facilityRentals       FacilityRental[]
+  clubActivities        ClubActivity[]
   trainingSessions      TrainingSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
@@ -143,6 +144,7 @@ model User {
   company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clubMemberships ClubMembership[]
   bookings        Booking[]
+  activityInquiries ActivityInquiry[]
 
   @@index([companyId])
   @@index([companyId, role])
@@ -182,6 +184,10 @@ model Club {
   // Reservas online: zona horaria de los turnos y % de seña sobre el precio.
   timezone         String   @default("America/Argentina/Buenos_Aires")
   depositPercent   Int      @default(30)
+  // Reservas desde la app: off | request (sin seña, confirma el club) | deposit (seña por Mercado Pago).
+  bookingMode      String   @default("off")
+  // Servicios del club (catálogo src/clubs/club-amenities.ts): wifi, vestuarios, duchas…
+  amenities        String[] @default([])
   companyId        String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -205,6 +211,8 @@ model Club {
   membershipPlans       MembershipPlan[]
   bookings              Booking[]
   paymentAccount        ClubPaymentAccount?
+  activities            ClubActivity[]
+  activityInquiries     ActivityInquiry[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -729,6 +737,7 @@ model MembershipPlan {
 }
 
 enum BookingStatus {
+  REQUESTED // solicitud sin seña: turno retenido hasta que el club confirme o rechace
   PENDING_PAYMENT // turno retenido mientras se paga la seña
   CONFIRMED // seña aprobada por Mercado Pago
   EXPIRED // no se pagó a tiempo; el turno se liberó
@@ -798,4 +807,62 @@ model ClubPaymentAccount {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+/// Actividad que el club ofrece (escuela, clases, entrenamiento) y muestra en la app.
+model ClubActivity {
+  id          String   @id @default(cuid())
+  companyId   String
+  clubId      String
+  name        String
+  /// Familia de deporte (football, padel…), opcional.
+  sport       String?
+  /// Público al que apunta: "Infantiles 6 a 12 años", "Adultos principiantes"…
+  audience    String?
+  description String?
+  /// Nombres de los profes que se muestran en la app.
+  coaches     String[] @default([])
+  /// Horarios semanales: [{ day: 0-6 (lunes = 0), start: "18:00", end: "19:30" }]
+  schedule    Json     @default("[]")
+  price       Decimal? @db.Decimal(12, 2)
+  /// "mes" | "clase" | "semana" | "trimestre" | "año"
+  priceUnit   String?
+  showPrice   Boolean  @default(false)
+  isPublic    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club      Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  inquiries ActivityInquiry[]
+
+  @@index([companyId, clubId])
+  @@index([clubId, isPublic])
+}
+
+enum ActivityInquiryStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+/// "Consultar disponibilidad" de un usuario sobre una actividad.
+model ActivityInquiry {
+  id         String                @id @default(cuid())
+  companyId  String
+  clubId     String
+  activityId String
+  userId     String
+  message    String?
+  status     ActivityInquiryStatus @default(NEW)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  club     Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  activity ClubActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, clubId, status])
+  @@index([userId, activityId])
 }

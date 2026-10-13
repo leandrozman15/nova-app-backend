@@ -111,6 +111,16 @@ export class ClubBookingsController {
     );
   }
 
+  @Post(':id/confirm')
+  confirm(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Param('id') id: string,
+  ) {
+    requireClubScope(req, clubId);
+    return this.bookings.confirmByClub(requireCompanyId(req), clubId, id);
+  }
+
   @Post(':id/cancel')
   cancel(
     @Req() req: unknown,

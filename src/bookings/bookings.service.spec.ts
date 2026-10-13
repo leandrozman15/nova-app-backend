@@ -38,6 +38,7 @@ describe('BookingsService', () => {
           name: 'Club A',
           timezone: TZ,
           depositPercent: 30,
+          bookingMode: 'deposit',
           paymentAccount: { id: 'acc' },
         }),
       },
@@ -215,10 +216,74 @@ describe('BookingsService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    describe('without deposit (request mode)', () => {
+      beforeEach(() => {
+        prisma.club.findFirst.mockResolvedValue({
+          id: 'club-a',
+          companyId: 'company-a',
+          name: 'Club A',
+          timezone: TZ,
+          depositPercent: 30,
+          bookingMode: 'request',
+          paymentAccount: null,
+        });
+      });
+
+      it('holds the slot as a request until it starts, without Mercado Pago', async () => {
+        delete process.env.MP_CLIENT_SECRET;
+        const result = await service.create('fb-ana', undefined, dto());
+
+        expect(prisma.booking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              status: 'REQUESTED',
+              depositAmount: 0,
+              price: 20000,
+              contactPhone: '11 5555-1234',
+            }),
+          }),
+        );
+        const data = prisma.booking.create.mock.calls[0][0].data;
+        expect(data.holdExpiresAt).toEqual(data.startsAt);
+        expect(mp.createPreference).not.toHaveBeenCalled();
+        expect(result).toEqual(
+          expect.objectContaining({ status: 'REQUESTED', checkoutUrl: null }),
+        );
+      });
+
+      it('limits open requests per user', async () => {
+        prisma.booking.count.mockResolvedValue(3);
+        await expect(
+          service.create('fb-ana', undefined, dto()),
+        ).rejects.toThrow('solicitudes sin respuesta');
+      });
+
+      it('lets the club confirm only pending requests', async () => {
+        prisma.booking.updateMany.mockResolvedValue({ count: 1 });
+        await expect(
+          service.confirmByClub('company-a', 'club-a', 'b1'),
+        ).resolves.toEqual({ ok: true });
+        expect(prisma.booking.updateMany).toHaveBeenLastCalledWith({
+          where: {
+            id: 'b1',
+            companyId: 'company-a',
+            clubId: 'club-a',
+            status: 'REQUESTED',
+          },
+          data: { status: 'CONFIRMED' },
+        });
+
+        prisma.booking.updateMany.mockResolvedValue({ count: 0 });
+        await expect(
+          service.confirmByClub('company-a', 'club-a', 'b1'),
+        ).rejects.toBeInstanceOf(ConflictException);
+      });
+    });
+
     it('is disabled when the platform is not configured', async () => {
       delete process.env.MP_CLIENT_SECRET;
       await expect(service.create('fb-ana', undefined, dto())).rejects.toThrow(
-        'todavía no están habilitadas',
+        'todavía no recibe reservas online',
       );
     });
   });
@@ -334,7 +399,11 @@ describe('BookingsService', () => {
       );
       expect(prisma.booking.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'b1', userId: 'u1', status: 'PENDING_PAYMENT' },
+          where: {
+            id: 'b1',
+            userId: 'u1',
+            status: { in: ['PENDING_PAYMENT', 'REQUESTED'] },
+          },
         }),
       );
     });

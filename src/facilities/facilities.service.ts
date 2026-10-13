@@ -82,7 +82,7 @@ export class FacilitiesService {
         facilityId,
         hour,
         date: { gte: today, lte: addDays(today, 60) },
-        status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] },
+        status: { in: ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'] },
       },
       select: { date: true },
       orderBy: { date: 'asc' },

@@ -49,7 +49,7 @@ describe('FacilitiesService rentals vs online bookings', () => {
         clubId: 'club-a',
         facilityId: 'f1',
         hour: 18,
-        status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] },
+        status: { in: ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'] },
       }),
     );
   });

@@ -118,9 +118,15 @@ export class PaymentAccountsService {
       update: data,
       create: { ...data, clubId: state.clubId },
     });
+    // Conectar Mercado Pago activa la seña online si el club no recibía reservas.
+    await this.prisma.club.updateMany({
+      where: { id: state.clubId, bookingMode: 'off' },
+      data: { bookingMode: 'deposit' },
+    });
     this.logger.log(
       `Mercado Pago conectado: club=${state.clubId} mpUser=${data.providerUserId}`,
     );
+
     return { clubId: state.clubId };
   }
 

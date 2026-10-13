@@ -34,9 +34,14 @@ export const FACILITY_SPORT_FAMILIES = [
   { id: 'multi', label: 'Multideporte' },
 ] as const;
 
-export type FacilitySportFamily = (typeof FACILITY_SPORT_FAMILIES)[number]['id'];
+export type FacilitySportFamily =
+  (typeof FACILITY_SPORT_FAMILIES)[number]['id'];
 
-export const FACILITY_SPORTS: ReadonlyArray<{ id: string; label: string; family: FacilitySportFamily }> = [
+export const FACILITY_SPORTS: ReadonlyArray<{
+  id: string;
+  label: string;
+  family: FacilitySportFamily;
+}> = [
   { id: 'futbol_5', label: 'Fútbol 5', family: 'football' },
   { id: 'futbol_6', label: 'Fútbol 6', family: 'football' },
   { id: 'futbol_7', label: 'Fútbol 7', family: 'football' },
@@ -52,7 +57,11 @@ export const FACILITY_SPORTS: ReadonlyArray<{ id: string; label: string; family:
   { id: 'squash', label: 'Squash', family: 'squash' },
   { id: 'pickleball', label: 'Pickleball', family: 'pickleball' },
   { id: 'tenis_mesa', label: 'Tenis de mesa', family: 'table_tennis' },
-  { id: 'pelota_paleta', label: 'Pelota paleta / frontón', family: 'pelota_paleta' },
+  {
+    id: 'pelota_paleta',
+    label: 'Pelota paleta / frontón',
+    family: 'pelota_paleta',
+  },
   { id: 'basquet', label: 'Básquet', family: 'basketball' },
   { id: 'basquet_3x3', label: 'Básquet 3x3', family: 'basketball' },
   { id: 'voley', label: 'Vóley', family: 'volleyball' },
@@ -66,7 +75,11 @@ export const FACILITY_SPORTS: ReadonlyArray<{ id: string; label: string; family:
   { id: 'beisbol', label: 'Béisbol', family: 'baseball' },
   { id: 'softbol', label: 'Sóftbol', family: 'baseball' },
   { id: 'golf', label: 'Golf (cancha)', family: 'golf' },
-  { id: 'golf_practica', label: 'Golf (práctica / driving range)', family: 'golf' },
+  {
+    id: 'golf_practica',
+    label: 'Golf (práctica / driving range)',
+    family: 'golf',
+  },
   { id: 'pileta_25', label: 'Pileta 25 m', family: 'swimming' },
   { id: 'pileta_50', label: 'Pileta 50 m', family: 'swimming' },
   { id: 'waterpolo', label: 'Waterpolo', family: 'swimming' },
@@ -74,15 +87,27 @@ export const FACILITY_SPORTS: ReadonlyArray<{ id: string; label: string; family:
   { id: 'patin', label: 'Patín', family: 'skating' },
   { id: 'ciclismo', label: 'Ciclismo / velódromo', family: 'cycling' },
   { id: 'musculacion', label: 'Gimnasio / musculación', family: 'gym' },
-  { id: 'funcional', label: 'Entrenamiento funcional / crossfit', family: 'gym' },
+  {
+    id: 'funcional',
+    label: 'Entrenamiento funcional / crossfit',
+    family: 'gym',
+  },
   { id: 'gimnasia', label: 'Gimnasia artística', family: 'gymnastics' },
   { id: 'yoga', label: 'Yoga / pilates', family: 'yoga' },
-  { id: 'artes_marciales', label: 'Artes marciales / dojo', family: 'martial_arts' },
+  {
+    id: 'artes_marciales',
+    label: 'Artes marciales / dojo',
+    family: 'martial_arts',
+  },
   { id: 'boxeo', label: 'Boxeo', family: 'boxeo' },
   { id: 'esgrima', label: 'Esgrima', family: 'fencing' },
   { id: 'bochas', label: 'Bochas', family: 'bochas' },
   { id: 'polo', label: 'Polo', family: 'polo' },
-  { id: 'multideporte', label: 'Polideportivo / multideporte', family: 'multi' },
+  {
+    id: 'multideporte',
+    label: 'Polideportivo / multideporte',
+    family: 'multi',
+  },
 ];
 
 export const FACILITY_SPORT_IDS = FACILITY_SPORTS.map((sport) => sport.id);

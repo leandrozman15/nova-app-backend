@@ -30,7 +30,24 @@ import { CreateBookingDto } from './dto/booking.dto';
 
 export const HOLD_MINUTES = 15;
 const MAX_ACTIVE_HOLDS_PER_USER = 2;
-const ACTIVE: BookingStatus[] = ['PENDING_PAYMENT', 'CONFIRMED'];
+const MAX_OPEN_REQUESTS_PER_USER = 3;
+const ACTIVE: BookingStatus[] = ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'];
+
+export type BookingMode = 'off' | 'request' | 'deposit';
+
+/**
+ * Modo real de reservas del club: "deposit" necesita Mercado Pago conectado
+ * (y la plataforma configurada); si falta, el club no recibe reservas.
+ */
+export function effectiveBookingMode(club: {
+  bookingMode: string;
+  paymentAccount: { id: string } | null;
+}): BookingMode {
+  if (club.bookingMode === 'request') return 'request';
+  if (club.bookingMode === 'deposit')
+    return isMercadoPagoConfigured() && club.paymentAccount ? 'deposit' : 'off';
+  return 'off';
+}
 const FREEING_RENTAL_STATUSES = [
   'cancelled',
   'canceled',
@@ -68,12 +85,15 @@ export class BookingsService {
     private readonly accounts: PaymentAccountsService,
   ) {}
 
-  /** Libera los turnos retenidos cuyo pago no se completó a tiempo. */
+  /**
+   * Libera turnos retenidos vencidos: seña no pagada a tiempo, o solicitud que
+   * el club no respondió antes del horario (holdExpiresAt = inicio del turno).
+   */
   expireStaleHolds(where: Prisma.BookingWhereInput = {}) {
     return this.prisma.booking.updateMany({
       where: {
         ...where,
-        status: 'PENDING_PAYMENT',
+        status: { in: ['PENDING_PAYMENT', 'REQUESTED'] },
         holdExpiresAt: { lt: new Date() },
       },
       data: { status: 'EXPIRED' },
@@ -92,6 +112,7 @@ export class BookingsService {
         id: true,
         timezone: true,
         depositPercent: true,
+        bookingMode: true,
         paymentAccount: { select: { id: true } },
       },
     });
@@ -105,11 +126,12 @@ export class BookingsService {
     const dates = bookingWindow(club.timezone);
     const date =
       requestedDate && dates.includes(requestedDate) ? requestedDate : dates[0];
+    const mode = effectiveBookingMode(club);
     const onlineBooking =
-      isMercadoPagoConfigured() &&
-      Boolean(club.paymentAccount) &&
       facility.bookable &&
-      facility.hourlyPrice !== null;
+      (mode === 'request' ||
+        (mode === 'deposit' && facility.hourlyPrice !== null));
+    const bookingMode: BookingMode = onlineBooking ? mode : 'off';
 
     await this.expireStaleHolds({ facilityId, date });
     const [rentals, bookings] = await Promise.all([
@@ -137,11 +159,14 @@ export class BookingsService {
       dates,
       timezone: club.timezone,
       onlineBooking,
+      bookingMode,
       currency: 'ARS',
       price,
-      depositPercent: club.depositPercent,
+      depositPercent: bookingMode === 'deposit' ? club.depositPercent : 0,
       depositAmount:
-        price !== null ? roundMoney((price * club.depositPercent) / 100) : null,
+        bookingMode === 'deposit' && price !== null
+          ? roundMoney((price * club.depositPercent) / 100)
+          : null,
       holdMinutes: HOLD_MINUTES,
       slots: BOOKING_HOURS.map((hour) => ({
         hour,
@@ -155,17 +180,15 @@ export class BookingsService {
     };
   }
 
-  /** Reserva un turno y devuelve el link de pago de la seña. */
+  /**
+   * Reserva un turno. Con seña devuelve el link de pago; sin seña queda como
+   * solicitud (REQUESTED) que el club confirma o rechaza desde la consola.
+   */
   async create(
     firebaseUid: string,
     email: string | undefined,
     dto: CreateBookingDto,
   ) {
-    if (!isMercadoPagoConfigured()) {
-      throw new ConflictException(
-        'Las reservas online todavía no están habilitadas.',
-      );
-    }
     const user = await this.requireUser(firebaseUid);
     // El club necesita poder contactar a quien reserva: nombre y celular del perfil.
     const contactPhone = dto.contactPhone?.trim() || user.phone?.trim() || null;
@@ -182,11 +205,13 @@ export class BookingsService {
         name: true,
         timezone: true,
         depositPercent: true,
+        bookingMode: true,
         paymentAccount: { select: { id: true } },
       },
     });
     if (!club) throw new NotFoundException('Club no encontrado');
-    if (!club.paymentAccount)
+    const mode = effectiveBookingMode(club);
+    if (mode === 'off')
       throw new ConflictException(
         'Este club todavía no recibe reservas online.',
       );
@@ -196,7 +221,10 @@ export class BookingsService {
       select: { id: true, name: true, bookable: true, hourlyPrice: true },
     });
     if (!facility) throw new NotFoundException('Cancha no encontrada');
-    if (!facility.bookable || facility.hourlyPrice === null) {
+    if (
+      !facility.bookable ||
+      (mode === 'deposit' && facility.hourlyPrice === null)
+    ) {
       throw new ConflictException('Esta cancha no se puede reservar online.');
     }
 
@@ -215,12 +243,18 @@ export class BookingsService {
       throw new BadRequestException('Ese horario ya pasó.');
 
     await this.expireStaleHolds({ userId: user.id });
-    const activeHolds = await this.prisma.booking.count({
-      where: { userId: user.id, status: 'PENDING_PAYMENT' },
+    const pendingStatus = mode === 'request' ? 'REQUESTED' : 'PENDING_PAYMENT';
+    const pending = await this.prisma.booking.count({
+      where: { userId: user.id, status: pendingStatus },
     });
-    if (activeHolds >= MAX_ACTIVE_HOLDS_PER_USER) {
+    if (mode === 'deposit' && pending >= MAX_ACTIVE_HOLDS_PER_USER) {
       throw new ConflictException(
         'Tenés reservas esperando pago. Pagá o cancelá una antes de reservar otra.',
+      );
+    }
+    if (mode === 'request' && pending >= MAX_OPEN_REQUESTS_PER_USER) {
+      throw new ConflictException(
+        'Tenés varias solicitudes sin respuesta. Esperá a que el club confirme o cancelá alguna.',
       );
     }
 
@@ -236,13 +270,19 @@ export class BookingsService {
     });
     if (rental) throw new ConflictException('Ese turno ya está ocupado.');
 
-    const price = Number(facility.hourlyPrice);
-    const depositAmount = roundMoney((price * club.depositPercent) / 100);
-    if (depositAmount <= 0)
+    const price =
+      facility.hourlyPrice === null ? 0 : Number(facility.hourlyPrice);
+    const depositAmount =
+      mode === 'deposit' ? roundMoney((price * club.depositPercent) / 100) : 0;
+    if (mode === 'deposit' && depositAmount <= 0)
       throw new ConflictException(
         'El club no configuró una seña para reservas online.',
       );
-    const holdExpiresAt = new Date(Date.now() + HOLD_MINUTES * 60 * 1000);
+    // La solicitud retiene el turno hasta que empieza (si el club no responde, vence).
+    const holdExpiresAt =
+      mode === 'request'
+        ? startsAt
+        : new Date(Date.now() + HOLD_MINUTES * 60 * 1000);
 
     await this.expireStaleHolds({
       facilityId: facility.id,
@@ -263,6 +303,7 @@ export class BookingsService {
           price,
           depositAmount,
           holdExpiresAt,
+          status: pendingStatus,
           contactName: user.name,
           contactPhone,
         },
@@ -279,6 +320,17 @@ export class BookingsService {
         );
       }
       throw error;
+    }
+
+    if (mode === 'request') {
+      return {
+        bookingId: booking.id,
+        status: 'REQUESTED' as const,
+        checkoutUrl: null,
+        holdExpiresAt,
+        depositAmount: 0,
+        price,
+      };
     }
 
     try {
@@ -307,6 +359,7 @@ export class BookingsService {
         : preference.init_point;
       return {
         bookingId: booking.id,
+        status: 'PENDING_PAYMENT' as const,
         checkoutUrl,
         holdExpiresAt,
         depositAmount,
@@ -359,7 +412,11 @@ export class BookingsService {
   async cancelByUser(firebaseUid: string, bookingId: string) {
     const user = await this.requireUser(firebaseUid);
     const result = await this.prisma.booking.updateMany({
-      where: { id: bookingId, userId: user.id, status: 'PENDING_PAYMENT' },
+      where: {
+        id: bookingId,
+        userId: user.id,
+        status: { in: ['PENDING_PAYMENT', 'REQUESTED'] },
+      },
       data: { status: 'CANCELLED_BY_USER', cancelledAt: new Date() },
     });
     if (result.count === 0) {
@@ -535,6 +592,7 @@ export class BookingsService {
         date: { gte: start, lte: end },
         status: {
           in: [
+            'REQUESTED',
             'CONFIRMED',
             'PENDING_PAYMENT',
             'CANCELLED_BY_CLUB',
@@ -562,6 +620,20 @@ export class BookingsService {
         user: { select: { name: true, email: true } },
       },
     });
+  }
+
+  /** El club acepta una solicitud sin seña. */
+  async confirmByClub(companyId: string, clubId: string, bookingId: string) {
+    await this.expireStaleHolds({ id: bookingId });
+    const result = await this.prisma.booking.updateMany({
+      where: { id: bookingId, companyId, clubId, status: 'REQUESTED' },
+      data: { status: 'CONFIRMED' },
+    });
+    if (result.count === 0)
+      throw new ConflictException(
+        'La solicitud ya no está pendiente (fue cancelada o venció).',
+      );
+    return { ok: true };
   }
 
   /** El club cancela; si había seña cobrada, se devuelve completa por Mercado Pago. */

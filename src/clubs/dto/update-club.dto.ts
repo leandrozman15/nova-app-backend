@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -16,6 +19,7 @@ import {
 } from 'class-validator';
 
 import { isValidTimeZone } from '../../bookings/booking-time';
+import { CLUB_AMENITY_IDS } from '../club-amenities';
 import { IsPublicMediaUrl } from '../../common/validation/public-media-url';
 
 @ValidatorConstraint({ name: 'timeZone' })
@@ -173,4 +177,16 @@ export class UpdateClubDto {
   @MaxLength(60)
   @Validate(TimeZoneConstraint)
   timezone?: string;
+
+  /** off = sin reservas; request = solicitud sin seña; deposit = seña por Mercado Pago. */
+  @IsOptional()
+  @IsIn(['off', 'request', 'deposit'])
+  bookingMode?: 'off' | 'request' | 'deposit';
+
+  /** Servicios del club (catálogo club-amenities). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @IsIn(CLUB_AMENITY_IDS, { each: true, message: 'Servicio no válido' })
+  amenities?: string[];
 }

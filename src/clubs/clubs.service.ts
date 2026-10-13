@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClubDto } from './dto/create-club.dto';
@@ -45,6 +46,17 @@ export class ClubsService {
   async update(companyId: string, id: string, dto: UpdateClubDto) {
     await this.getById(companyId, id);
 
+    if (dto.bookingMode === 'deposit') {
+      const account = await this.prisma.clubPaymentAccount.findUnique({
+        where: { clubId: id },
+        select: { id: true },
+      });
+      if (!account)
+        throw new ConflictException(
+          'Para cobrar seña conectá primero la cuenta de Mercado Pago del club.',
+        );
+    }
+
     const foundationDate = dto.foundationDate ? new Date(dto.foundationDate) : undefined;
 
     return this.prisma.club.update({
@@ -79,6 +91,8 @@ export class ClubsService {
         coverUrl: dto.coverUrl,
         depositPercent: dto.depositPercent,
         timezone: dto.timezone,
+        bookingMode: dto.bookingMode,
+        amenities: dto.amenities ? [...new Set(dto.amenities)] : undefined,
       },
     });
   }
