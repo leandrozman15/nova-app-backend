@@ -7,6 +7,28 @@ import type { ListStoreDto } from './dto/store.dto';
 import { STORE_CATEGORIES } from './store-categories';
 import { firstImage } from './store-orders.service';
 
+/**
+ * Las fotos comprimidas (data URL) se sirven aparte para no inflar el listado;
+ * las https se usan tal cual.
+ */
+export function publicImage(
+  kind: 'p' | 'c',
+  id: string,
+  raw: string | null,
+  updatedAt: Date,
+) {
+  if (!raw) return null;
+  if (!raw.startsWith('data:')) return raw;
+  return `/api/public/store/images/${kind}/${id}?v=${updatedAt.getTime()}`;
+}
+
+/** Decodifica una data URL de imagen. */
+export function decodeImage(raw: string | null) {
+  const match = raw?.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!match) return null;
+  return { contentType: match[1], body: Buffer.from(match[2], 'base64') };
+}
+
 const PUBLIC_CLUB: Prisma.ClubWhereInput = {
   isPublic: true,
   ...CLUB_IN_GOOD_STANDING,
@@ -100,6 +122,7 @@ export class StorePublicService {
               price: true,
               stock: true,
               imageUrl: true,
+              updatedAt: true,
               merchant: {
                 select: {
                   id: true,
@@ -133,6 +156,7 @@ export class StorePublicService {
         price: true,
         images: true,
         sizes: true,
+        updatedAt: true,
         club: { select: { id: true, name: true, logoUrl: true, city: true } },
       },
     });
@@ -145,7 +169,12 @@ export class StorePublicService {
         description: product.description,
         category: product.category,
         price: Number(product.price),
-        imageUrl: product.imageUrl,
+        imageUrl: publicImage(
+          'p',
+          product.id,
+          product.imageUrl,
+          product.updatedAt,
+        ),
         stock: product.stock,
         sizes: [] as Array<{ label: string; available: boolean }>,
         seller: {
@@ -173,7 +202,12 @@ export class StorePublicService {
             description: product.description,
             category: clubCategory(product.category),
             price: Number(product.price),
-            imageUrl: firstImage(product.images),
+            imageUrl: publicImage(
+              'c',
+              product.id,
+              firstImage(product.images),
+              product.updatedAt,
+            ),
             stock: null as number | null,
             sizes,
             seller: {
@@ -193,6 +227,32 @@ export class StorePublicService {
         ),
     ];
     return { items, pickupAvailable: pickupCount > 0 };
+  }
+
+  /** Foto de un producto (p = comercio, c = club) para usar en <img>. */
+  async image(kind: string, id: string) {
+    let raw: string | null = null;
+    if (kind === 'p') {
+      const product = await this.prisma.storeProduct.findUnique({
+        where: { id },
+        select: { imageUrl: true },
+      });
+      raw = product?.imageUrl ?? null;
+    } else if (kind === 'c') {
+      const product = await this.prisma.shopProduct.findFirst({
+        where: {
+          id,
+          status: 'active',
+          club: { ...PUBLIC_CLUB, publicShop: true },
+        },
+        select: { images: true },
+      });
+      raw = product ? firstImage(product.images) : null;
+    }
+    if (raw && !raw.startsWith('data:')) return { redirect: raw };
+    const image = decodeImage(raw);
+    if (!image) throw new NotFoundException('Imagen no encontrada');
+    return image;
   }
 
   async merchant(id: string) {

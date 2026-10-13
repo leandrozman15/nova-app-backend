@@ -24,6 +24,10 @@ import { IVA_CONDITIONS, STORE_CATEGORY_IDS } from '../store-categories';
 
 const PERCENT = { maxDecimalPlaces: 2 } as const;
 
+/** Foto del producto: URL https o imagen comprimida en el navegador (data URL). */
+export const PRODUCT_IMAGE =
+  /^(https:\/\/\S+|data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+)$/;
+
 // ─── Plataforma: comercios ──────────────────────────────────────────────────
 
 export class CreateMerchantDto {
@@ -354,8 +358,8 @@ export class ProductDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== '')
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  @MaxLength(800)
+  @Matches(PRODUCT_IMAGE, { message: 'Imagen inválida' })
+  @MaxLength(120_000)
   imageUrl?: string;
 
   @IsOptional()
@@ -395,8 +399,8 @@ export class UpdateProductDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== '')
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  @MaxLength(800)
+  @Matches(PRODUCT_IMAGE, { message: 'Imagen inválida' })
+  @MaxLength(120_000)
   imageUrl?: string;
 
   @IsOptional()

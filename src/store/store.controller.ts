@@ -7,11 +7,13 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { StoreOrderStatus } from '@prisma/client';
+import type { Response } from 'express';
 
 import { NoTenant } from '../common/decorators/no-tenant.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -420,6 +422,29 @@ export class PublicStoreController {
   @Get('merchants/:id')
   merchant(@Param('id') id: string) {
     return this.service.merchant(id);
+  }
+}
+
+/** Fotos de productos (públicas, para <img>; cacheables). */
+@Public()
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 600, ttl: 60_000 } })
+@Controller('public/store/images')
+export class StoreImagesController {
+  constructor(private readonly service: StorePublicService) {}
+
+  @Get(':kind/:id')
+  async image(
+    @Param('kind') kind: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const result = await this.service.image(kind, id);
+    if ('redirect' in result) return res.redirect(302, result.redirect);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.send(result.body);
   }
 }
 

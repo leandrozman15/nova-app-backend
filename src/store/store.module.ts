@@ -13,6 +13,7 @@ import {
   PlatformCommissionsController,
   PlatformMerchantsController,
   PublicStoreController,
+  StoreImagesController,
 } from './store.controller';
 import { StoreOrdersService } from './store-orders.service';
 import { StorePublicService } from './store-public.service';
@@ -26,6 +27,7 @@ import { StorePublicService } from './store-public.service';
     MerchantPortalController,
     ClubStoreController,
     PublicStoreController,
+    StoreImagesController,
     MyStoreOrdersController,
   ],
   providers: [

@@ -164,3 +164,25 @@ describe('utilidades de la tienda', () => {
     expect(start.toISOString()).toBe('2026-10-12T03:00:00.000Z');
   });
 });
+
+describe('fotos de productos', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { publicImage, decodeImage } = require('./store-public.service');
+
+  it('serves compressed images by URL and keeps https as is', () => {
+    const at = new Date(1000);
+    expect(publicImage('p', 'x1', 'data:image/jpeg;base64,AAAA', at)).toBe(
+      '/api/public/store/images/p/x1?v=1000',
+    );
+    expect(publicImage('c', 'x1', 'https://cdn.com/a.jpg', at)).toBe('https://cdn.com/a.jpg');
+    expect(publicImage('p', 'x1', null, at)).toBeNull();
+  });
+
+  it('decodes only image data URLs', () => {
+    expect(decodeImage('data:image/png;base64,aGk=')).toEqual({
+      contentType: 'image/png',
+      body: Buffer.from('hi'),
+    });
+    expect(decodeImage('data:text/html;base64,aGk=')).toBeNull();
+  });
+});
