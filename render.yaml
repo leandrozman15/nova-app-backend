@@ -5,13 +5,17 @@ services:
     plan: starter
     rootDir: .
     buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    startCommand: sh -c "npx prisma migrate deploy && node dist/main.js"
+    # Neon con pooler: el candado de migraciones (pg_advisory_lock) queda tomado en una
+    # conexión del pooler y bloquea los deploys. Con una sola instancia no hace falta.
+    startCommand: sh -c "PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 npx prisma migrate deploy && node dist/main.js"
     autoDeploy: true
     envVars:
       - key: PORT
         value: 3001
       - key: NODE_ENV
         value: production
+      - key: PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK
+        value: "1"
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGIN
