@@ -78,14 +78,54 @@ export class PlatformService {
     }));
   }
 
+  /**
+   * Pagado / pendiente / anulado desde el panel de Fluxion. Un cargo anulado
+   * sale de la Tesorería del club; si se reactiva, vuelve a figurar.
+   */
   async markCharges(dto: MarkChargesDto) {
-    const result = await this.prisma.platformCharge.updateMany({
+    const charges = await this.prisma.platformCharge.findMany({
       where: { id: { in: dto.ids } },
+      select: {
+        id: true,
+        status: true,
+        companyId: true,
+        clubId: true,
+        amount: true,
+        currency: true,
+        description: true,
+      },
+    });
+    const result = await this.prisma.platformCharge.updateMany({
+      where: { id: { in: charges.map((charge) => charge.id) } },
       data: {
         status: dto.status,
         paidAt: dto.status === 'PAID' ? new Date() : null,
       },
     });
+    if (dto.status === 'VOIDED') {
+      await this.prisma.financialTransaction.deleteMany({
+        where: {
+          reference: { in: charges.map((charge) => `fx:${charge.id}`) },
+        },
+      });
+    } else {
+      const revived = charges.filter((charge) => charge.status === 'VOIDED');
+      for (const charge of revived) {
+        await this.prisma.financialTransaction.create({
+          data: {
+            companyId: charge.companyId,
+            clubId: charge.clubId,
+            type: 'expense',
+            category: 'Fluxion · Torneos',
+            amount: charge.amount,
+            currency: charge.currency,
+            occurredAt: new Date(),
+            description: charge.description,
+            reference: `fx:${charge.id}`,
+          },
+        });
+      }
+    }
     return { updated: result.count };
   }
 

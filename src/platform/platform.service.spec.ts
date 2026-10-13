@@ -110,10 +110,40 @@ describe('PlatformService (cargos de Fluxion a clubes)', () => {
   });
 
   it('marks charges as paid', async () => {
+    prisma.platformCharge.findMany = jest.fn().mockResolvedValue([
+      { id: 'ch1', status: 'PENDING' },
+      { id: 'ch2', status: 'PENDING' },
+    ]);
     await service.markCharges({ ids: ['ch1', 'ch2'], status: 'PAID' });
     expect(prisma.platformCharge.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['ch1', 'ch2'] } },
       data: { status: 'PAID', paidAt: expect.any(Date) },
+    });
+    expect(prisma.financialTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it('removes a voided charge from the club treasury and restores it if revived', async () => {
+    const row = {
+      id: 'ch1',
+      status: 'PENDING',
+      companyId: 'company-a',
+      clubId: 'club-a',
+      amount: new Prisma.Decimal(15000),
+      currency: 'ARS',
+      description: 'Publicación',
+    };
+    prisma.platformCharge.findMany = jest.fn().mockResolvedValue([row]);
+    await service.markCharges({ ids: ['ch1'], status: 'VOIDED' });
+    expect(prisma.financialTransaction.deleteMany).toHaveBeenCalledWith({
+      where: { reference: { in: ['fx:ch1'] } },
+    });
+
+    prisma.platformCharge.findMany.mockResolvedValue([
+      { ...row, status: 'VOIDED' },
+    ]);
+    await service.markCharges({ ids: ['ch1'], status: 'PENDING' });
+    expect(prisma.financialTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reference: 'fx:ch1', type: 'expense' }),
     });
   });
 });
