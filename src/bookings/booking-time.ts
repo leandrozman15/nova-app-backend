@@ -1,6 +1,6 @@
 /** Utilidades de fecha en la zona horaria del club (sin dependencias). */
 
-export const BOOKING_HOURS = Array.from({ length: 15 }, (_, i) => i + 8); // 08 a 22
+export const BOOKING_HOURS = Array.from({ length: 16 }, (_, i) => i + 8); // turnos de 08 a 23 (el último termina a las 00)
 export const BOOKING_WINDOW_DAYS = 14;
 const DAY_ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
