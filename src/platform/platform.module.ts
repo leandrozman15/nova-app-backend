@@ -5,6 +5,7 @@ import {
   PlatformController,
   PlatformMeController,
 } from './platform.controller';
+import { PlatformOverviewService } from './platform-overview.service';
 import { PlatformService } from './platform.service';
 
 @Module({
@@ -13,7 +14,7 @@ import { PlatformService } from './platform.service';
     PlatformMeController,
     ClubPlatformController,
   ],
-  providers: [PlatformService],
+  providers: [PlatformService, PlatformOverviewService],
   exports: [PlatformService],
 })
 export class PlatformModule {}

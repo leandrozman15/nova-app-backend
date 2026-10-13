@@ -20,6 +20,7 @@ import {
   UpdatePlatformSettingsDto,
 } from './dto/platform.dto';
 import { isPlatformAdmin, PlatformAdminGuard } from './platform-admin.guard';
+import { PlatformOverviewService } from './platform-overview.service';
 import { PlatformService } from './platform.service';
 
 /** Panel del dueño de Fluxion: valores de los cargos y facturación a clubes. */
@@ -27,7 +28,10 @@ import { PlatformService } from './platform.service';
 @UseGuards(PlatformAdminGuard)
 @Controller('platform')
 export class PlatformController {
-  constructor(private readonly service: PlatformService) {}
+  constructor(
+    private readonly service: PlatformService,
+    private readonly overview_: PlatformOverviewService,
+  ) {}
 
   @Get('settings')
   settings() {
@@ -37,6 +41,12 @@ export class PlatformController {
   @Put('settings')
   update(@Req() req: unknown, @Body() dto: UpdatePlatformSettingsDto) {
     return this.service.updateSettings((req as RequestWithAuth).auth!.uid, dto);
+  }
+
+  /** Panorama de todos los clubes: usuarios de la app, actividad y facturación. */
+  @Get('overview')
+  overview() {
+    return this.overview_.overview();
   }
 
   @Get('charges')
