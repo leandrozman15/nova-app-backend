@@ -8,6 +8,8 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // Render está detrás de un proxy: la IP real (para el rate limit) viene en X-Forwarded-For.
   app.set('trust proxy', 1);
+  // Implantación de planillas de jugadores y fotos de productos: hasta 4 MB por pedido.
+  app.useBodyParser('json', { limit: '4mb' });
 
   app.useGlobalPipes(
     new ValidationPipe({
