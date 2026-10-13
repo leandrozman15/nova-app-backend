@@ -9,6 +9,7 @@ import { Prisma, type TournamentStatus } from '@prisma/client';
 
 import { addDays, todayIn } from '../bookings/booking-time';
 import { facilitySportFamily } from '../facilities/facility-sports';
+import { PlatformService } from '../platform/platform.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEntryDto,
@@ -107,7 +108,10 @@ function money(value: Prisma.Decimal | null) {
 
 @Injectable()
 export class TournamentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly platform: PlatformService,
+  ) {}
 
   // ----- Consola del club -----
 
@@ -176,6 +180,15 @@ export class TournamentsService {
           : {}),
       },
     });
+    if (status === 'PUBLISHED') {
+      // Fluxion cobra la publicación una sola vez por torneo (aunque se reabra).
+      await this.platform.chargeTournamentPublished({
+        companyId,
+        clubId,
+        tournamentId: id,
+        tournamentName: current.name,
+      });
+    }
     return { ok: true, status };
   }
 
@@ -216,7 +229,12 @@ export class TournamentsService {
     );
     const entry = await this.prisma.tournamentEntry.findFirst({
       where: { id: entryId, tournamentId, companyId, clubId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        teamName: true,
+        user: { select: { name: true, email: true } },
+      },
     });
     if (!entry) throw new NotFoundException('Inscripción no encontrada');
     if (entry.status === 'CANCELLED')
@@ -239,6 +257,18 @@ export class TournamentsService {
       where: { id: entryId },
       data: { status: dto.status, reviewNote: dto.note || null },
     });
+    if (dto.status === 'ACCEPTED' && entry.status !== 'ACCEPTED') {
+      await this.platform.chargeEntryAccepted({
+        companyId,
+        clubId,
+        tournamentId,
+        tournamentName: tournament.name,
+        entryId,
+        entryName: entry.teamName || entry.user.name || entry.user.email,
+      });
+    } else if (dto.status !== 'ACCEPTED' && entry.status === 'ACCEPTED') {
+      await this.platform.voidEntryCharge(entryId);
+    }
     return { ok: true };
   }
 
@@ -406,6 +436,8 @@ export class TournamentsService {
       throw new NotFoundException(
         'No hay una inscripción activa para cancelar.',
       );
+    // Si ya estaba confirmada y el cargo no se pagó, se anula.
+    await this.platform.voidEntryCharge(entryId);
     return { ok: true };
   }
 

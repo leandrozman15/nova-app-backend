@@ -216,6 +216,7 @@ model Club {
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
   tournaments           ClubTournament[]
+  platformCharges       PlatformCharge[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -952,4 +953,46 @@ model TournamentEntry {
   @@index([tournamentId, status])
   @@index([userId])
   @@index([companyId, clubId])
+}
+
+/// Configuración global de la plataforma (una sola fila, id "global"). La edita el dueño de Fluxion.
+model PlatformSettings {
+  id                   String   @id @default("global")
+  /// Cargo de Fluxion al club por publicar un torneo (0 = no se cobra).
+  tournamentPublishFee Decimal  @default(0) @db.Decimal(12, 2)
+  /// Cargo de Fluxion al club por cada inscripción confirmada (0 = no se cobra).
+  tournamentEntryFee   Decimal  @default(0) @db.Decimal(12, 2)
+  currency             String   @default("ARS")
+  updatedByUid         String?
+  updatedAt            DateTime @updatedAt
+}
+
+enum PlatformChargeStatus {
+  PENDING
+  PAID
+  VOIDED
+}
+
+/// Cargo que Fluxion le factura a un club (torneo publicado, inscripción confirmada).
+model PlatformCharge {
+  id           String               @id @default(cuid())
+  companyId    String
+  clubId       String
+  /// tournament_published | tournament_entry
+  kind         String
+  /// Evita cobrar dos veces lo mismo: "tournament:<id>" o "entry:<id>".
+  sourceKey    String               @unique
+  tournamentId String?
+  amount       Decimal              @db.Decimal(12, 2)
+  currency     String               @default("ARS")
+  description  String
+  status       PlatformChargeStatus @default(PENDING)
+  paidAt       DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, status])
+  @@index([status, createdAt])
 }

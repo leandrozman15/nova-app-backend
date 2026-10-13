@@ -35,15 +35,20 @@ export class FirebaseAuthGuard implements CanActivate {
     const idToken = authHeader.slice(7);
 
     try {
-      const decoded = await this.firebaseAdminService.auth.verifyIdToken(idToken);
+      const decoded =
+        await this.firebaseAdminService.auth.verifyIdToken(idToken);
       request.auth = {
         uid: decoded.uid,
         email: decoded.email,
-        companyId: typeof decoded.companyId === 'string' ? decoded.companyId : undefined,
+        emailVerified: decoded.email_verified === true,
+        companyId:
+          typeof decoded.companyId === 'string' ? decoded.companyId : undefined,
         clubId: typeof decoded.clubId === 'string' ? decoded.clubId : undefined,
         role: typeof decoded.role === 'string' ? decoded.role : undefined,
         roles: Array.isArray(decoded.roles)
-          ? decoded.roles.filter((role): role is string => typeof role === 'string')
+          ? decoded.roles.filter(
+              (role): role is string => typeof role === 'string',
+            )
           : undefined,
       };
       return true;

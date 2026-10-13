@@ -3,6 +3,7 @@ import { Request } from 'express';
 export interface AuthContext {
   uid: string;
   email?: string;
+  emailVerified?: boolean;
   role?: string;
   companyId?: string;
   clubId?: string;

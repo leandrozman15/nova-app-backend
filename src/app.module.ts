@@ -14,6 +14,7 @@ import { InjuriesModule } from './injuries/injuries.module';
 import { JoinRequestsModule } from './join-requests/join-requests.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
+import { PlatformModule } from './platform/platform.module';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
 import { MatchesModule } from './matches/matches.module';
@@ -54,6 +55,7 @@ import { UsersModule } from './users/users.module';
     JoinRequestsModule,
     ActivitiesModule,
     TournamentsModule,
+    PlatformModule,
     PublicModule,
     PaymentsModule,
   ],

@@ -23,6 +23,7 @@ const future = (days: number) => {
 
 describe('TournamentsService', () => {
   let prisma: any;
+  let platform: any;
   let service: TournamentsService;
   const published = {
     id: 't1',
@@ -63,7 +64,12 @@ describe('TournamentsService', () => {
         groupBy: jest.fn().mockResolvedValue([]),
       },
     };
-    service = new TournamentsService(prisma);
+    platform = {
+      chargeTournamentPublished: jest.fn(),
+      chargeEntryAccepted: jest.fn(),
+      voidEntryCharge: jest.fn(),
+    };
+    service = new TournamentsService(prisma, platform);
   });
 
   describe('rules', () => {
@@ -193,6 +199,10 @@ describe('TournamentsService', () => {
         where: { id: 't1' },
         data: { status: 'PUBLISHED', publishedAt: expect.any(Date) },
       });
+      // Fluxion le cobra al club la publicación.
+      expect(platform.chargeTournamentPublished).toHaveBeenCalledWith(
+        expect.objectContaining({ clubId: 'club-a', tournamentId: 't1' }),
+      );
     });
 
     it('does not accept entries beyond the limit', async () => {
@@ -210,6 +220,47 @@ describe('TournamentsService', () => {
           status: 'ACCEPTED',
         }),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  describe('Fluxion charges', () => {
+    it('charges a confirmed entry and voids it when the club undoes it', async () => {
+      prisma.clubTournament.findFirst.mockResolvedValue({
+        ...published,
+        name: 'Copa',
+      });
+      prisma.tournamentEntry.findFirst.mockResolvedValue({
+        id: 'e1',
+        status: 'PENDING',
+        teamName: 'Los Pibes',
+        user: { name: 'Ana', email: 'a@b' },
+      });
+      await service.reviewEntry('company-a', 'club-a', 't1', 'e1', {
+        status: 'ACCEPTED',
+      });
+      expect(platform.chargeEntryAccepted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entryId: 'e1',
+          entryName: 'Los Pibes',
+          tournamentName: 'Copa',
+        }),
+      );
+
+      prisma.tournamentEntry.findFirst.mockResolvedValue({
+        id: 'e1',
+        status: 'ACCEPTED',
+        teamName: 'Los Pibes',
+        user: { name: 'Ana', email: 'a@b' },
+      });
+      await service.reviewEntry('company-a', 'club-a', 't1', 'e1', {
+        status: 'REJECTED',
+      });
+      expect(platform.voidEntryCharge).toHaveBeenCalledWith('e1');
+    });
+
+    it('voids the charge when the player cancels', async () => {
+      await service.cancelMyEntry('fb-ana', 'e1');
+      expect(platform.voidEntryCharge).toHaveBeenCalledWith('e1');
     });
   });
 
