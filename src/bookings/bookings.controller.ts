@@ -47,7 +47,12 @@ export class PublicSlotsController {
     @Param('facilityId') facilityId: string,
     @Query() query: SlotsQueryDto,
   ) {
-    return this.bookings.publicSlots(clubId, facilityId, query.date);
+    return this.bookings.publicSlots(
+      clubId,
+      facilityId,
+      query.date,
+      query.duration,
+    );
   }
 }
 

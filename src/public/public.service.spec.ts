@@ -30,6 +30,7 @@ describe('PublicService', () => {
       club: { findMany: jest.fn(), findFirst: jest.fn() },
       facility: { findMany: jest.fn(), findFirst: jest.fn(), count: jest.fn() },
       facilityRental: { findMany: jest.fn() },
+      recurringBooking: { findMany: jest.fn() },
     };
     service = new PublicService(prisma);
   });
@@ -135,21 +136,23 @@ describe('PublicService', () => {
       id: 'f-1',
       name: 'Cancha 1',
     });
-    prisma.facilityRental.findMany.mockResolvedValue([
-      { day: 'Lun', hour: 18 },
-      { day: 'Lun', hour: 18 },
-      { day: 'Mar', hour: 20 },
+    prisma.recurringBooking.findMany.mockResolvedValue([
+      { weekday: 1, startMinute: 1080, durationMinutes: 60 },
+      { weekday: 1, startMinute: 1080, durationMinutes: 60 },
+      { weekday: 2, startMinute: 1230, durationMinutes: 90 },
     ]);
 
     const result = await service.facilityAvailability('club-1', 'f-1');
 
-    expect(prisma.facilityRental.findMany.mock.calls[0][0].select).toEqual({
-      day: true,
-      hour: true,
+    expect(prisma.recurringBooking.findMany.mock.calls[0][0].select).toEqual({
+      weekday: true,
+      startMinute: true,
+      durationMinutes: true,
     });
     expect(result.occupied).toEqual([
       { day: 'Lun', hour: 18 },
       { day: 'Mar', hour: 20 },
+      { day: 'Mar', hour: 21 },
     ]);
     expect(result.days).toHaveLength(7);
   });

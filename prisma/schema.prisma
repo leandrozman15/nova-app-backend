@@ -190,6 +190,12 @@ model Club {
   depositPercent   Int      @default(30)
   // Reservas desde la app: off | request (sin seña, confirma el club) | deposit (seña por Mercado Pago).
   bookingMode      String   @default("off")
+  // Horario de turnos (minutos desde las 00:00; 1440 = medianoche) y seña sin pasarela.
+  openMinute       Int      @default(480)
+  closeMinute      Int      @default(1440)
+  requireDeposit   Boolean  @default(false)
+  depositAlias     String?
+  depositHoldHours Int      @default(12)
   // Servicios del club (catálogo src/clubs/club-amenities.ts): wifi, vestuarios, duchas…
   amenities        String[] @default([])
   companyId        String
@@ -214,6 +220,7 @@ model Club {
   injuryReports         InjuryReport[]
   membershipPlans       MembershipPlan[]
   bookings              Booking[]
+  recurringBookings     RecurringBooking[]
   paymentAccount        ClubPaymentAccount?
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
@@ -610,6 +617,8 @@ model Facility {
   // Reservas online desde la app pública.
   bookable     Boolean  @default(false)
   hourlyPrice  Decimal? @db.Decimal(12, 2)
+  // Duraciones de turno que ofrece la cancha (minutos: 30, 60, 90, 120).
+  slotDurations Int[]   @default([60])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -617,6 +626,7 @@ model Facility {
   club     Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
   rentals  FacilityRental[]
   bookings Booking[]
+  recurringBookings RecurringBooking[]
 
   @@index([companyId])
   @@index([clubId])
@@ -765,11 +775,31 @@ model Booking {
   companyId     String
   clubId        String
   facilityId    String
-  userId        String
+  /// null en turnos cargados por el club (fijos o manuales).
+  userId        String?
   /// Fecha local del club (YYYY-MM-DD) y hora de inicio (0-23).
   date          String
   hour          Int
+  /// Inicio en minutos desde las 00:00 (p. ej. 1290 = 21:30) y duración.
+  startMinute     Int
+  durationMinutes Int       @default(60)
   startsAt      DateTime
+  endsAt        DateTime
+  /// APP (desde la app) | CLUB (cargado en la consola) | FIXED (turno fijo semanal)
+  source        String        @default("APP")
+  /// ALQUILER | ENTRENAMIENTO | PARTIDO | MANTENIMIENTO
+  kind          String        @default("ALQUILER")
+  recurringId   String?
+  /// SHOWED | NO_SHOW (lo marca el encargado)
+  attendance    String?
+  /// Seña cobrada sin pasarela: efectivo o transferencia.
+  depositMethod String?
+  depositPaidAt DateTime?
+  /// Total cobrado del turno (seña + saldo).
+  paidAmount    Decimal       @default(0) @db.Decimal(12, 2)
+  paymentMethod String?
+  notes         String?
+  createdByUid  String?
   status        BookingStatus @default(PENDING_PAYMENT)
   currency      String        @default("ARS")
   price         Decimal       @db.Decimal(12, 2)
@@ -788,10 +818,12 @@ model Booking {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club      Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  facility  Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurring RecurringBooking? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
 
+  @@unique([recurringId, date])
   @@index([companyId, clubId, date])
   @@index([facilityId, date])
   @@index([userId, createdAt])
@@ -1375,4 +1407,35 @@ model StoreOrderItem {
   clubProduct ShopProduct?  @relation(fields: [clubProductId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
+}
+
+/// Turno fijo semanal (el equipo de los martes a las 21). Genera un turno por fecha.
+model RecurringBooking {
+  id              String   @id @default(cuid())
+  companyId       String
+  clubId          String
+  facilityId      String
+  /// 0 = domingo … 6 = sábado
+  weekday         Int
+  startMinute     Int
+  durationMinutes Int      @default(60)
+  /// ALQUILER | ENTRENAMIENTO | PARTIDO | MANTENIMIENTO
+  kind            String   @default("ALQUILER")
+  clientName      String
+  clientPhone     String?
+  price           Decimal  @default(0) @db.Decimal(12, 2)
+  notes           String?
+  /// Vigencia (fechas locales YYYY-MM-DD); endDate null = sin fin.
+  startDate       String
+  endDate         String?
+  createdByUid    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  club     Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  facility Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([clubId, weekday])
+  @@index([facilityId])
 }

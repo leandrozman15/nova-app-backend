@@ -52,6 +52,8 @@ const CLUB_DETAIL_SELECT = {
   facebook: true,
   depositPercent: true,
   bookingMode: true,
+  requireDeposit: true,
+  depositAlias: true,
   amenities: true,
   paymentAccount: { select: { id: true } },
 } satisfies Prisma.ClubSelect;
@@ -81,8 +83,13 @@ export const RENTAL_DAYS = [
   'Sáb',
   'Dom',
 ] as const;
-export const RENTAL_HOURS = Array.from({ length: 15 }, (_, i) => i + 8); // 08 a 22
-const FREEING_STATUSES = ['cancelled', 'canceled', 'cancelado', 'cancelada'];
+export const RENTAL_HOURS = Array.from({ length: 16 }, (_, i) => i + 8); // 08 a 23
+const WEEKDAY_ABBR = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function addDaysIso(date: string, days: number) {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
 
 const DEFAULT_RADIUS_KM = 50;
 const DEFAULT_LIMIT = 50;
@@ -237,10 +244,16 @@ export class PublicService {
           select: { services: true },
         })
       : [];
-    const { paymentAccount, amenities, ...rest } = club;
+    const { paymentAccount, amenities, requireDeposit, depositAlias, ...rest } =
+      club;
     const mode = club.publicFacilities
       ? effectiveBookingMode({ bookingMode: club.bookingMode, paymentAccount })
       : 'off';
+    const manualDeposit =
+      mode === 'request' &&
+      requireDeposit &&
+      Boolean(depositAlias) &&
+      club.depositPercent > 0;
     return {
       ...toCard(rest),
       facilitiesCount: facilities.length,
@@ -251,7 +264,10 @@ export class PublicService {
       ),
       bookingMode: mode,
       onlineBooking: mode !== 'off',
-      depositPercent: mode === 'deposit' ? club.depositPercent : 0,
+      // Seña por transferencia al alias del club (sin pasarela).
+      manualDeposit,
+      depositPercent:
+        mode === 'deposit' || manualDeposit ? club.depositPercent : 0,
     };
   }
 
@@ -280,23 +296,32 @@ export class PublicService {
     });
     if (!facility) throw new NotFoundException('Cancha no encontrada');
 
-    const rentals = await this.prisma.facilityRental.findMany({
+    // Turnos fijos vigentes: cada hora que tocan queda ocupada en la grilla semanal.
+    const today = new Date().toISOString().slice(0, 10);
+    const rules = await this.prisma.recurringBooking.findMany({
       where: {
         clubId,
         facilityId,
-        NOT: { status: { in: FREEING_STATUSES, mode: 'insensitive' } },
+        startDate: { lte: addDaysIso(today, 7) },
+        OR: [{ endDate: null }, { endDate: { gte: today } }],
       },
-      select: { day: true, hour: true },
+      select: { weekday: true, startMinute: true, durationMinutes: true },
     });
     const seen = new Set<string>();
-    const occupied = rentals
-      .filter(({ day, hour }) => {
+    const occupied: Array<{ day: string; hour: number }> = [];
+    for (const rule of rules) {
+      const day = WEEKDAY_ABBR[rule.weekday];
+      for (
+        let hour = Math.floor(rule.startMinute / 60);
+        hour * 60 < rule.startMinute + rule.durationMinutes;
+        hour += 1
+      ) {
         const key = `${day}-${hour}`;
-        if (seen.has(key)) return false;
+        if (seen.has(key)) continue;
         seen.add(key);
-        return true;
-      })
-      .map(({ day, hour }) => ({ day, hour }));
+        occupied.push({ day, hour });
+      }
+    }
 
     return { facility, days: RENTAL_DAYS, hours: RENTAL_HOURS, occupied };
   }

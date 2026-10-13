@@ -39,15 +39,26 @@ describe('BookingsService', () => {
           timezone: TZ,
           depositPercent: 30,
           bookingMode: 'deposit',
+          openMinute: 480,
+          closeMinute: 1440,
+          requireDeposit: false,
+          depositAlias: null,
+          depositHoldHours: 12,
           paymentAccount: { id: 'acc' },
         }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ companyId: 'company-a', timezone: TZ }),
       },
+      recurringBooking: { findMany: jest.fn().mockResolvedValue([]) },
+      $executeRaw: jest.fn().mockResolvedValue(0),
       facility: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'f1',
           name: 'Cancha 1',
           bookable: true,
           hourlyPrice: new Prisma.Decimal(20000),
+          slotDurations: [60],
         }),
       },
       user: {
@@ -148,12 +159,100 @@ describe('BookingsService', () => {
       expect(prisma.booking.create).not.toHaveBeenCalled();
     });
 
-    it('rejects a slot taken by a fixed club rental', async () => {
-      prisma.facilityRental.findFirst.mockResolvedValue({ id: 'r1' });
-      await expect(service.create('fb-ana', undefined, dto())).rejects.toThrow(
-        'Ese turno ya está ocupado.',
+    it('generates the fixed turns of that day before taking the slot', async () => {
+      prisma.recurringBooking.findMany.mockResolvedValue([
+        {
+          id: 'fx1',
+          companyId: 'company-a',
+          clubId: 'club-a',
+          facilityId: 'f1',
+          weekday: new Date(`${tomorrow}T12:00:00Z`).getUTCDay(),
+          startMinute: 1080,
+          durationMinutes: 60,
+          kind: 'ALQUILER',
+          clientName: 'Los Pibes',
+          clientPhone: null,
+          price: new Prisma.Decimal(20000),
+          notes: null,
+          startDate: '2026-01-01',
+          endDate: null,
+        },
+      ]);
+      prisma.booking.create.mockRejectedValue(
+        new Error('violates exclusion constraint "Booking_no_overlap"'),
       );
-      expect(prisma.booking.create).not.toHaveBeenCalled();
+      await expect(service.create('fb-ana', undefined, dto())).rejects.toThrow(
+        'Ese horario se acaba de ocupar. Elegí otro.',
+      );
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+    });
+
+    it('reserves 90 minutes from a half hour with the proportional price', async () => {
+      prisma.facility.findFirst.mockResolvedValue({
+        id: 'f1',
+        name: 'Pádel 1',
+        bookable: true,
+        hourlyPrice: new Prisma.Decimal(20000),
+        slotDurations: [60, 90],
+      });
+      await service.create('fb-ana', undefined, {
+        clubId: 'club-a',
+        facilityId: 'f1',
+        date: tomorrow,
+        startMinute: 1290,
+        durationMinutes: 90,
+      });
+      expect(prisma.booking.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            startMinute: 1290,
+            durationMinutes: 90,
+            hour: 21,
+            price: 30000,
+            depositAmount: 9000,
+          }),
+        }),
+      );
+      await expect(
+        service.create('fb-ana', undefined, {
+          clubId: 'club-a',
+          facilityId: 'f1',
+          date: tomorrow,
+          startMinute: 1380,
+          durationMinutes: 90,
+        }),
+      ).rejects.toThrow('Horario fuera de la grilla del club.');
+    });
+
+    it('holds the slot until the club registers a manual deposit', async () => {
+      prisma.club.findFirst.mockResolvedValue({
+        id: 'club-a',
+        companyId: 'company-a',
+        name: 'Club A',
+        timezone: TZ,
+        depositPercent: 50,
+        bookingMode: 'request',
+        openMinute: 480,
+        closeMinute: 1440,
+        requireDeposit: true,
+        depositAlias: 'club.a.canchas',
+        depositHoldHours: 6,
+        paymentAccount: null,
+      });
+      const before = Date.now();
+      const result = await service.create('fb-ana', undefined, dto());
+      const data = prisma.booking.create.mock.calls[0][0].data;
+      expect(data.status).toBe('PENDING_PAYMENT');
+      expect(data.depositAmount).toBe(10000);
+      expect(data.holdExpiresAt.getTime()).toBeLessThanOrEqual(
+        before + 6 * 3_600_000 + 1000,
+      );
+      expect(mp.createPreference).not.toHaveBeenCalled();
+      expect(result.deposit).toEqual({
+        manual: true,
+        alias: 'club.a.canchas',
+        amount: 10000,
+      });
     });
 
     it('turns a concurrent double booking into a 409', async () => {
@@ -265,7 +364,10 @@ describe('BookingsService', () => {
             id: 'b1',
             companyId: 'company-a',
             clubId: 'club-a',
-            status: 'REQUESTED',
+            OR: [
+              { status: 'REQUESTED' },
+              { status: 'PENDING_PAYMENT', mpPreferenceId: null },
+            ],
           },
           data: { status: 'CONFIRMED' },
         });
@@ -297,6 +399,7 @@ describe('BookingsService', () => {
       companyId: 'company-a',
       date: '2026-10-20',
       hour: 18,
+      startMinute: 1080,
       paidAt: null,
       contactName: 'Ana',
       facility: { name: 'Cancha 1' },
@@ -507,9 +610,13 @@ describe('BookingsService', () => {
 
   describe('publicSlots', () => {
     it('marks taken slots from rentals and active bookings and hides prices when offline', async () => {
-      prisma.facilityRental.findMany.mockResolvedValue([{ hour: 18 }]);
-      prisma.booking.findMany.mockResolvedValue([{ hour: 20 }]);
+      prisma.booking.findMany.mockResolvedValue([
+        { startMinute: 1080, durationMinutes: 60 },
+        { startMinute: 1200, durationMinutes: 90 },
+      ]);
       const result = await service.publicSlots('club-a', 'f1', tomorrow);
+      const half = result.times.find((time) => time.label === '19:30');
+      expect(half?.status).toBe('taken');
       const status = Object.fromEntries(
         result.slots.map((slot) => [slot.hour, slot.status]),
       );

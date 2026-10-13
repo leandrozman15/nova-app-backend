@@ -98,10 +98,15 @@ export class PlatformOverviewService {
         select: { clubId: true, userId: true },
         distinct: ['clubId', 'userId'],
       }),
-      this.prisma.booking.findMany({
-        select: { clubId: true, userId: true },
-        distinct: ['clubId', 'userId'],
-      }),
+      this.prisma.booking
+        .findMany({
+          where: { userId: { not: null } },
+          select: { clubId: true, userId: true },
+          distinct: ['clubId', 'userId'],
+        })
+        .then((rows) =>
+          rows.map((row) => ({ clubId: row.clubId, userId: row.userId! })),
+        ),
       this.prisma.tournamentEntry.findMany({
         select: { clubId: true, userId: true },
         distinct: ['clubId', 'userId'],
@@ -113,6 +118,7 @@ export class PlatformOverviewService {
       this.prisma.booking.groupBy({
         by: ['clubId'],
         where: {
+          source: 'APP',
           createdAt: { gte: since30 },
           status: { in: ['CONFIRMED', 'REQUESTED', 'PENDING_PAYMENT'] },
         },
@@ -120,6 +126,7 @@ export class PlatformOverviewService {
       }),
       this.prisma.booking.groupBy({
         by: ['clubId'],
+        where: { source: 'APP' },
         _max: { createdAt: true },
       }),
       this.prisma.booking.groupBy({

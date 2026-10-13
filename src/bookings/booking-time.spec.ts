@@ -59,3 +59,53 @@ describe('booking-time', () => {
     expect(roundMoney(12000 * 0.3333)).toBe(3999.6);
   });
 });
+
+describe('turnos por minutos', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const t = require('./booking-time');
+
+  it('converts minutes in the club zone, including midnight', () => {
+    const tz = 'America/Argentina/Buenos_Aires';
+    expect(t.zonedMinuteToUtc('2026-10-20', 1290, tz).toISOString()).toBe(
+      '2026-10-21T00:30:00.000Z',
+    );
+    expect(t.zonedMinuteToUtc('2026-10-20', 1440, tz).toISOString()).toBe(
+      '2026-10-21T03:00:00.000Z',
+    );
+    expect(t.minuteLabel(1290)).toBe('21:30');
+    expect(t.minuteLabel(1440)).toBe('00:00');
+    expect(t.weekdayOf('2026-10-20')).toBe(2);
+  });
+
+  it('offers 30-minute starts that fit and do not overlap', () => {
+    const times = t.computeTimes({
+      open: 1080,
+      close: 1440,
+      duration: 90,
+      taken: [[1260, 1320]],
+      nowMinute: null,
+    });
+    const labels = (status: string) =>
+      times
+        .filter((time: { status: string }) => time.status === status)
+        .map((time: { label: string }) => time.label);
+    expect(times[0].label).toBe('18:00');
+    expect(times.at(-1).label).toBe('22:30');
+    expect(labels('taken')).toEqual(['20:00', '20:30', '21:00', '21:30']);
+  });
+
+  it('marks started times as past today', () => {
+    const times = t.computeTimes({
+      open: 1080,
+      close: 1200,
+      duration: 60,
+      taken: [],
+      nowMinute: 1100,
+    });
+    expect(times.map((time: { status: string }) => time.status)).toEqual([
+      'past',
+      'free',
+      'free',
+    ]);
+  });
+});

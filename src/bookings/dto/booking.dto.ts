@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -23,11 +24,25 @@ export class CreateBookingDto {
   })
   date!: string;
 
+  /** Formato anterior: hora en punto. */
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   @Max(23)
-  hour!: number;
+  hour?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1425)
+  startMinute?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn([30, 60, 90, 120])
+  durationMinutes?: number;
 
   @IsOptional()
   @IsString()
@@ -54,6 +69,11 @@ export class SlotsQueryDto {
     message: 'La fecha debe tener el formato AAAA-MM-DD',
   })
   date?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn([30, 60, 90, 120])
+  duration?: number;
 }
 
 export class ClubBookingsQueryDto {

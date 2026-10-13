@@ -19,14 +19,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import {
   addDays,
-  BOOKING_HOURS,
   bookingWindow,
-  dayAbbr,
+  computeTimes,
   isIsoDate,
+  minuteLabel,
+  nowMinuteIn,
   roundMoney,
+  SLOT_STEP_MINUTES,
   todayIn,
-  zonedToUtc,
+  zonedMinuteToUtc,
 } from './booking-time';
+import { ensureOccurrences, isOverlapError } from './fixed-turns';
 import { CreateBookingDto } from './dto/booking.dto';
 
 export const HOLD_MINUTES = 15;
@@ -49,19 +52,23 @@ export function effectiveBookingMode(club: {
     return isMercadoPagoConfigured() && club.paymentAccount ? 'deposit' : 'off';
   return 'off';
 }
-const FREEING_RENTAL_STATUSES = [
-  'cancelled',
-  'canceled',
-  'cancelado',
-  'cancelada',
-];
+
+/** Duración por defecto: 60 si la cancha la ofrece, si no la primera. */
+export function defaultDuration(durations: number[]) {
+  return durations.includes(60) ? 60 : (durations[0] ?? 60);
+}
 
 const USER_BOOKING_SELECT = {
   id: true,
   date: true,
   hour: true,
+  startMinute: true,
+  durationMinutes: true,
   startsAt: true,
   status: true,
+  depositPaidAt: true,
+  depositMethod: true,
+  mpPreferenceId: true,
   currency: true,
   price: true,
   depositAmount: true,
@@ -71,7 +78,14 @@ const USER_BOOKING_SELECT = {
   cancelReason: true,
   createdAt: true,
   club: {
-    select: { id: true, name: true, logoUrl: true, address: true, city: true },
+    select: {
+      id: true,
+      name: true,
+      logoUrl: true,
+      address: true,
+      city: true,
+      depositAlias: true,
+    },
   },
   facility: { select: { id: true, name: true, typeLabel: true, type: true } },
 } satisfies Prisma.BookingSelect;
@@ -106,6 +120,7 @@ export class BookingsService {
     clubId: string,
     facilityId: string,
     requestedDate?: string,
+    requestedDuration?: number,
   ) {
     const club = await this.prisma.club.findFirst({
       where: {
@@ -119,19 +134,37 @@ export class BookingsService {
         timezone: true,
         depositPercent: true,
         bookingMode: true,
+        openMinute: true,
+        closeMinute: true,
+        requireDeposit: true,
+        depositAlias: true,
+        depositHoldHours: true,
         paymentAccount: { select: { id: true } },
       },
     });
     if (!club) throw new NotFoundException('Sección no disponible');
     const facility = await this.prisma.facility.findFirst({
       where: { id: facilityId, clubId },
-      select: { id: true, name: true, bookable: true, hourlyPrice: true },
+      select: {
+        id: true,
+        name: true,
+        bookable: true,
+        hourlyPrice: true,
+        slotDurations: true,
+      },
     });
     if (!facility) throw new NotFoundException('Cancha no encontrada');
 
     const dates = bookingWindow(club.timezone);
     const date =
       requestedDate && dates.includes(requestedDate) ? requestedDate : dates[0];
+    const durations = facility.slotDurations.length
+      ? facility.slotDurations
+      : [60];
+    const duration =
+      requestedDuration && durations.includes(requestedDuration)
+        ? requestedDuration
+        : defaultDuration(durations);
     const mode = effectiveBookingMode(club);
     const onlineBooking =
       facility.bookable &&
@@ -140,25 +173,50 @@ export class BookingsService {
     const bookingMode: BookingMode = onlineBooking ? mode : 'off';
 
     await this.expireStaleHolds({ facilityId, date });
-    const [rentals, bookings] = await Promise.all([
-      this.prisma.facilityRental.findMany({
-        where: {
-          clubId,
-          facilityId,
-          day: dayAbbr(date),
-          NOT: { status: { in: FREEING_RENTAL_STATUSES, mode: 'insensitive' } },
-        },
-        select: { hour: true },
-      }),
-      this.prisma.booking.findMany({
-        where: { facilityId, date, status: { in: ACTIVE } },
-        select: { hour: true },
-      }),
-    ]);
-    const taken = new Set([...rentals, ...bookings].map(({ hour }) => hour));
-    const now = Date.now();
+    await ensureOccurrences(this.prisma, clubId, date, date);
+    const bookings = await this.prisma.booking.findMany({
+      where: { facilityId, date, status: { in: ACTIVE } },
+      select: { startMinute: true, durationMinutes: true },
+    });
+    const taken = bookings.map(
+      (row) =>
+        [row.startMinute, row.startMinute + row.durationMinutes] as [
+          number,
+          number,
+        ],
+    );
+    const nowMinute =
+      date === todayIn(club.timezone) ? nowMinuteIn(club.timezone) : null;
+    const times = computeTimes({
+      open: club.openMinute,
+      close: club.closeMinute,
+      duration,
+      taken,
+      nowMinute,
+    });
+    // Formato anterior (turnos de 1 hora en punto), para versiones viejas de la app.
+    const hourly = computeTimes({
+      open: club.openMinute,
+      close: club.closeMinute,
+      duration: 60,
+      taken,
+      nowMinute,
+    }).filter((time) => time.start % 60 === 0);
 
-    const price = facility.hourlyPrice ? Number(facility.hourlyPrice) : null;
+    const hourlyPrice = facility.hourlyPrice
+      ? Number(facility.hourlyPrice)
+      : null;
+    const price =
+      hourlyPrice === null ? null : roundMoney((hourlyPrice * duration) / 60);
+    const manualDeposit =
+      bookingMode === 'request' &&
+      club.requireDeposit &&
+      Boolean(club.depositAlias) &&
+      club.depositPercent > 0 &&
+      price !== null &&
+      price > 0;
+    const depositPercent =
+      bookingMode === 'deposit' || manualDeposit ? club.depositPercent : 0;
     return {
       facility: { id: facility.id, name: facility.name },
       date,
@@ -168,27 +226,34 @@ export class BookingsService {
       bookingMode,
       currency: 'ARS',
       price,
-      depositPercent: bookingMode === 'deposit' ? club.depositPercent : 0,
+      hourlyPrice,
+      durations,
+      duration,
+      depositPercent,
       depositAmount:
-        bookingMode === 'deposit' && price !== null
-          ? roundMoney((price * club.depositPercent) / 100)
+        depositPercent > 0 && price !== null
+          ? roundMoney((price * depositPercent) / 100)
           : null,
+      deposit: manualDeposit
+        ? {
+            manual: true,
+            alias: club.depositAlias,
+            holdHours: club.depositHoldHours,
+          }
+        : null,
       holdMinutes: HOLD_MINUTES,
-      slots: BOOKING_HOURS.map((hour) => ({
-        hour,
-        status:
-          zonedToUtc(date, hour, club.timezone).getTime() <= now
-            ? 'past'
-            : taken.has(hour)
-              ? 'taken'
-              : 'free',
+      times,
+      slots: hourly.map((time) => ({
+        hour: time.start / 60,
+        status: time.status,
       })),
     };
   }
 
   /**
-   * Reserva un turno. Con seña devuelve el link de pago; sin seña queda como
-   * solicitud (REQUESTED) que el club confirma o rechaza desde la consola.
+   * Reserva un turno. Con seña por Mercado Pago devuelve el link de pago; con
+   * seña manual queda retenido hasta que el club la registre; sin seña queda
+   * como solicitud (REQUESTED) que el club confirma o rechaza.
    */
   async create(
     firebaseUid: string,
@@ -217,6 +282,11 @@ export class BookingsService {
         timezone: true,
         depositPercent: true,
         bookingMode: true,
+        openMinute: true,
+        closeMinute: true,
+        requireDeposit: true,
+        depositAlias: true,
+        depositHoldHours: true,
         paymentAccount: { select: { id: true } },
       },
     });
@@ -229,7 +299,13 @@ export class BookingsService {
 
     const facility = await this.prisma.facility.findFirst({
       where: { id: dto.facilityId, clubId: club.id },
-      select: { id: true, name: true, bookable: true, hourlyPrice: true },
+      select: {
+        id: true,
+        name: true,
+        bookable: true,
+        hourlyPrice: true,
+        slotDurations: true,
+      },
     });
     if (!facility) throw new NotFoundException('Cancha no encontrada');
     if (
@@ -247,59 +323,88 @@ export class BookingsService {
         `Podés reservar desde hoy y hasta ${addDays(todayIn(club.timezone), 13)}.`,
       );
     }
-    if (!BOOKING_HOURS.includes(dto.hour))
+    const durations = facility.slotDurations.length
+      ? facility.slotDurations
+      : [60];
+    const duration = dto.durationMinutes ?? defaultDuration(durations);
+    if (!durations.includes(duration))
+      throw new BadRequestException('Esa duración no está disponible.');
+    const startMinute =
+      dto.startMinute ?? (dto.hour !== undefined ? dto.hour * 60 : NaN);
+    if (
+      !Number.isInteger(startMinute) ||
+      startMinute % SLOT_STEP_MINUTES !== 0 ||
+      startMinute < club.openMinute ||
+      startMinute + duration > club.closeMinute
+    )
       throw new BadRequestException('Horario fuera de la grilla del club.');
-    const startsAt = zonedToUtc(dto.date, dto.hour, club.timezone);
+    const startsAt = zonedMinuteToUtc(dto.date, startMinute, club.timezone);
+    const endsAt = zonedMinuteToUtc(
+      dto.date,
+      startMinute + duration,
+      club.timezone,
+    );
     if (startsAt.getTime() <= Date.now())
       throw new BadRequestException('Ese horario ya pasó.');
 
+    const hourlyPrice =
+      facility.hourlyPrice === null ? 0 : Number(facility.hourlyPrice);
+    const price = roundMoney((hourlyPrice * duration) / 60);
+    const manualDeposit =
+      mode === 'request' &&
+      club.requireDeposit &&
+      Boolean(club.depositAlias) &&
+      club.depositPercent > 0 &&
+      price > 0;
+
     await this.expireStaleHolds({ userId: user.id });
-    const pendingStatus = mode === 'request' ? 'REQUESTED' : 'PENDING_PAYMENT';
+    const pendingStatus =
+      mode === 'request' && !manualDeposit ? 'REQUESTED' : 'PENDING_PAYMENT';
     const pending = await this.prisma.booking.count({
       where: { userId: user.id, status: pendingStatus },
     });
-    if (mode === 'deposit' && pending >= MAX_ACTIVE_HOLDS_PER_USER) {
+    if (
+      pendingStatus === 'PENDING_PAYMENT' &&
+      pending >= MAX_ACTIVE_HOLDS_PER_USER
+    ) {
       throw new ConflictException(
-        'Tenés reservas esperando pago. Pagá o cancelá una antes de reservar otra.',
+        'Tenés reservas esperando la seña. Pagá o cancelá una antes de reservar otra.',
       );
     }
-    if (mode === 'request' && pending >= MAX_OPEN_REQUESTS_PER_USER) {
+    if (
+      pendingStatus === 'REQUESTED' &&
+      pending >= MAX_OPEN_REQUESTS_PER_USER
+    ) {
       throw new ConflictException(
         'Tenés varias solicitudes sin respuesta. Esperá a que el club confirme o cancelá alguna.',
       );
     }
 
-    const rental = await this.prisma.facilityRental.findFirst({
-      where: {
-        clubId: club.id,
-        facilityId: facility.id,
-        day: dayAbbr(dto.date),
-        hour: dto.hour,
-        NOT: { status: { in: FREEING_RENTAL_STATUSES, mode: 'insensitive' } },
-      },
-      select: { id: true },
-    });
-    if (rental) throw new ConflictException('Ese turno ya está ocupado.');
-
-    const price =
-      facility.hourlyPrice === null ? 0 : Number(facility.hourlyPrice);
     const depositAmount =
-      mode === 'deposit' ? roundMoney((price * club.depositPercent) / 100) : 0;
+      mode === 'deposit' || manualDeposit
+        ? roundMoney((price * club.depositPercent) / 100)
+        : 0;
     if (mode === 'deposit' && depositAmount <= 0)
       throw new ConflictException(
         'El club no configuró una seña para reservas online.',
       );
-    // La solicitud retiene el turno hasta que empieza (si el club no responde, vence).
+    // Solicitud: retiene hasta que empieza. Seña manual: las horas que fija el club.
+    // Mercado Pago: unos minutos para pagar.
     const holdExpiresAt =
-      mode === 'request'
-        ? startsAt
-        : new Date(Date.now() + HOLD_MINUTES * 60 * 1000);
+      mode === 'deposit'
+        ? new Date(Date.now() + HOLD_MINUTES * 60 * 1000)
+        : manualDeposit
+          ? new Date(
+              Math.min(
+                startsAt.getTime(),
+                Date.now() + club.depositHoldHours * 3_600_000,
+              ),
+            )
+          : startsAt;
 
-    await this.expireStaleHolds({
-      facilityId: facility.id,
-      date: dto.date,
-      hour: dto.hour,
-    });
+    await this.expireStaleHolds({ facilityId: facility.id, date: dto.date });
+    // Los turnos fijos de ese día tienen que existir antes de ocupar el horario.
+    await ensureOccurrences(this.prisma, club.id, dto.date, dto.date);
     let booking: { id: string };
     try {
       booking = await this.prisma.booking.create({
@@ -309,25 +414,26 @@ export class BookingsService {
           facilityId: facility.id,
           userId: user.id,
           date: dto.date,
-          hour: dto.hour,
+          hour: Math.floor(startMinute / 60),
+          startMinute,
+          durationMinutes: duration,
           startsAt,
+          endsAt,
           price,
           depositAmount,
           holdExpiresAt,
           status: pendingStatus,
+          source: 'APP',
           contactName: user.name,
           contactPhone,
         },
         select: { id: true },
       });
     } catch (error) {
-      // Índice único parcial: otro usuario tomó el turno un instante antes.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      // Restricción de solapes: otro turno tomó ese horario un instante antes.
+      if (isOverlapError(error)) {
         throw new ConflictException(
-          'Ese turno se acaba de reservar. Elegí otro horario.',
+          'Ese horario se acaba de ocupar. Elegí otro.',
         );
       }
       throw error;
@@ -336,11 +442,14 @@ export class BookingsService {
     if (mode === 'request') {
       return {
         bookingId: booking.id,
-        status: 'REQUESTED' as const,
+        status: pendingStatus,
         checkoutUrl: null,
         holdExpiresAt,
-        depositAmount: 0,
+        depositAmount,
         price,
+        deposit: manualDeposit
+          ? { manual: true, alias: club.depositAlias, amount: depositAmount }
+          : null,
       };
     }
 
@@ -349,7 +458,7 @@ export class BookingsService {
       const accessToken = await this.accounts.accessTokenFor(club.id);
       const preference = await this.mp.createPreference(accessToken, {
         title:
-          `Seña ${facility.name} - ${club.name} - ${dto.date} ${String(dto.hour).padStart(2, '0')}:00`.slice(
+          `Seña ${facility.name} - ${club.name} - ${dto.date} ${minuteLabel(startMinute)}`.slice(
             0,
             250,
           ),
@@ -375,6 +484,7 @@ export class BookingsService {
         holdExpiresAt,
         depositAmount,
         price,
+        deposit: null,
       };
     } catch (error) {
       // Sin link de pago no tiene sentido retener el turno.
@@ -531,6 +641,11 @@ export class BookingsService {
           paidAt: payment.date_approved
             ? new Date(payment.date_approved)
             : new Date(),
+          depositPaidAt: payment.date_approved
+            ? new Date(payment.date_approved)
+            : new Date(),
+          depositMethod: 'mercadopago',
+          paidAmount: payment.transaction_amount,
         },
       });
       if (updated.count === 1) {
@@ -689,7 +804,7 @@ export class BookingsService {
         companyId: true,
         clubId: true,
         date: true,
-        hour: true,
+        startMinute: true,
         depositAmount: true,
         currency: true,
         paidAt: true,
@@ -698,7 +813,7 @@ export class BookingsService {
       },
     });
     if (!booking) return null;
-    const when = `${booking.date} ${String(booking.hour).padStart(2, '0')}:00`;
+    const when = `${booking.date} ${minuteLabel(booking.startMinute)}`;
     return {
       ...booking,
       label: [booking.facility.name, when, booking.contactName]
@@ -727,6 +842,7 @@ export class BookingsService {
       where: {
         companyId,
         clubId,
+        source: 'APP',
         date: { gte: start, lte: end },
         status: {
           in: [
@@ -738,11 +854,15 @@ export class BookingsService {
           ],
         },
       },
-      orderBy: [{ date: 'asc' }, { hour: 'asc' }],
+      orderBy: [{ date: 'asc' }, { startMinute: 'asc' }],
       select: {
         id: true,
         date: true,
         hour: true,
+        startMinute: true,
+        durationMinutes: true,
+        depositPaidAt: true,
+        depositMethod: true,
         status: true,
         currency: true,
         price: true,
@@ -764,7 +884,16 @@ export class BookingsService {
   async confirmByClub(companyId: string, clubId: string, bookingId: string) {
     await this.expireStaleHolds({ id: bookingId });
     const result = await this.prisma.booking.updateMany({
-      where: { id: bookingId, companyId, clubId, status: 'REQUESTED' },
+      where: {
+        id: bookingId,
+        companyId,
+        clubId,
+        // Solicitud sin seña, o seña manual que el club decide no exigir.
+        OR: [
+          { status: 'REQUESTED' },
+          { status: 'PENDING_PAYMENT', mpPreferenceId: null },
+        ],
+      },
       data: { status: 'CONFIRMED' },
     });
     if (result.count === 0)

@@ -122,15 +122,13 @@ describe('PlatformOverviewService', () => {
           .mockResolvedValue([{ clubId: 'a', _count: { _all: 120 } }]),
       },
       subscriptionInvoice: {
-        groupBy: jest
-          .fn()
-          .mockResolvedValue([
-            {
-              clubId: 'a',
-              _count: { _all: 2 },
-              _sum: { amount: new Prisma.Decimal(100000) },
-            },
-          ]),
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            clubId: 'a',
+            _count: { _all: 2 },
+            _sum: { amount: new Prisma.Decimal(100000) },
+          },
+        ]),
       },
       user: {
         count: jest.fn().mockResolvedValueOnce(25).mockResolvedValueOnce(6),

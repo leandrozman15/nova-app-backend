@@ -87,3 +87,88 @@ export function bookingWindow(timeZone: string, now = new Date()) {
 export function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
+
+// ─── Turnos por minutos ─────────────────────────────────────────────────────
+
+/** Los turnos arrancan cada 30 minutos. */
+export const SLOT_STEP_MINUTES = 30;
+export const ALLOWED_DURATIONS = [30, 60, 90, 120] as const;
+
+/** Instante UTC de "date + minute" (minuto desde las 00:00; 1440 = medianoche siguiente). */
+export function zonedMinuteToUtc(
+  date: string,
+  minute: number,
+  timeZone: string,
+) {
+  if (minute >= 1440)
+    return new Date(
+      zonedToUtc(addDays(date, 1), 0, timeZone).getTime() +
+        (minute - 1440) * 60_000,
+    );
+  return new Date(
+    zonedToUtc(date, Math.floor(minute / 60), timeZone).getTime() +
+      (minute % 60) * 60_000,
+  );
+}
+
+/** "21:30"; 1440 se muestra como "00:00". */
+export function minuteLabel(minute: number) {
+  const value = ((minute % 1440) + 1440) % 1440;
+  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+}
+
+/** 0 = domingo … 6 = sábado. */
+export function weekdayOf(date: string) {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** Minuto actual del día en la zona del club. */
+export function nowMinuteIn(timeZone: string, now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return get('hour') * 60 + get('minute');
+}
+
+export type TimeStatus = 'free' | 'taken' | 'past';
+
+/**
+ * Horarios de inicio posibles para una duración: cada 30 min entre la apertura
+ * y el cierre, ocupado si se pisa con algún turno activo.
+ */
+export function computeTimes(options: {
+  open: number;
+  close: number;
+  duration: number;
+  taken: Array<[number, number]>;
+  /** Minuto actual si la fecha es hoy; null si es un día futuro. */
+  nowMinute: number | null;
+}) {
+  const times: Array<{
+    start: number;
+    end: number;
+    label: string;
+    status: TimeStatus;
+  }> = [];
+  for (
+    let start = Math.ceil(options.open / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES;
+    start + options.duration <= options.close;
+    start += SLOT_STEP_MINUTES
+  ) {
+    const end = start + options.duration;
+    const status: TimeStatus =
+      options.nowMinute !== null && start <= options.nowMinute
+        ? 'past'
+        : options.taken.some(([from, to]) => start < to && from < end)
+          ? 'taken'
+          : 'free';
+    times.push({ start, end, label: minuteLabel(start), status });
+  }
+  return times;
+}

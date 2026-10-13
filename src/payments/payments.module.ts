@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 
+import { AgendaController } from '../bookings/agenda.controller';
+import { AgendaService } from '../bookings/agenda.service';
 import { BookingsService } from '../bookings/bookings.service';
 import {
   ClubBookingsController,
@@ -19,9 +21,15 @@ import {
     PublicSlotsController,
     MyBookingsController,
     ClubBookingsController,
+    AgendaController,
     ClubPaymentsController,
     MercadoPagoCallbacksController,
   ],
-  providers: [MercadoPagoClient, PaymentAccountsService, BookingsService],
+  providers: [
+    MercadoPagoClient,
+    PaymentAccountsService,
+    BookingsService,
+    AgendaService,
+  ],
 })
 export class PaymentsModule {}
