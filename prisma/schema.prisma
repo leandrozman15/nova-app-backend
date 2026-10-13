@@ -133,6 +133,10 @@ model User {
   role        String   @default("user")
   // null = usuario libre (registrado desde la app pública, sin empresa).
   companyId   String?
+  // Perfil del usuario libre (lo completa desde la app pública).
+  phone       String?
+  city        String?
+  sports      String[] @default([])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

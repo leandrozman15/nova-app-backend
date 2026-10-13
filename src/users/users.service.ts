@@ -10,6 +10,7 @@ import {
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateJoinRequestDto } from './dto/create-join-request.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterFreeUserDto } from './dto/register-free-user.dto';
 
 export type ProvisionProfileActor = {
@@ -42,6 +43,22 @@ const CLUB_MANAGERS = new Set(['club_admin', 'manager', 'coordinator']);
 const CLUB_PLAYER_PROVISIONERS = new Set([
   'club_admin', 'manager', 'coordinator', 'coach', 'coach_lvl1', 'coach_lvl2',
 ]);
+
+const MY_PROFILE_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  phone: true,
+  city: true,
+  sports: true,
+  companyId: true,
+} as const;
+
+function withCompleteness<T extends { name: string | null; phone: string | null }>(
+  user: T,
+) {
+  return { ...user, complete: Boolean(user.name?.trim() && user.phone?.trim()) };
+}
 
 @Injectable()
 export class UsersService {
@@ -168,6 +185,34 @@ export class UsersService {
       },
     });
     return { created: true, user };
+  }
+
+  /** Perfil del usuario libre. `complete` = tiene lo mínimo para reservar. */
+  async getMyProfile(firebaseUid: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { firebaseUid },
+      select: MY_PROFILE_SELECT,
+    });
+    if (!user) throw new UnauthorizedException('Perfil no registrado');
+    return withCompleteness(user);
+  }
+
+  async updateMyProfile(firebaseUid: string, dto: UpdateMyProfileDto) {
+    await this.requireUser(firebaseUid);
+    const sports = dto.sports
+      ? [...new Set(dto.sports.map((sport) => sport.trim()).filter(Boolean))]
+      : undefined;
+    const user = await this.prisma.user.update({
+      where: { firebaseUid },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(dto.city !== undefined && { city: dto.city || null }),
+        ...(sports !== undefined && { sports }),
+      },
+      select: MY_PROFILE_SELECT,
+    });
+    return withCompleteness(user);
   }
 
   async listMyMemberships(firebaseUid: string) {

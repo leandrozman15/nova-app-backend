@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UnauthorizedException } from '@nestjs/common';
 
 import { NoTenant } from '../common/decorators/no-tenant.decorator';
 
@@ -6,6 +6,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 import { CreateJoinRequestDto } from './dto/create-join-request.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterFreeUserDto } from './dto/register-free-user.dto';
 import { SetActiveClubContextDto } from './dto/set-active-club-context.dto';
 import { UsersService } from './users.service';
@@ -106,6 +107,18 @@ export class UsersController {
   async registerFree(@Req() req: unknown, @Body() dto: RegisterFreeUserDto) {
     const auth = requireAuth(req);
     return this.usersService.registerFreeUser(auth.uid, dto);
+  }
+
+  @NoTenant()
+  @Get('me/profile')
+  async myProfile(@Req() req: unknown) {
+    return this.usersService.getMyProfile(requireAuth(req).uid);
+  }
+
+  @NoTenant()
+  @Patch('me/profile')
+  async updateMyProfile(@Req() req: unknown, @Body() dto: UpdateMyProfileDto) {
+    return this.usersService.updateMyProfile(requireAuth(req).uid, dto);
   }
 
   @NoTenant()

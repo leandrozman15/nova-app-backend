@@ -54,7 +54,12 @@ describe('BookingsService', () => {
       user: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'u1', name: 'Ana', email: 'ana@mail.com' }),
+          .mockResolvedValue({
+            id: 'u1',
+            name: 'Ana',
+            email: 'ana@mail.com',
+            phone: '11 5555-1234',
+          }),
       },
       facilityRental: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -105,6 +110,8 @@ describe('BookingsService', () => {
             price: 20000,
             depositAmount: 6000,
             userId: 'u1',
+            contactName: 'Ana',
+            contactPhone: '11 5555-1234',
           }),
         }),
       );
@@ -127,6 +134,20 @@ describe('BookingsService', () => {
           depositAmount: 6000,
         }),
       );
+    });
+
+    it('requires name and phone in the profile before holding a slot', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        name: 'Ana',
+        email: 'ana@mail.com',
+        phone: null,
+      });
+
+      await expect(
+        service.create('fb-ana', 'ana@mail.com', dto()),
+      ).rejects.toThrow('Completá tu nombre y celular');
+      expect(prisma.booking.create).not.toHaveBeenCalled();
     });
 
     it('rejects a slot taken by a fixed club rental', async () => {

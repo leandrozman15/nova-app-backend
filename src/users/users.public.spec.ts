@@ -20,6 +20,7 @@ describe('UsersService (usuario libre)', () => {
       user: {
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'new-user' }),
+        update: jest.fn(),
       },
       club: { findFirst: jest.fn() },
       clubMembership: {
@@ -211,6 +212,54 @@ describe('UsersService (usuario libre)', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.clubMembership.deleteMany).toHaveBeenCalledWith({
       where: { id: 'm-other', userId: 'free-user', status: 'SOLICITADA' },
+    });
+  });
+
+  describe('profile', () => {
+    const row = {
+      id: 'u1',
+      email: 'ana@mail.com',
+      name: 'Ana',
+      phone: null,
+      city: null,
+      sports: [],
+      companyId: null,
+    };
+
+    it('reports an incomplete profile until it has name and phone', async () => {
+      prisma.user.findUnique.mockResolvedValue(row);
+      await expect(service.getMyProfile('free-uid')).resolves.toEqual(
+        expect.objectContaining({ complete: false }),
+      );
+    });
+
+    it('updates only the free user own fields and dedupes sports', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'u1', companyId: null });
+      prisma.user.update.mockResolvedValue({
+        ...row,
+        phone: '11 5555-1234',
+        sports: ['padel'],
+      });
+
+      const result = await service.updateMyProfile('free-uid', {
+        phone: '11 5555-1234',
+        sports: ['padel', ' padel ', ''],
+      });
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { firebaseUid: 'free-uid' },
+          data: { phone: '11 5555-1234', sports: ['padel'] },
+        }),
+      );
+      expect(result.complete).toBe(true);
+    });
+
+    it('rejects unregistered users', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateMyProfile('ghost', { phone: '11 5555-1234' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 });

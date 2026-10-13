@@ -167,6 +167,13 @@ export class BookingsService {
       );
     }
     const user = await this.requireUser(firebaseUid);
+    // El club necesita poder contactar a quien reserva: nombre y celular del perfil.
+    const contactPhone = dto.contactPhone?.trim() || user.phone?.trim() || null;
+    if (!user.name?.trim() || !contactPhone) {
+      throw new BadRequestException(
+        'Completá tu nombre y celular en tu perfil para reservar.',
+      );
+    }
     const club = await this.prisma.club.findFirst({
       where: { id: dto.clubId, isPublic: true, publicFacilities: true },
       select: {
@@ -257,7 +264,7 @@ export class BookingsService {
           depositAmount,
           holdExpiresAt,
           contactName: user.name,
-          contactPhone: dto.contactPhone?.trim() || null,
+          contactPhone,
         },
         select: { id: true },
       });
@@ -600,7 +607,7 @@ export class BookingsService {
   private async requireUser(firebaseUid: string) {
     const user = await this.prisma.user.findUnique({
       where: { firebaseUid },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, phone: true },
     });
     if (!user) throw new UnauthorizedException('Perfil no registrado');
     return user;

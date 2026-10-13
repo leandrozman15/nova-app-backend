@@ -12,7 +12,6 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 
 import { NoTenant } from '../common/decorators/no-tenant.decorator';
-import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import {
   requireClubScope,
@@ -34,8 +33,8 @@ function auth(req: unknown) {
   return value;
 }
 
-/** Turnos de un día (público, sin login). */
-@Public()
+/** Turnos de un día (usuarios con cuenta, sin empresa). */
+@NoTenant()
 @UseGuards(ThrottlerGuard)
 @Throttle({ default: { limit: 60, ttl: 60_000 } })
 @Controller('public/clubs/:clubId/facilities/:facilityId/slots')
