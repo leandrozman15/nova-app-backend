@@ -53,8 +53,7 @@ export type MpPayment = {
 // Direcciones de producción por defecto: se pueden cambiar por variable de
 // entorno (staging, otro dominio), pero no hace falta cargarlas en Render.
 const DEFAULT_PUBLIC_API_URL = 'https://nova-app-backend.onrender.com';
-const DEFAULT_PUBLIC_APP_URL =
-  'https://studio--studio-9112699346-ecb8d.us-central1.hosted.app';
+const DEFAULT_PUBLIC_APP_URL = 'https://sport.fluxi-on.com';
 
 export function mpConfig() {
   const publicApiUrl = (
