@@ -61,10 +61,20 @@ describe('FeePaymentsService', () => {
       expect(input.externalReference).toBe('fee:f1');
       expect(input.amount).toBe(15000);
       expect(input.notificationUrl).toContain('webhook?fee=f1');
+      expect(input.backUrl).toBe(
+        'https://app.test/dashboard/member/payments?cuota=f1',
+      );
       expect(prisma.playerPayment.update).toHaveBeenCalledWith({
         where: { id: 'f1' },
         data: { mpPreferenceId: 'pref1' },
       });
+    });
+
+    it('returns the player to the player portal', async () => {
+      await service.createCheckout('c1', 'uid1', 'f1', 'player');
+      expect(mp.createPreference.mock.calls[0][1].backUrl).toBe(
+        'https://app.test/dashboard/player/payments?cuota=f1',
+      );
     });
 
     it('rejects a fee that belongs to someone else', async () => {

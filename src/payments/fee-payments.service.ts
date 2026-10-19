@@ -89,7 +89,12 @@ export class FeePaymentsService {
   }
 
   /** Crea el link de pago (Checkout Pro) de una cuota pendiente. */
-  async createCheckout(companyId: string, firebaseUid: string, feeId: string) {
+  async createCheckout(
+    companyId: string,
+    firebaseUid: string,
+    feeId: string,
+    role?: string,
+  ) {
     const fee = await this.loadForOwner(companyId, firebaseUid, feeId);
     if (fee.status === 'paid')
       throw new ConflictException('Esta cuota ya está pagada');
@@ -119,7 +124,7 @@ export class FeePaymentsService {
       externalReference: feeReference(fee.id),
       payerEmail: user?.email,
       notificationUrl: `${config.publicApiUrl}/payments/mercadopago/webhook?fee=${fee.id}`,
-      backUrl: `${config.publicAppUrl}/dashboard/member/payments?cuota=${fee.id}`,
+      backUrl: `${config.publicAppUrl}/dashboard/${role === 'player' ? 'player' : 'member'}/payments?cuota=${fee.id}`,
       // 48 h para completar el pago; después hay que generar otro link.
       expiresAt: new Date(Date.now() + 48 * 3_600_000),
       // El monto va en la clave: si el club corrige la cuota, no se reutiliza el link viejo.

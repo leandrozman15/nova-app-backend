@@ -71,6 +71,7 @@ export class FeePaymentsController {
       requireCompanyId(req),
       (req as RequestWithAuth).auth!.uid,
       id,
+      (req as RequestWithAuth).auth?.role,
     );
   }
 
