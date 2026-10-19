@@ -8,14 +8,16 @@ import {
   MyBookingsController,
   PublicSlotsController,
 } from '../bookings/bookings.controller';
+import { FeePaymentsService } from './fee-payments.service';
 import { MercadoPagoClient } from './mercadopago.client';
 import { PaymentAccountsService } from './payment-accounts.service';
 import {
   ClubPaymentsController,
+  FeePaymentsController,
   MercadoPagoCallbacksController,
 } from './payments.controller';
 
-/** Reservas online con seña por Mercado Pago (cuenta propia de cada club). */
+/** Cobros online por Mercado Pago (señas de reservas y cuotas de socio) en la cuenta propia de cada club. */
 @Module({
   controllers: [
     PublicSlotsController,
@@ -24,12 +26,14 @@ import {
     AgendaController,
     ClubPaymentsController,
     MercadoPagoCallbacksController,
+    FeePaymentsController,
   ],
   providers: [
     MercadoPagoClient,
     PaymentAccountsService,
     BookingsService,
     AgendaService,
+    FeePaymentsService,
   ],
 })
 export class PaymentsModule {}

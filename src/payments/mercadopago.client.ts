@@ -26,6 +26,10 @@ export type MpPreferenceInput = {
   notificationUrl: string;
   backUrl: string;
   expiresAt: Date;
+  /** Clave de idempotencia propia (por defecto, una por referencia externa). */
+  idempotencyKey?: string;
+  /** Medios que se excluyen (por defecto efectivo/ticket y cajeros). */
+  excludedPaymentTypes?: string[];
 };
 
 export type MpPreference = {
@@ -147,13 +151,15 @@ export class MercadoPagoClient {
         expiration_date_to: input.expiresAt.toISOString(),
         // El pago tiene que acreditarse dentro de la retención del turno (sin efectivo/ticket).
         payment_methods: {
-          excluded_payment_types: [{ id: 'ticket' }, { id: 'atm' }],
+          excluded_payment_types: (
+            input.excludedPaymentTypes ?? ['ticket', 'atm']
+          ).map((id) => ({ id })),
         },
         binary_mode: true,
         ...(input.payerEmail ? { payer: { email: input.payerEmail } } : {}),
         statement_descriptor: 'FLUXION SPORT',
       },
-      `pref-${input.externalReference}`,
+      input.idempotencyKey ?? `pref-${input.externalReference}`,
     );
   }
 

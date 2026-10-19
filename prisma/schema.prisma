@@ -546,6 +546,10 @@ model PlayerPayment {
   status        PaymentStatus @default(pending)
   paymentMethod String?
   paymentDate   DateTime?
+  // Cobro online de la cuota por Mercado Pago (cuenta del club).
+  mpPreferenceId  String?
+  mpPaymentId     String?
+  mpPaymentStatus String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -559,6 +563,7 @@ model PlayerPayment {
   @@index([companyId, clubId])
   @@index([companyId, playerId])
   @@index([companyId, status])
+  @@index([mpPaymentId])
   @@unique([playerId, month, year])
 }
 
