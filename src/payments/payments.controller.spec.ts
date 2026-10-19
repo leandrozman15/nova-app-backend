@@ -11,13 +11,15 @@ import { signState } from './token-crypto';
 
 describe('MercadoPagoCallbacksController.webhook', () => {
   let bookings: any;
+  let fees: any;
   let controller: MercadoPagoCallbacksController;
   const req = (body: unknown = {}) => ({ body });
 
   beforeEach(() => {
     process.env.MP_WEBHOOK_SECRET = '';
     bookings = { applyPayment: jest.fn().mockResolvedValue(undefined) };
-    controller = new MercadoPagoCallbacksController({} as any, bookings);
+    fees = { applyPayment: jest.fn().mockResolvedValue(undefined) };
+    controller = new MercadoPagoCallbacksController({} as any, bookings, fees);
   });
 
   it('applies payment notifications for the booking in the URL', async () => {
@@ -28,6 +30,17 @@ describe('MercadoPagoCallbacksController.webhook', () => {
       req(),
     );
     expect(bookings.applyPayment).toHaveBeenCalledWith('b1', '555');
+  });
+
+  it('applies payment notifications for the fee in the URL, not the booking flow', async () => {
+    await controller.webhook(
+      { fee: 'f1', type: 'payment', 'data.id': '777' },
+      undefined,
+      undefined,
+      req(),
+    );
+    expect(fees.applyPayment).toHaveBeenCalledWith('f1', '777');
+    expect(bookings.applyPayment).not.toHaveBeenCalled();
   });
 
   it('ignores other topics, missing booking and malformed ids', async () => {

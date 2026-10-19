@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -24,6 +25,7 @@ import {
   requireCompanyId,
 } from '../common/http/request-context';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
+import { FeePaymentsService } from './fee-payments.service';
 import { mpConfig } from './mercadopago.client';
 import { PaymentAccountsService } from './payment-accounts.service';
 import { isValidWebhookSignature } from './webhook-signature';
@@ -57,6 +59,37 @@ export class ClubPaymentsController {
   }
 }
 
+/** Pago online de la cuota de socio desde el portal (socio/jugador dueño de la cuota). */
+@Roles('player', 'member')
+@Controller('player-payments/:id/mercadopago')
+export class FeePaymentsController {
+  constructor(private readonly fees: FeePaymentsService) {}
+
+  @Post('checkout')
+  checkout(@Req() req: unknown, @Param('id') id: string) {
+    return this.fees.createCheckout(
+      requireCompanyId(req),
+      (req as RequestWithAuth).auth!.uid,
+      id,
+    );
+  }
+
+  @Post('sync')
+  @HttpCode(200)
+  sync(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() body: { paymentId?: string },
+  ) {
+    return this.fees.syncForOwner(
+      requireCompanyId(req),
+      (req as RequestWithAuth).auth!.uid,
+      id,
+      String(body?.paymentId ?? ''),
+    );
+  }
+}
+
 /** Endpoints que llama Mercado Pago (públicos, sin token de Firebase). */
 @Public()
 @Controller('payments/mercadopago')
@@ -66,6 +99,7 @@ export class MercadoPagoCallbacksController {
   constructor(
     private readonly accounts: PaymentAccountsService,
     private readonly bookings: BookingsService,
+    private readonly fees: FeePaymentsService,
   ) {}
 
   /** Vuelta del OAuth: guarda la cuenta y redirige a la consola del club. */
@@ -110,6 +144,7 @@ export class MercadoPagoCallbacksController {
     const type = query.type ?? query.topic ?? body.type ?? body.topic;
     const paymentId = query['data.id'] ?? body.data?.id ?? query.id;
     const bookingId = query.booking;
+    const feeId = query.fee;
 
     const secret = mpConfig().webhookSecret;
     if (
@@ -127,18 +162,19 @@ export class MercadoPagoCallbacksController {
     if (
       type !== 'payment' ||
       !paymentId ||
-      !bookingId ||
+      (!bookingId && !feeId) ||
       !/^\d{1,20}$/.test(String(paymentId))
     )
       return { ok: true };
 
     try {
-      await this.bookings.applyPayment(bookingId, String(paymentId));
+      if (feeId) await this.fees.applyPayment(feeId, String(paymentId));
+      else await this.bookings.applyPayment(bookingId!, String(paymentId));
     } catch (error) {
       // Mercado Pago reintenta si no respondemos 2xx: solo devolvemos error cuando
       // la falla es transitoria (su API no respondió); el resto se loguea.
       this.logger.warn(
-        `Webhook pago ${paymentId} reserva ${bookingId}: ${String(error)}`,
+        `Webhook pago ${paymentId} ${feeId ? `cuota ${feeId}` : `reserva ${bookingId}`}: ${String(error)}`,
       );
       if (error instanceof BadGatewayException) throw error;
     }
