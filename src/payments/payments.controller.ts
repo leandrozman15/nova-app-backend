@@ -19,6 +19,7 @@ import type { Response } from 'express';
 
 import { BookingsService } from '../bookings/bookings.service';
 import { Public } from '../common/decorators/public.decorator';
+import { NoTenant } from '../common/decorators/no-tenant.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import {
   requireClubScope,
@@ -86,6 +87,52 @@ export class FeePaymentsController {
       requireCompanyId(req),
       (req as RequestWithAuth).auth!.uid,
       id,
+      String(body?.paymentId ?? ''),
+    );
+  }
+}
+
+/** Padre/tutor: sus hijos vinculados y el pago de sus cuotas (sin membresía de club propia). */
+@NoTenant()
+@Controller('users/me/children')
+export class GuardianChildrenController {
+  constructor(private readonly fees: FeePaymentsService) {}
+
+  @Get()
+  list(@Req() req: unknown) {
+    return this.fees.listChildren((req as RequestWithAuth).auth!);
+  }
+
+  @Get(':playerId/payments')
+  payments(@Req() req: unknown, @Param('playerId') playerId: string) {
+    return this.fees.listChildFees((req as RequestWithAuth).auth!, playerId);
+  }
+
+  @Post(':playerId/payments/:feeId/mercadopago/checkout')
+  checkout(
+    @Req() req: unknown,
+    @Param('playerId') playerId: string,
+    @Param('feeId') feeId: string,
+  ) {
+    return this.fees.checkoutForGuardian(
+      (req as RequestWithAuth).auth!,
+      playerId,
+      feeId,
+    );
+  }
+
+  @Post(':playerId/payments/:feeId/mercadopago/sync')
+  @HttpCode(200)
+  sync(
+    @Req() req: unknown,
+    @Param('playerId') playerId: string,
+    @Param('feeId') feeId: string,
+    @Body() body: { paymentId?: string },
+  ) {
+    return this.fees.syncForGuardian(
+      (req as RequestWithAuth).auth!,
+      playerId,
+      feeId,
       String(body?.paymentId ?? ''),
     );
   }

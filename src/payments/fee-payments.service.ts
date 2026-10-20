@@ -40,6 +40,20 @@ export const feeReference = (feeId: string) => `fee:${feeId}`;
  * cambia cuando se consulta el pago a la API de Mercado Pago con el token del
  * club; la notificación del webhook o la vuelta del checkout nunca bastan.
  */
+function guardianEmailOf(extra: unknown): string | null {
+  const value = (extra as Record<string, unknown> | null)?.guardianEmail;
+  return typeof value === 'string' && value.trim()
+    ? value.trim().toLowerCase()
+    : null;
+}
+
+function isMinorWithGuardian(player: { birthDate: Date | null; extra: unknown }) {
+  if (!guardianEmailOf(player.extra) || !player.birthDate) return false;
+  const adult = new Date(player.birthDate);
+  adult.setFullYear(adult.getFullYear() + 18);
+  return adult.getTime() > Date.now();
+}
+
 @Injectable()
 export class FeePaymentsService {
   private readonly logger = new Logger(FeePaymentsService.name);
@@ -72,6 +86,129 @@ export class FeePaymentsService {
     ]);
     if (!player && !membership)
       throw new ForbiddenException('Esta cuota no es de tu cuenta');
+    const record = await this.prisma.player.findUnique({
+      where: { id: fee.playerId },
+      select: { birthDate: true, extra: true },
+    });
+    if (record && isMinorWithGuardian(record))
+      throw new ForbiddenException(
+        'Esta cuota la abona el padre/tutor vinculado',
+      );
+  }
+
+  /** La cuota es de un atleta a cargo del usuario (email del tutor verificado). */
+  async assertGuardian(
+    auth: { email?: string; emailVerified?: boolean },
+    playerId: string,
+  ) {
+    const email = auth.email?.trim().toLowerCase();
+    if (!email || auth.emailVerified !== true)
+      throw new ForbiddenException('Verificá tu email para ver a tu hijo/a');
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      select: { extra: true },
+    });
+    if (!player || guardianEmailOf(player.extra) !== email)
+      throw new ForbiddenException('Este atleta no está vinculado a tu cuenta');
+  }
+
+  async listChildren(auth: { email?: string; emailVerified?: boolean }) {
+    const email = auth.email?.trim().toLowerCase();
+    if (!email || auth.emailVerified !== true) return [];
+    const candidates = await this.prisma.player.findMany({
+      where: {
+        extra: { path: ['guardianEmail'], string_contains: email, mode: 'insensitive' },
+      },
+      select: {
+        id: true,
+        companyId: true,
+        clubId: true,
+        firstName: true,
+        lastName: true,
+        photoUrl: true,
+        birthDate: true,
+        extra: true,
+        club: { select: { name: true } },
+      },
+    });
+    const children = candidates.filter(
+      (p) => guardianEmailOf(p.extra) === email,
+    );
+    const pending = await this.prisma.playerPayment.groupBy({
+      by: ['playerId'],
+      where: {
+        playerId: { in: children.map((c) => c.id) },
+        status: 'pending',
+      },
+      _count: { _all: true },
+    });
+    const pendingBy = new Map(pending.map((r) => [r.playerId, r._count._all]));
+    return children.map((c) => {
+      const extra = (c.extra ?? {}) as Record<string, unknown>;
+      return {
+        playerId: c.id,
+        companyId: c.companyId,
+        clubId: c.clubId,
+        clubName: c.club?.name ?? null,
+        teamId: typeof extra.teamId === 'string' ? extra.teamId : null,
+        teamName: typeof extra.teamName === 'string' ? extra.teamName : null,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        photoUrl: c.photoUrl,
+        birthDate: c.birthDate?.toISOString() ?? null,
+        pendingFees: pendingBy.get(c.id) ?? 0,
+      };
+    });
+  }
+
+  async listChildFees(
+    auth: { email?: string; emailVerified?: boolean },
+    playerId: string,
+  ) {
+    await this.assertGuardian(auth, playerId);
+    return this.prisma.playerPayment.findMany({
+      where: { playerId },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+  }
+
+  async checkoutForGuardian(
+    auth: { uid: string; email?: string; emailVerified?: boolean },
+    playerId: string,
+    feeId: string,
+  ) {
+    const fee = await this.loadGuardianFee(auth, playerId, feeId);
+    return this.createCheckout(fee.companyId, auth.uid, feeId, 'parent', true);
+  }
+
+  async syncForGuardian(
+    auth: { uid: string; email?: string; emailVerified?: boolean },
+    playerId: string,
+    feeId: string,
+    paymentId: string,
+  ) {
+    if (!/^\d{1,20}$/.test(paymentId))
+      throw new BadRequestException('Pago inválido');
+    await this.loadGuardianFee(auth, playerId, feeId);
+    await this.applyPayment(feeId, paymentId);
+    return this.prisma.playerPayment.findUnique({
+      where: { id: feeId },
+      select: { status: true, paymentDate: true, mpPaymentStatus: true },
+    });
+  }
+
+  private async loadGuardianFee(
+    auth: { email?: string; emailVerified?: boolean },
+    playerId: string,
+    feeId: string,
+  ) {
+    await this.assertGuardian(auth, playerId);
+    const fee = await this.prisma.playerPayment.findFirst({
+      where: { id: feeId, playerId },
+      select: { id: true, companyId: true },
+    });
+    if (!fee) throw new NotFoundException('Cuota no encontrada');
+    return fee;
   }
 
   private async loadForOwner(
@@ -94,8 +231,14 @@ export class FeePaymentsService {
     firebaseUid: string,
     feeId: string,
     role?: string,
+    guardianChecked = false,
   ) {
-    const fee = await this.loadForOwner(companyId, firebaseUid, feeId);
+    const fee = guardianChecked
+      ? await this.prisma.playerPayment.findFirstOrThrow({
+          where: { id: feeId, companyId },
+          include: { club: { select: { name: true } } },
+        })
+      : await this.loadForOwner(companyId, firebaseUid, feeId);
     if (fee.status === 'paid')
       throw new ConflictException('Esta cuota ya está pagada');
 
@@ -124,7 +267,7 @@ export class FeePaymentsService {
       externalReference: feeReference(fee.id),
       payerEmail: user?.email,
       notificationUrl: `${config.publicApiUrl}/payments/mercadopago/webhook?fee=${fee.id}`,
-      backUrl: `${config.publicAppUrl}/dashboard/${role === 'player' ? 'player' : 'member'}/payments?cuota=${fee.id}`,
+      backUrl: `${config.publicAppUrl}/dashboard/${role === 'parent' ? 'parent' : role === 'player' ? 'player' : 'member'}/payments?cuota=${fee.id}`,
       // 48 h para completar el pago; después hay que generar otro link.
       expiresAt: new Date(Date.now() + 48 * 3_600_000),
       // El monto va en la clave: si el club corrige la cuota, no se reutiliza el link viejo.
