@@ -14,6 +14,7 @@ import { PaymentAccountsService } from './payment-accounts.service';
 import {
   ClubPaymentsController,
   FeePaymentsController,
+  GuardianChildrenController,
   MercadoPagoCallbacksController,
 } from './payments.controller';
 
@@ -27,6 +28,7 @@ import {
     ClubPaymentsController,
     MercadoPagoCallbacksController,
     FeePaymentsController,
+    GuardianChildrenController,
   ],
   providers: [
     MercadoPagoClient,
