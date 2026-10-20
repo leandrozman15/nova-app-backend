@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDate, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class UpdateFinanceTransactionDto {
   @IsOptional()
@@ -40,4 +40,9 @@ export class UpdateFinanceTransactionDto {
   @IsString()
   @MaxLength(120)
   reference?: string;
+
+  /** true envía el movimiento al archivo; false lo restaura al libro activo. */
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 }

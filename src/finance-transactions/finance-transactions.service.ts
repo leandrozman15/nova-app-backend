@@ -136,6 +136,8 @@ export class FinanceTransactionsService {
         clubId: dto.clubId,
         description: dto.description,
         reference: dto.reference,
+        archivedAt:
+          dto.archived === undefined ? undefined : dto.archived ? new Date() : null,
       },
     });
   }
