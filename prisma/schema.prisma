@@ -523,6 +523,8 @@ model FinancialTransaction {
   occurredAt  DateTime
   description String?
   reference   String?
+  /// Movimiento enviado al archivo: sigue contando en totales y reportes, pero sale del libro activo.
+  archivedAt  DateTime?
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
 
