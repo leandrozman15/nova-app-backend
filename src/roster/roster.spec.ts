@@ -191,7 +191,7 @@ describe('copia de Firestore', () => {
     expect(report.players).toEqual({ created: 1, merged: 1, failed: 0 });
     expect(prisma.clubDiscipline.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        id: 'boxeo',
+        id: 'c1_boxeo',
         sportId: 'boxeo',
         name: 'Boxeo',
         minAge: 12,

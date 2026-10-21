@@ -124,7 +124,7 @@ export class RosterService {
       this.prisma.clubDiscipline.create({
         data: {
           ...(data as Prisma.ClubDisciplineUncheckedCreateInput),
-          id: sportId,
+          id: `${clubId}_${sportId}`,
           sportId,
           name: (data.name as string) ?? sportId,
           companyId: club.companyId,

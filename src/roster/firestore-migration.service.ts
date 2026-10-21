@@ -135,7 +135,7 @@ export class FirestoreMigrationService {
           await this.prisma.clubDiscipline.create({
             data: {
               ...(data as Prisma.ClubDisciplineUncheckedCreateInput),
-              id: doc.id,
+              id: `${clubId}_${sportId}`,
               companyId: club.companyId,
               clubId,
               sportId,
