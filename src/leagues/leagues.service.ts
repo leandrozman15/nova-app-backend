@@ -98,6 +98,10 @@ export class LeaguesService {
         format: dto.format,
         description: dto.description,
         status: dto.status ?? 'draft',
+        formatType: dto.formatType ?? 'league',
+        groupCount: dto.groupCount,
+        advancePerGroup: dto.advancePerGroup,
+        thirdPlace: dto.thirdPlace ?? false,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
         clubs: { create: clubIds.map((clubId) => ({ clubId })) },
@@ -109,6 +113,10 @@ export class LeaguesService {
   async updateTournament(companyId: string, leagueId: string, id: string, dto: UpdateLeagueTournamentDto) {
     const existing = await this.prisma.leagueTournament.findFirst({ where: { id, leagueId, companyId } });
     if (!existing) throw new NotFoundException('Tournament not found');
+    if (dto.formatType && dto.formatType !== existing.formatType) {
+      const matches = await this.prisma.match.count({ where: { tournamentId: id } });
+      if (matches > 0) throw new BadRequestException('No se puede cambiar el formato con partidos creados');
+    }
     const clubIds = dto.clubIds ? await this.validClubIds(companyId, leagueId, dto.clubIds) : null;
     const { clubIds: _ignored, startDate, endDate, ...rest } = dto;
     return this.prisma.leagueTournament.update({

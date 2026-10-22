@@ -5,7 +5,7 @@ import type { RequestWithAuth } from '../common/interfaces/request-with-auth.int
 import { COMPANY_WIDE_ROLES, requireCompanyId } from '../common/http/request-context';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
-import { CreateTournamentMatchDto, GenerateFixtureDto } from './dto/league-fixture.dto';
+import { AdvanceTournamentDto, CreateTournamentMatchDto, GenerateFixtureDto, SetTournamentResultDto } from './dto/league-fixture.dto';
 import { LeagueFixtureService } from './league-fixture.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
@@ -87,6 +87,24 @@ export class LeaguesController {
   @Get(':id/tournaments/:tid/standings')
   tournamentStandings(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string) {
     return this.fixtureService.standings(requireCompanyId(req), id, tid);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Post(':id/tournaments/:tid/advance')
+  advanceTournament(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string, @Body() dto: AdvanceTournamentDto) {
+    return this.fixtureService.advance(requireCompanyId(req), id, tid, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Patch(':id/tournaments/:tid/matches/:matchId/result')
+  setTournamentResult(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('tid') tid: string,
+    @Param('matchId') matchId: string,
+    @Body() dto: SetTournamentResultDto,
+  ) {
+    return this.fixtureService.setResult(requireCompanyId(req), id, tid, matchId, dto);
   }
 
   @Get(':id/announcements')

@@ -37,6 +37,8 @@ export class StandingsService {
         companyId,
         leagueId,
         status: MatchStatus.played,
+        // Las llaves eliminatorias de torneos no cuentan para la tabla general.
+        OR: [{ stage: null }, { stage: { notIn: ['knockout', 'third_place'] } }],
       },
       select: {
         homeTeamId: true,

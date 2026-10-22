@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, Max, Min, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateLeagueTournamentDto {
   @IsString()
@@ -36,6 +36,26 @@ export class CreateLeagueTournamentDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @IsOptional()
+  @IsIn(['league', 'knockout', 'groups', 'groups_knockout'])
+  formatType?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(16)
+  groupCount?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  advancePerGroup?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  thirdPlace?: boolean;
 
   @IsOptional()
   @IsArray()
@@ -80,6 +100,26 @@ export class UpdateLeagueTournamentDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @IsOptional()
+  @IsIn(['league', 'knockout', 'groups', 'groups_knockout'])
+  formatType?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(16)
+  groupCount?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  advancePerGroup?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  thirdPlace?: boolean;
 
   @IsOptional()
   @IsArray()

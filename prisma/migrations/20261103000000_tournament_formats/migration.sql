@@ -1,0 +1,13 @@
+ALTER TABLE "LeagueTournament" ADD COLUMN "formatType" TEXT NOT NULL DEFAULT 'league',
+ADD COLUMN "groupCount" INTEGER,
+ADD COLUMN "advancePerGroup" INTEGER,
+ADD COLUMN "thirdPlace" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "LeagueTournamentClub" ADD COLUMN "seed" INTEGER;
+
+ALTER TABLE "Match" ADD COLUMN "stage" TEXT,
+ADD COLUMN "groupName" TEXT,
+ADD COLUMN "label" TEXT,
+ADD COLUMN "bracketSlot" INTEGER,
+ADD COLUMN "homePens" INTEGER,
+ADD COLUMN "awayPens" INTEGER;

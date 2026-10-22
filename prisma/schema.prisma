@@ -473,6 +473,13 @@ model Match {
   notes       String?
   tournamentId String?
   round       Int?
+  /// group | knockout | third_place | league
+  stage       String?
+  groupName   String?
+  label       String?
+  bracketSlot Int?
+  homePens    Int?
+  awayPens    Int?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -1578,6 +1585,11 @@ model LeagueTournament {
   description String?
   /// draft | active | finished
   status      String    @default("draft")
+  /// league | knockout | groups | groups_knockout
+  formatType  String    @default("league")
+  groupCount      Int?
+  advancePerGroup Int?
+  thirdPlace      Boolean @default(false)
   startDate   DateTime?
   endDate     DateTime?
   createdAt   DateTime  @default(now())
@@ -1594,6 +1606,7 @@ model LeagueTournament {
 model LeagueTournamentClub {
   tournamentId String
   clubId       String
+  seed         Int?
   createdAt    DateTime @default(now())
 
   tournament LeagueTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
