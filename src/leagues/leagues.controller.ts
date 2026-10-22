@@ -3,6 +3,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireCompanyId } from '../common/http/request-context';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
+import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 import { LeaguesService } from './leagues.service';
@@ -21,6 +22,35 @@ export class LeaguesController {
   @Get(':id/players')
   listPlayers(@Req() req: unknown, @Param('id') id: string) {
     return this.leaguesService.listFederatedPlayers(requireCompanyId(req), id);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Get(':id/tournaments')
+  listTournaments(@Req() req: unknown, @Param('id') id: string) {
+    return this.leaguesService.listTournaments(requireCompanyId(req), id);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Post(':id/tournaments')
+  createTournament(@Req() req: unknown, @Param('id') id: string, @Body() dto: CreateLeagueTournamentDto) {
+    return this.leaguesService.createTournament(requireCompanyId(req), id, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Patch(':id/tournaments/:tournamentId')
+  updateTournament(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('tournamentId') tournamentId: string,
+    @Body() dto: UpdateLeagueTournamentDto,
+  ) {
+    return this.leaguesService.updateTournament(requireCompanyId(req), id, tournamentId, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Delete(':id/tournaments/:tournamentId')
+  removeTournament(@Req() req: unknown, @Param('id') id: string, @Param('tournamentId') tournamentId: string) {
+    return this.leaguesService.removeTournament(requireCompanyId(req), id, tournamentId);
   }
 
   @Get(':id/announcements')

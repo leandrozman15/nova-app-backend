@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
+import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 
@@ -55,6 +56,79 @@ export class LeaguesService {
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
+  }
+
+  private readonly tournamentInclude = {
+    clubs: { include: { club: { select: { id: true, name: true } } } },
+  } as const;
+
+  async listTournaments(companyId: string, leagueId: string) {
+    await this.getById(companyId, leagueId);
+    return this.prisma.leagueTournament.findMany({
+      where: { leagueId, companyId },
+      include: this.tournamentInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Solo admite clubes afiliados a la liga. */
+  private async validClubIds(companyId: string, leagueId: string, clubIds: string[]) {
+    const unique = Array.from(new Set(clubIds));
+    if (unique.length === 0) return [];
+    const found = await this.prisma.club.findMany({
+      where: { id: { in: unique }, companyId, leagueId },
+      select: { id: true },
+    });
+    if (found.length !== unique.length) {
+      throw new BadRequestException('Hay clubes que no pertenecen a la liga');
+    }
+    return unique;
+  }
+
+  async createTournament(companyId: string, leagueId: string, dto: CreateLeagueTournamentDto) {
+    await this.getById(companyId, leagueId);
+    const clubIds = await this.validClubIds(companyId, leagueId, dto.clubIds ?? []);
+    return this.prisma.leagueTournament.create({
+      data: {
+        leagueId,
+        companyId,
+        name: dto.name,
+        kind: dto.kind ?? 'regular',
+        category: dto.category,
+        format: dto.format,
+        description: dto.description,
+        status: dto.status ?? 'draft',
+        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        clubs: { create: clubIds.map((clubId) => ({ clubId })) },
+      },
+      include: this.tournamentInclude,
+    });
+  }
+
+  async updateTournament(companyId: string, leagueId: string, id: string, dto: UpdateLeagueTournamentDto) {
+    const existing = await this.prisma.leagueTournament.findFirst({ where: { id, leagueId, companyId } });
+    if (!existing) throw new NotFoundException('Tournament not found');
+    const clubIds = dto.clubIds ? await this.validClubIds(companyId, leagueId, dto.clubIds) : null;
+    const { clubIds: _ignored, startDate, endDate, ...rest } = dto;
+    return this.prisma.leagueTournament.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(startDate ? { startDate: new Date(startDate) } : {}),
+        ...(endDate ? { endDate: new Date(endDate) } : {}),
+        ...(clubIds
+          ? { clubs: { deleteMany: {}, create: clubIds.map((clubId) => ({ clubId })) } }
+          : {}),
+      },
+      include: this.tournamentInclude,
+    });
+  }
+
+  async removeTournament(companyId: string, leagueId: string, id: string) {
+    const { count } = await this.prisma.leagueTournament.deleteMany({ where: { id, leagueId, companyId } });
+    if (!count) throw new NotFoundException('Tournament not found');
+    return { ok: true };
   }
 
   async listAnnouncements(companyId: string, leagueId: string) {

@@ -206,6 +206,7 @@ model Club {
   municipality Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
   league       League?       @relation("LeagueClubs", fields: [leagueId], references: [id], onDelete: SetNull)
   primaryLeagues League[]    @relation("ClubPrimaryLeague")
+  leagueTournamentEntries LeagueTournamentClub[]
   teams        Team[]
   players      Player[]
   /// Etapas de la salida de Firestore ya copiadas para este club ({ "stage1": "2026-10-13T…" }).
@@ -290,6 +291,7 @@ model League {
   teams        Team[]
   matches      Match[]
   announcements LeagueAnnouncement[]
+  tournaments   LeagueTournament[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -1556,4 +1558,40 @@ model StoreDocument {
   @@index([parentPath])
   @@index([clubId, collection])
   @@index([collection])
+}
+
+model LeagueTournament {
+  id          String    @id @default(cuid())
+  leagueId    String
+  companyId   String
+  name        String
+  /// regular | special (copas, amistosos, festivales)
+  kind        String    @default("regular")
+  category    String?
+  format      String?
+  description String?
+  /// draft | active | finished
+  status      String    @default("draft")
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  league League                  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  clubs  LeagueTournamentClub[]
+
+  @@index([leagueId, createdAt])
+  @@index([companyId])
+}
+
+model LeagueTournamentClub {
+  tournamentId String
+  clubId       String
+  createdAt    DateTime @default(now())
+
+  tournament LeagueTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  club       Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@id([tournamentId, clubId])
+  @@index([clubId])
 }
