@@ -30,6 +30,33 @@ export class LeaguesService {
     return league;
   }
 
+  /** Padrón de jugadores federados de los clubes afiliados: solo lectura y sin datos de contacto. */
+  async listFederatedPlayers(companyId: string, leagueId: string) {
+    await this.getById(companyId, leagueId);
+    return this.prisma.player.findMany({
+      where: { companyId, isFan: false, club: { leagueId } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        dni: true,
+        birthDate: true,
+        gender: true,
+        sport: true,
+        branch: true,
+        position: true,
+        status: true,
+        active: true,
+        hasMedicalCert: true,
+        photoUrl: true,
+        clubId: true,
+        club: { select: { id: true, name: true } },
+        team: { select: { id: true, name: true } },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+  }
+
   async listAnnouncements(companyId: string, leagueId: string) {
     await this.getById(companyId, leagueId);
     return this.prisma.leagueAnnouncement.findMany({

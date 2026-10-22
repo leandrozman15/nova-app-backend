@@ -17,6 +17,12 @@ export class LeaguesController {
     return this.leaguesService.list(requireCompanyId(req));
   }
 
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Get(':id/players')
+  listPlayers(@Req() req: unknown, @Param('id') id: string) {
+    return this.leaguesService.listFederatedPlayers(requireCompanyId(req), id);
+  }
+
   @Get(':id/announcements')
   listAnnouncements(@Req() req: unknown, @Param('id') id: string) {
     return this.leaguesService.listAnnouncements(requireCompanyId(req), id);
