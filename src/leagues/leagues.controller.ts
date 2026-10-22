@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
-import { requireCompanyId } from '../common/http/request-context';
+import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
+import { COMPANY_WIDE_ROLES, requireCompanyId } from '../common/http/request-context';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
 import { CreateLeagueDto } from './dto/create-league.dto';
@@ -54,8 +55,12 @@ export class LeaguesController {
   }
 
   @Get(':id/announcements')
-  listAnnouncements(@Req() req: unknown, @Param('id') id: string) {
-    return this.leaguesService.listAnnouncements(requireCompanyId(req), id);
+  listAnnouncements(@Req() req: unknown, @Param('id') id: string, @Query('clubId') clubId?: string) {
+    const auth = (req as RequestWithAuth).auth;
+    const role = auth?.role?.trim().toLowerCase();
+    // Los roles de club solo ven lo dirigido a su club; los de liga/empresa pueden filtrar por club.
+    const scope = role && COMPANY_WIDE_ROLES.has(role) ? clubId : (auth?.clubId ?? '__none__');
+    return this.leaguesService.listAnnouncements(requireCompanyId(req), id, scope);
   }
 
   @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')

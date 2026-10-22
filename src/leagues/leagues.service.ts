@@ -131,10 +131,15 @@ export class LeaguesService {
     return { ok: true };
   }
 
-  async listAnnouncements(companyId: string, leagueId: string) {
+  /** Con `clubId` devuelve solo lo dirigido a ese club o a todos. */
+  async listAnnouncements(companyId: string, leagueId: string, clubId?: string) {
     await this.getById(companyId, leagueId);
     return this.prisma.leagueAnnouncement.findMany({
-      where: { leagueId, companyId },
+      where: {
+        leagueId,
+        companyId,
+        ...(clubId ? { OR: [{ clubIds: { isEmpty: true } }, { clubIds: { has: clubId } }] } : {}),
+      },
       orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
       take: 100,
     });
@@ -142,8 +147,9 @@ export class LeaguesService {
 
   async createAnnouncement(companyId: string, leagueId: string, dto: CreateAnnouncementDto) {
     await this.getById(companyId, leagueId);
+    const clubIds = await this.validClubIds(companyId, leagueId, dto.clubIds ?? []);
     return this.prisma.leagueAnnouncement.create({
-      data: { leagueId, companyId, title: dto.title, body: dto.body, pinned: dto.pinned ?? false },
+      data: { leagueId, companyId, title: dto.title, body: dto.body, pinned: dto.pinned ?? false, clubIds },
     });
   }
 

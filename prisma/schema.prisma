@@ -306,6 +306,8 @@ model LeagueAnnouncement {
   title     String
   body      String
   pinned    Boolean  @default(false)
+  /// Clubes destinatarios; vacío = todos los clubes de la liga.
+  clubIds   String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

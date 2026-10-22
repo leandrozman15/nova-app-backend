@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateAnnouncementDto {
   @IsString()
@@ -14,4 +14,9 @@ export class CreateAnnouncementDto {
   @IsOptional()
   @IsBoolean()
   pinned?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  clubIds?: string[];
 }
