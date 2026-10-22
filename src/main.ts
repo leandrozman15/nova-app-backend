@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import compression from 'compression';
+import helmet from 'helmet';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
@@ -12,6 +13,8 @@ async function bootstrap() {
   // Implantación de planillas de jugadores y fotos de productos: hasta 4 MB por pedido.
   app.useBodyParser('json', { limit: '4mb' });
   // Respuestas JSON comprimidas (gzip): listas de clubes, agenda y productos pesan ~5 veces menos.
+  // Cabeceras de seguridad; CORP cross-origin porque el front en otro dominio consume la API y los medios.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(compression({ threshold: 1024 }));
 
   app.useGlobalPipes(
