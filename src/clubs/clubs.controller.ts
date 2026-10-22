@@ -16,6 +16,14 @@ export class ClubsController {
     return this.clubsService.list(requireCompanyId(req));
   }
 
+  /** Partidos de torneos de liga donde juega el club. */
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
+  @Get(':id/league-matches')
+  leagueMatches(@Req() req: unknown, @Param('id') id: string) {
+    requireClubScope(req, id);
+    return this.clubsService.leagueMatches(requireCompanyId(req), id);
+  }
+
   @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get(':id')
   getById(@Req() req: unknown, @Param('id') id: string) {

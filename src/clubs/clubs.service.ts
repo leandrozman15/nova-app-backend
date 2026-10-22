@@ -33,6 +33,21 @@ export class ClubsService {
     });
   }
 
+  async leagueMatches(companyId: string, clubId: string) {
+    await this.getById(companyId, clubId);
+    const team = { select: { id: true, name: true, clubId: true } } as const;
+    return this.prisma.match.findMany({
+      where: {
+        companyId,
+        tournamentId: { not: null },
+        OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }],
+      },
+      include: { homeTeam: team, awayTeam: team, tournament: { select: { id: true, name: true } } },
+      orderBy: { scheduledAt: 'asc' },
+      take: 300,
+    });
+  }
+
   async getById(companyId: string, id: string) {
     const club = await this.prisma.club.findFirst({
       where: { id, companyId },
