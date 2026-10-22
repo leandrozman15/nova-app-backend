@@ -5,13 +5,18 @@ import type { RequestWithAuth } from '../common/interfaces/request-with-auth.int
 import { COMPANY_WIDE_ROLES, requireCompanyId } from '../common/http/request-context';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
+import { CreateTournamentMatchDto, GenerateFixtureDto } from './dto/league-fixture.dto';
+import { LeagueFixtureService } from './league-fixture.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 import { LeaguesService } from './leagues.service';
 
 @Controller('leagues')
 export class LeaguesController {
-  constructor(private readonly leaguesService: LeaguesService) {}
+  constructor(
+    private readonly leaguesService: LeaguesService,
+    private readonly fixtureService: LeagueFixtureService,
+  ) {}
 
   @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
   @Get()
@@ -52,6 +57,36 @@ export class LeaguesController {
   @Delete(':id/tournaments/:tournamentId')
   removeTournament(@Req() req: unknown, @Param('id') id: string, @Param('tournamentId') tournamentId: string) {
     return this.leaguesService.removeTournament(requireCompanyId(req), id, tournamentId);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Get(':id/tournaments/:tid/matches')
+  listTournamentMatches(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string) {
+    return this.fixtureService.list(requireCompanyId(req), id, tid);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Post(':id/tournaments/:tid/fixture')
+  generateFixture(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string, @Body() dto: GenerateFixtureDto) {
+    return this.fixtureService.generate(requireCompanyId(req), id, tid, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Post(':id/tournaments/:tid/matches')
+  createTournamentMatch(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string, @Body() dto: CreateTournamentMatchDto) {
+    return this.fixtureService.createMatch(requireCompanyId(req), id, tid, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Delete(':id/tournaments/:tid/matches/:matchId')
+  removeTournamentMatch(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string, @Param('matchId') matchId: string) {
+    return this.fixtureService.removeMatch(requireCompanyId(req), id, tid, matchId);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Get(':id/tournaments/:tid/standings')
+  tournamentStandings(@Req() req: unknown, @Param('id') id: string, @Param('tid') tid: string) {
+    return this.fixtureService.standings(requireCompanyId(req), id, tid);
   }
 
   @Get(':id/announcements')

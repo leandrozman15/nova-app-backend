@@ -471,9 +471,12 @@ model Match {
   callupsPublishedAt DateTime?
   lineupSubmittedAt DateTime?
   notes       String?
+  tournamentId String?
+  round       Int?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  tournament LeagueTournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   league    League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   homeTeam  Team    @relation("HomeTeamMatches", fields: [homeTeamId], references: [id], onDelete: Cascade)
@@ -481,6 +484,7 @@ model Match {
   events    MatchEvent[]
   callups   MatchCallup[]
 
+  @@index([tournamentId])
   @@index([companyId])
   @@index([leagueId])
   @@index([homeTeamId])
@@ -1581,6 +1585,7 @@ model LeagueTournament {
 
   league League                  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   clubs  LeagueTournamentClub[]
+  matches Match[]
 
   @@index([leagueId, createdAt])
   @@index([companyId])
