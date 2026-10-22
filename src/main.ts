@@ -24,11 +24,16 @@ async function bootstrap() {
   );
 
   const config = app.get(ConfigService);
-  const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
+  const corsOrigin = config.get<string>('CORS_ORIGIN', '*').trim();
   const allowCredentials = corsOrigin !== '*';
+  // Admite varios orígenes separados por coma; se normaliza la barra final.
+  const origins = corsOrigin
+    .split(',')
+    .map((item) => item.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
 
   app.enableCors({
-    origin: corsOrigin,
+    origin: corsOrigin === '*' ? '*' : origins,
     credentials: allowCredentials,
   });
 
