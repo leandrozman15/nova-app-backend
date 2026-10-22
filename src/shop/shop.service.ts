@@ -93,6 +93,15 @@ export class ShopService {
     return { ok: true };
   }
 
+  /** Ids con los que el front identifica a un cliente: uid de Firebase, usuario y fichas de jugador. */
+  async customerIdentities(companyId: string, firebaseUid: string): Promise<string[]> {
+    const [users, players] = await Promise.all([
+      this.prisma.user.findMany({ where: { companyId, firebaseUid }, select: { id: true } }),
+      this.prisma.player.findMany({ where: { companyId, authUid: firebaseUid }, select: { id: true } }),
+    ]);
+    return [firebaseUid, ...users.map((item) => item.id), ...players.map((item) => item.id)];
+  }
+
   async listOrders(
     companyId: string,
     filters?: {

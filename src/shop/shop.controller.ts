@@ -1,8 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
-import { requireCompanyId } from '../common/http/request-context';
+import { COMPANY_WIDE_ROLES, requireCompanyId } from '../common/http/request-context';
+import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 import { CreateShopOrderDto } from './dto/create-shop-order.dto';
 import { CreateShopProductDto } from './dto/create-shop-product.dto';
 import { UpdateShopOrderDto } from './dto/update-shop-order.dto';
@@ -49,7 +50,7 @@ export class ShopController {
 
   @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get('orders')
-  listOrders(
+  async listOrders(
     @Req() req: unknown,
     @Query('clubId') clubId?: string,
     @Query('customerExternalId') customerExternalId?: string,
@@ -57,9 +58,35 @@ export class ShopController {
     @Query('offset') offset?: string,
     @Query('withMeta') withMeta?: string,
   ) {
-    return this.shopService.listOrders(requireCompanyId(req), {
-      clubId,
-      customerExternalId,
+    const companyId = requireCompanyId(req);
+    const auth = (req as RequestWithAuth).auth;
+    const role = auth?.role?.trim().toLowerCase() ?? '';
+    const companyWide = COMPANY_WIDE_ROLES.has(role);
+    const clubManager = role === 'club_admin' || role === 'manager';
+
+    let scopedClubId = clubId;
+    let scopedCustomer = customerExternalId;
+
+    if (!companyWide) {
+      // Todo rol de club queda limitado a su club activo.
+      if (!auth?.clubId || (clubId && clubId !== auth.clubId)) {
+        throw new ForbiddenException('Club fuera de tu contexto activo');
+      }
+      scopedClubId = auth.clubId;
+
+      // Jugadores, socios y profes solo ven sus propias órdenes.
+      if (!clubManager) {
+        const identities = await this.shopService.customerIdentities(companyId, auth.uid);
+        if (!customerExternalId || !identities.includes(customerExternalId)) {
+          throw new ForbiddenException('Solo podés consultar tus propias órdenes');
+        }
+        scopedCustomer = customerExternalId;
+      }
+    }
+
+    return this.shopService.listOrders(companyId, {
+      clubId: scopedClubId,
+      customerExternalId: scopedCustomer,
       ...parsePagination(limit, offset),
       withMeta: parseBooleanFlag(withMeta),
     });

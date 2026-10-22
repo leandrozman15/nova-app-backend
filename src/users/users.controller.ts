@@ -21,19 +21,21 @@ export class UsersController {
     return { hasAdminUsers: await this.usersService.hasAdminUsers() };
   }
 
-  @Public()
+  // Exige token de Firebase: solo la propia cuenta puede reclamar el primer admin.
+  @NoTenant()
   @Post('bootstrap-admin')
   async bootstrapAdmin(@Req() req: unknown) {
     const typedReq = req as RequestWithAuth & { body?: any };
     const body = typedReq.body ?? {};
+    const auth = typedReq.auth;
 
-    if (!body.uid) {
-      throw new UnauthorizedException('Missing user id');
+    if (!auth?.uid || !body.uid || body.uid !== auth.uid) {
+      throw new UnauthorizedException('El token no corresponde al usuario indicado');
     }
 
     return this.usersService.bootstrapFirstAdmin({
-      uid: body.uid,
-      email: body.email,
+      uid: auth.uid,
+      email: auth.email ?? body.email,
       name: body.name,
     });
   }
