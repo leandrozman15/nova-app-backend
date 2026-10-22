@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 
@@ -27,6 +28,30 @@ export class LeaguesService {
     }
 
     return league;
+  }
+
+  async listAnnouncements(companyId: string, leagueId: string) {
+    await this.getById(companyId, leagueId);
+    return this.prisma.leagueAnnouncement.findMany({
+      where: { leagueId, companyId },
+      orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+      take: 100,
+    });
+  }
+
+  async createAnnouncement(companyId: string, leagueId: string, dto: CreateAnnouncementDto) {
+    await this.getById(companyId, leagueId);
+    return this.prisma.leagueAnnouncement.create({
+      data: { leagueId, companyId, title: dto.title, body: dto.body, pinned: dto.pinned ?? false },
+    });
+  }
+
+  async removeAnnouncement(companyId: string, leagueId: string, announcementId: string) {
+    const { count } = await this.prisma.leagueAnnouncement.deleteMany({
+      where: { id: announcementId, leagueId, companyId },
+    });
+    if (!count) throw new NotFoundException('Announcement not found');
+    return { ok: true };
   }
 
   create(companyId: string, dto: CreateLeagueDto) {

@@ -289,11 +289,28 @@ model League {
   clubs        Club[]        @relation("LeagueClubs")
   teams        Team[]
   matches      Match[]
+  announcements LeagueAnnouncement[]
 
   @@index([companyId])
   @@index([companyId, name])
   @@index([clubId])
   @@index([municipalityId])
+}
+
+model LeagueAnnouncement {
+  id        String   @id @default(cuid())
+  leagueId  String
+  companyId String
+  title     String
+  body      String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
+  @@index([companyId])
 }
 
 model Team {
