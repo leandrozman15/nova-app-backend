@@ -22,6 +22,7 @@ export class MatchesService {
         league: { select: { id: true, name: true, season: true } },
         homeTeam: { select: { id: true, name: true } },
         awayTeam: { select: { id: true, name: true } },
+        suspensions: { orderBy: { suspendedAt: 'desc' as const } },
       },
       orderBy: { scheduledAt: 'desc' as const },
       skip: pagination?.skip,
@@ -59,6 +60,7 @@ export class MatchesService {
         league: true,
         homeTeam: true,
         awayTeam: true,
+        suspensions: { orderBy: { suspendedAt: 'desc' } },
         callups: {
           orderBy: { createdAt: 'asc' },
         },
@@ -124,6 +126,10 @@ export class MatchesService {
 
   async setResult(companyId: string, id: string, dto: SetMatchResultDto) {
     await this.ensureMatchExists(companyId, id);
+    const current = await this.prisma.match.findUnique({ where: { id }, select: { status: true } });
+    if (current?.status === MatchStatus.suspended) {
+      throw new BadRequestException('El partido está suspendido: reprogramalo antes de cargar el resultado');
+    }
 
     return this.prisma.match.update({
       where: { id },

@@ -10,11 +10,35 @@ import { SetMatchResultDto } from './dto/set-match-result.dto';
 import { UpdateMatchCallupStatusDto } from './dto/update-match-callup-status.dto';
 import { UpdateMatchOperationsDto } from './dto/update-match-operations.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
+import { RescheduleMatchDto, SuspendMatchDto } from './dto/suspend-match.dto';
+import { MatchSuspensionsService } from './match-suspensions.service';
 import { MatchesService } from './matches.service';
+import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 
 @Controller('matches')
 export class MatchesController {
-  constructor(private readonly matchesService: MatchesService) {}
+  constructor(
+    private readonly matchesService: MatchesService,
+    private readonly suspensions: MatchSuspensionsService,
+  ) {}
+
+  @Roles('admin', 'manager')
+  @Post(':id/suspend')
+  suspend(@Req() req: unknown, @Param('id') id: string, @Body() dto: SuspendMatchDto) {
+    return this.suspensions.suspend(requireCompanyId(req), id, dto, req as RequestWithAuth);
+  }
+
+  @Roles('admin', 'manager')
+  @Post(':id/suspensions/:sid/reschedule')
+  reschedule(@Req() req: unknown, @Param('id') id: string, @Param('sid') sid: string, @Body() dto: RescheduleMatchDto) {
+    return this.suspensions.reschedule(requireCompanyId(req), id, sid, dto, req as RequestWithAuth);
+  }
+
+  @Roles('admin', 'manager')
+  @Post(':id/suspensions/:sid/lift')
+  lift(@Req() req: unknown, @Param('id') id: string, @Param('sid') sid: string) {
+    return this.suspensions.lift(requireCompanyId(req), id, sid, req as RequestWithAuth);
+  }
 
   @Roles('admin', 'manager', 'coach')
   @Get()

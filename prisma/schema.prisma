@@ -17,6 +17,7 @@ enum MatchStatus {
   live
   played
   canceled
+  suspended
 }
 
 enum MatchEventType {
@@ -484,6 +485,8 @@ model Match {
   bracketSlot Int?
   homePens    Int?
   awayPens    Int?
+  /// Fecha original cuando el partido fue reprogramado por una suspensión.
+  originalScheduledAt DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -494,6 +497,7 @@ model Match {
   awayTeam  Team    @relation("AwayTeamMatches", fields: [awayTeamId], references: [id], onDelete: Cascade)
   events    MatchEvent[]
   callups   MatchCallup[]
+  suspensions MatchSuspension[]
 
   @@index([tournamentId])
   @@index([companyId])
@@ -501,6 +505,30 @@ model Match {
   @@index([homeTeamId])
   @@index([awayTeamId])
   @@index([companyId, status])
+}
+
+/// Suspensión de un partido por un club: de todas sus categorías (categories vacío) o solo de algunas.
+model MatchSuspension {
+  id           String    @id @default(cuid())
+  companyId    String
+  matchId      String
+  clubId       String?
+  categories   String[]
+  reason       String
+  suspendedBy  String?
+  suspendedAt  DateTime  @default(now())
+  /// open | rescheduled | lifted
+  state        String    @default("open")
+  newDate      DateTime?
+  newVenue     String?
+  rescheduleNote String?
+  resolvedAt   DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([companyId, state])
 }
 
 model MatchCallup {

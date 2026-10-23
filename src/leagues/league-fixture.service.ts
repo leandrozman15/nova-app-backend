@@ -67,6 +67,7 @@ export class LeagueFixtureService {
   private readonly matchInclude = {
     homeTeam: { select: { id: true, name: true, clubId: true } },
     awayTeam: { select: { id: true, name: true, clubId: true } },
+    suspensions: true,
   } as const;
 
   async list(companyId: string, leagueId: string, tournamentId: string) {
@@ -271,6 +272,9 @@ export class LeagueFixtureService {
   async setResult(companyId: string, leagueId: string, tournamentId: string, matchId: string, dto: SetTournamentResultDto) {
     const match = await this.prisma.match.findFirst({ where: { id: matchId, companyId, leagueId, tournamentId } });
     if (!match) throw new NotFoundException('Match not found');
+    if (match.status === MatchStatus.suspended) {
+      throw new BadRequestException('El partido está suspendido: reprogramalo antes de cargar el resultado');
+    }
 
     const knockout = match.stage != null && KNOCKOUT_STAGES.includes(match.stage);
     const tied = dto.homeScore === dto.awayScore;
