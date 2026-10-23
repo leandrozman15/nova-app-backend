@@ -97,12 +97,13 @@ export class LeaguesService {
     });
   }
 
-  /** Solo admite clubes afiliados a la liga. */
+  /** Solo admite clubes afiliados a la liga o, si es una organización, a sus sub-ligas. */
   private async validClubIds(companyId: string, leagueId: string, clubIds: string[]) {
     const unique = Array.from(new Set(clubIds));
     if (unique.length === 0) return [];
+    const leagueIds = await this.scopeIds(companyId, leagueId);
     const found = await this.prisma.club.findMany({
-      where: { id: { in: unique }, companyId, leagueId },
+      where: { id: { in: unique }, companyId, leagueId: { in: leagueIds } },
       select: { id: true },
     });
     if (found.length !== unique.length) {
@@ -167,10 +168,12 @@ export class LeaguesService {
 
   /** Con `clubId` devuelve solo lo dirigido a ese club o a todos. */
   async listAnnouncements(companyId: string, leagueId: string, clubId?: string) {
-    await this.getById(companyId, leagueId);
+    const league = await this.getById(companyId, leagueId);
+    // Un club también recibe los comunicados de la organización de la que depende su liga.
+    const sources = clubId && league.parentId ? [leagueId, league.parentId] : [leagueId];
     return this.prisma.leagueAnnouncement.findMany({
       where: {
-        leagueId,
+        leagueId: { in: sources },
         companyId,
         ...(clubId ? { OR: [{ clubIds: { isEmpty: true } }, { clubIds: { has: clubId } }] } : {}),
       },
