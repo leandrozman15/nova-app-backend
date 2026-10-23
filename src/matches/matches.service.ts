@@ -20,8 +20,8 @@ export class MatchesService {
       where,
       include: {
         league: { select: { id: true, name: true, season: true } },
-        homeTeam: { select: { id: true, name: true } },
-        awayTeam: { select: { id: true, name: true } },
+        homeTeam: { select: { id: true, name: true, clubId: true } },
+        awayTeam: { select: { id: true, name: true, clubId: true } },
         suspensions: { orderBy: { suspendedAt: 'desc' as const } },
       },
       orderBy: { scheduledAt: 'desc' as const },
