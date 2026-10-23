@@ -281,9 +281,12 @@ model League {
   companyId String
   clubId    String?
   municipalityId String?
+  parentId  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  parent       League?       @relation("LeagueHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  subLeagues   League[]      @relation("LeagueHierarchy")
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club         Club?         @relation("ClubPrimaryLeague", fields: [clubId], references: [id], onDelete: SetNull)
   municipality Municipality? @relation(fields: [municipalityId], references: [id], onDelete: SetNull)
@@ -297,6 +300,7 @@ model League {
   @@index([companyId, name])
   @@index([clubId])
   @@index([municipalityId])
+  @@index([parentId])
 }
 
 model LeagueAnnouncement {

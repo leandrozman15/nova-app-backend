@@ -8,6 +8,7 @@ export interface AuthContext {
   role?: string;
   companyId?: string;
   clubId?: string;
+  leagueId?: string;
   roles?: string[];
 }
 

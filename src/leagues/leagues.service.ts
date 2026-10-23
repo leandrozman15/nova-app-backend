@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
+import { CreateSubLeagueDto } from './dto/create-sub-league.dto';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
 
@@ -10,9 +11,9 @@ import { UpdateLeagueDto } from './dto/update-league.dto';
 export class LeaguesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(companyId: string) {
+  list(companyId: string, ownLeagueId?: string) {
     return this.prisma.league.findMany({
-      where: { companyId },
+      where: { companyId, ...(ownLeagueId ? { OR: [{ id: ownLeagueId }, { parentId: ownLeagueId }] } : {}) },
       include: { club: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -31,11 +32,36 @@ export class LeaguesService {
     return league;
   }
 
-  /** Padrón de jugadores federados de los clubes afiliados: solo lectura y sin datos de contacto. */
-  async listFederatedPlayers(companyId: string, leagueId: string) {
+  /** La liga y sus sub-ligas. */
+  private async scopeIds(companyId: string, leagueId: string) {
+    const subs = await this.prisma.league.findMany({ where: { companyId, parentId: leagueId }, select: { id: true } });
+    return [leagueId, ...subs.map((s) => s.id)];
+  }
+
+  async listSubLeagues(companyId: string, leagueId: string) {
     await this.getById(companyId, leagueId);
+    const subs = await this.prisma.league.findMany({
+      where: { companyId, parentId: leagueId },
+      include: { _count: { select: { clubs: true, tournaments: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return subs.map(({ _count, ...league }) => ({ ...league, clubCount: _count.clubs, tournamentCount: _count.tournaments }));
+  }
+
+  async createSubLeague(companyId: string, parentId: string, dto: CreateSubLeagueDto) {
+    const parent = await this.getById(companyId, parentId);
+    if (parent.parentId) throw new BadRequestException('Una sub-liga no puede tener sub-ligas');
+    return this.prisma.league.create({
+      data: { companyId, parentId, name: dto.name, season: dto.season ?? parent.season, municipalityId: parent.municipalityId },
+    });
+  }
+
+  /** Padrón de jugadores federados de los clubes afiliados: solo lectura y sin datos de contacto. */
+  async listFederatedPlayers(companyId: string, leagueId: string, includeSub = false) {
+    await this.getById(companyId, leagueId);
+    const leagueIds = includeSub ? await this.scopeIds(companyId, leagueId) : [leagueId];
     return this.prisma.player.findMany({
-      where: { companyId, isFan: false, club: { leagueId } },
+      where: { companyId, isFan: false, club: { leagueId: { in: leagueIds } } },
       select: {
         id: true,
         firstName: true,
@@ -197,6 +223,8 @@ export class LeaguesService {
 
   async remove(companyId: string, id: string) {
     await this.getById(companyId, id);
+    const subs = await this.prisma.league.count({ where: { companyId, parentId: id } });
+    if (subs > 0) throw new BadRequestException('Eliminá primero las sub-ligas de esta liga');
 
     await this.prisma.league.delete({ where: { id } });
 

@@ -49,6 +49,7 @@ export class FirebaseAuthGuard implements CanActivate {
         companyId:
           typeof decoded.companyId === 'string' ? decoded.companyId : undefined,
         clubId: typeof decoded.clubId === 'string' ? decoded.clubId : undefined,
+        leagueId: typeof decoded.leagueId === 'string' ? decoded.leagueId : undefined,
         role: typeof decoded.role === 'string' ? decoded.role : undefined,
         roles: Array.isArray(decoded.roles)
           ? decoded.roles.filter(

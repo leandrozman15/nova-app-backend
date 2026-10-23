@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
@@ -9,9 +9,12 @@ import { AdvanceTournamentDto, CreateTournamentMatchDto, GenerateFixtureDto, Set
 import { LeagueFixtureService } from './league-fixture.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
+import { LeagueScopeGuard } from './league-scope.guard';
+import { CreateSubLeagueDto } from './dto/create-sub-league.dto';
 import { LeaguesService } from './leagues.service';
 
 @Controller('leagues')
+@UseGuards(LeagueScopeGuard)
 export class LeaguesController {
   constructor(
     private readonly leaguesService: LeaguesService,
@@ -21,13 +24,25 @@ export class LeaguesController {
   @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
   @Get()
   list(@Req() req: unknown) {
-    return this.leaguesService.list(requireCompanyId(req));
+    return this.leaguesService.list(requireCompanyId(req), (req as RequestWithAuth).auth?.leagueId);
   }
 
   @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
   @Get(':id/players')
-  listPlayers(@Req() req: unknown, @Param('id') id: string) {
-    return this.leaguesService.listFederatedPlayers(requireCompanyId(req), id);
+  listPlayers(@Req() req: unknown, @Param('id') id: string, @Query('scope') scope?: string) {
+    return this.leaguesService.listFederatedPlayers(requireCompanyId(req), id, scope === 'all');
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Get(':id/sub-leagues')
+  listSubLeagues(@Req() req: unknown, @Param('id') id: string) {
+    return this.leaguesService.listSubLeagues(requireCompanyId(req), id);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Post(':id/sub-leagues')
+  createSubLeague(@Req() req: unknown, @Param('id') id: string, @Body() dto: CreateSubLeagueDto) {
+    return this.leaguesService.createSubLeague(requireCompanyId(req), id, dto);
   }
 
   @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
