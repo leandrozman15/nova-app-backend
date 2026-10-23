@@ -6,6 +6,7 @@ import {
   AdvanceTournamentDto,
   CreateTournamentMatchDto,
   GenerateFixtureDto,
+  SetCategoryResultDto,
   SetTournamentResultDto,
 } from './dto/league-fixture.dto';
 import {
@@ -68,6 +69,7 @@ export class LeagueFixtureService {
     homeTeam: { select: { id: true, name: true, clubId: true } },
     awayTeam: { select: { id: true, name: true, clubId: true } },
     suspensions: true,
+    categoryResults: true,
   } as const;
 
   async list(companyId: string, leagueId: string, tournamentId: string) {
@@ -295,6 +297,46 @@ export class LeagueFixtureService {
     });
   }
 
+  async setCategoryResult(
+    companyId: string,
+    leagueId: string,
+    tournamentId: string,
+    matchId: string,
+    category: string,
+    dto: SetCategoryResultDto,
+  ) {
+    const match = await this.prisma.match.findFirst({ where: { id: matchId, companyId, leagueId, tournamentId } });
+    if (!match) throw new NotFoundException('Match not found');
+    const name = category.trim();
+    if (!name) throw new BadRequestException('Categoría inválida');
+
+    const open = await this.prisma.matchSuspension.findFirst({
+      where: { matchId, state: 'open', OR: [{ categories: { isEmpty: true } }, { categories: { has: name } }] },
+    });
+    if (open) throw new BadRequestException('La categoría está suspendida: reprogramala antes de cargar el resultado');
+
+    let homeScore = dto.homeScore ?? 0;
+    let awayScore = dto.awayScore ?? 0;
+    if (dto.outcome === 'walkover_home') { homeScore = dto.walkoverScore ?? 3; awayScore = 0; }
+    else if (dto.outcome === 'walkover_away') { homeScore = 0; awayScore = dto.walkoverScore ?? 3; }
+    else if (dto.homeScore == null || dto.awayScore == null) throw new BadRequestException('Faltan los goles');
+
+    const data = { homeScore, awayScore, outcome: dto.outcome, note: dto.note ?? null };
+    await this.prisma.matchCategoryResult.upsert({
+      where: { matchId_category: { matchId, category: name } },
+      create: { companyId, matchId, category: name, ...data },
+      update: data,
+    });
+    return this.prisma.match.findUniqueOrThrow({ where: { id: matchId }, include: this.matchInclude });
+  }
+
+  async removeCategoryResult(companyId: string, leagueId: string, tournamentId: string, matchId: string, category: string) {
+    const match = await this.prisma.match.findFirst({ where: { id: matchId, companyId, leagueId, tournamentId } });
+    if (!match) throw new NotFoundException('Match not found');
+    await this.prisma.matchCategoryResult.deleteMany({ where: { matchId, category } });
+    return this.prisma.match.findUniqueOrThrow({ where: { id: matchId }, include: this.matchInclude });
+  }
+
   async createMatch(companyId: string, leagueId: string, tournamentId: string, dto: CreateTournamentMatchDto) {
     const t = await this.tournament(companyId, leagueId, tournamentId);
     if (dto.homeClubId === dto.awayClubId) throw new BadRequestException('Los equipos deben ser distintos');
@@ -346,6 +388,18 @@ export class LeagueFixtureService {
       all.filter((m) => (m.stage === 'league' || m.stage === null) && m.status === MatchStatus.played),
     );
 
-    return { tournamentId, formatType: t.formatType, table: t.formatType === 'league' ? table : [], groups };
+    const byCategory = new Map<string, { homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number }[]>();
+    for (const m of all) {
+      for (const r of m.categoryResults) {
+        const list = byCategory.get(r.category) ?? [];
+        list.push({ homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore });
+        byCategory.set(r.category, list);
+      }
+    }
+    const categories = Array.from(byCategory.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([category, results]) => ({ category, table: buildTable(teams, results) }));
+
+    return { tournamentId, formatType: t.formatType, table: t.formatType === 'league' ? table : [], groups, categories };
   }
 }

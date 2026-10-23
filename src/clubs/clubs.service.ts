@@ -42,7 +42,7 @@ export class ClubsService {
         tournamentId: { not: null },
         OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }],
       },
-      include: { homeTeam: team, awayTeam: team, tournament: { select: { id: true, name: true } }, suspensions: true },
+      include: { homeTeam: team, awayTeam: team, tournament: { select: { id: true, name: true } }, suspensions: true, categoryResults: true },
       orderBy: { scheduledAt: 'asc' },
       take: 300,
     });

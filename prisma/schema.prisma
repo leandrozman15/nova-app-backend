@@ -498,6 +498,7 @@ model Match {
   events    MatchEvent[]
   callups   MatchCallup[]
   suspensions MatchSuspension[]
+  categoryResults MatchCategoryResult[]
 
   @@index([tournamentId])
   @@index([companyId])
@@ -529,6 +530,26 @@ model MatchSuspension {
 
   @@index([matchId])
   @@index([companyId, state])
+}
+
+/// Resultado de una categoría dentro de un partido de liga (la tabla se calcula por categoría).
+model MatchCategoryResult {
+  id        String   @id @default(cuid())
+  companyId String
+  matchId   String
+  category  String
+  homeScore Int      @default(0)
+  awayScore Int      @default(0)
+  /// played | walkover_home (gana el local, el visitante no presentó equipo) | walkover_away
+  outcome   String   @default("played")
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, category])
+  @@index([companyId])
 }
 
 model MatchCallup {

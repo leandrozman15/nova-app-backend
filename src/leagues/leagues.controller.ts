@@ -5,7 +5,7 @@ import type { RequestWithAuth } from '../common/interfaces/request-with-auth.int
 import { COMPANY_WIDE_ROLES, requireCompanyId } from '../common/http/request-context';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { CreateLeagueTournamentDto, UpdateLeagueTournamentDto } from './dto/league-tournament.dto';
-import { AdvanceTournamentDto, CreateTournamentMatchDto, GenerateFixtureDto, SetTournamentResultDto } from './dto/league-fixture.dto';
+import { AdvanceTournamentDto, CreateTournamentMatchDto, GenerateFixtureDto, SetCategoryResultDto, SetTournamentResultDto } from './dto/league-fixture.dto';
 import { LeagueFixtureService } from './league-fixture.service';
 import { CreateLeagueDto } from './dto/create-league.dto';
 import { UpdateLeagueDto } from './dto/update-league.dto';
@@ -120,6 +120,31 @@ export class LeaguesController {
     @Body() dto: SetTournamentResultDto,
   ) {
     return this.fixtureService.setResult(requireCompanyId(req), id, tid, matchId, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Patch(':id/tournaments/:tid/matches/:matchId/categories/:category')
+  setCategoryResult(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('tid') tid: string,
+    @Param('matchId') matchId: string,
+    @Param('category') category: string,
+    @Body() dto: SetCategoryResultDto,
+  ) {
+    return this.fixtureService.setCategoryResult(requireCompanyId(req), id, tid, matchId, category, dto);
+  }
+
+  @Roles('admin', 'fed_admin', 'municipal_secretary', 'municipal_admin', 'league_admin', 'manager')
+  @Delete(':id/tournaments/:tid/matches/:matchId/categories/:category')
+  removeCategoryResult(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('tid') tid: string,
+    @Param('matchId') matchId: string,
+    @Param('category') category: string,
+  ) {
+    return this.fixtureService.removeCategoryResult(requireCompanyId(req), id, tid, matchId, category);
   }
 
   @Get(':id/announcements')

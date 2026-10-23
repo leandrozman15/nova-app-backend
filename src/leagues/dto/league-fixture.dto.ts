@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsDateString, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class GenerateFixtureDto {
   /** 1 = solo ida, 2 = ida y vuelta. */
@@ -90,4 +90,32 @@ export class CreateTournamentMatchDto {
   @IsString()
   @MaxLength(160)
   venue?: string;
+}
+
+export class SetCategoryResultDto {
+  /** played = se jugó; walkover_home = gana el local porque el visitante no presentó equipo; walkover_away = al revés. */
+  @IsIn(['played', 'walkover_home', 'walkover_away'])
+  outcome!: 'played' | 'walkover_home' | 'walkover_away';
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  homeScore?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  awayScore?: number;
+
+  /** Goles a favor del ganador por W.O. (por defecto 3, perdedor 0). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  walkoverScore?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
 }
