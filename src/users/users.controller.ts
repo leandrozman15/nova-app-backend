@@ -77,6 +77,7 @@ export class UsersController {
       uid: typedReq.auth.uid,
       companyId: typedReq.companyId,
       clubId: typedReq.auth.clubId,
+      leagueId: typedReq.auth.leagueId,
     });
   }
 

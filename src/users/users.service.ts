@@ -18,6 +18,7 @@ export type ProvisionProfileActor = {
   uid: string;
   companyId: string;
   clubId?: string;
+  leagueId?: string;
 };
 
 const GLOBAL_ROLES = new Set([
@@ -364,7 +365,7 @@ export class UsersService {
       input.clubId
         ? this.prisma.club.findUnique({
             where: { id: input.clubId },
-            select: { id: true, companyId: true },
+            select: { id: true, companyId: true, leagueId: true },
           })
         : Promise.resolve(null),
       actor
@@ -394,6 +395,7 @@ export class UsersService {
         input.clubId,
         normalizedRole,
       );
+      await this.assertWithinActorLeague(actor, input, normalizedRole, targetClub?.leagueId);
     }
 
     const email =
@@ -460,6 +462,26 @@ export class UsersService {
       claims,
     );
     return { ok: true, userId: user.id };
+  }
+
+  /** Un admin de sub-liga no puede crear perfiles fuera de su liga (ni subir a administrador de la organización). */
+  private async assertWithinActorLeague(
+    actor: ProvisionProfileActor,
+    input: { leagueId?: string; clubId?: string },
+    role: string,
+    clubLeagueId?: string | null,
+  ) {
+    if (!actor.leagueId) return;
+    const inScope = async (leagueId?: string | null) => {
+      if (!leagueId) return false;
+      if (leagueId === actor.leagueId) return true;
+      const league = await this.prisma.league.findUnique({ where: { id: leagueId }, select: { parentId: true } });
+      return league?.parentId === actor.leagueId;
+    };
+    const allowed = input.clubId
+      ? await inScope(clubLeagueId)
+      : role === 'league_admin' && (await inScope(input.leagueId));
+    if (!allowed) throw new ForbiddenException('Perfil fuera del alcance de tu liga');
   }
 
   private async assertActorCanProvision(
