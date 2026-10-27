@@ -52,14 +52,26 @@ export class LeagueFixtureService {
     return t;
   }
 
-  /** Cada club participa con un equipo propio de la liga (se crea si no existe). */
-  private async teamsByClub(companyId: string, leagueId: string, clubs: { id: string; name: string }[]) {
+  /**
+   * Cada club participa con un equipo propio de la liga (se crea si no existe).
+   * Si el torneo tiene categoría/división, el equipo es propio de esa categoría
+   * ("Club X · Sub 14"), así los torneos en paralelo no comparten plantel ni convocatorias.
+   */
+  private async teamsByClub(
+    companyId: string,
+    leagueId: string,
+    clubs: { id: string; name: string }[],
+    category?: string | null,
+  ) {
     const map = new Map<string, string>();
+    const cat = category?.trim() || null;
     for (const club of clubs) {
-      const existing = await this.prisma.team.findFirst({ where: { companyId, clubId: club.id, leagueId } });
+      const existing = await this.prisma.team.findFirst({ where: { companyId, clubId: club.id, leagueId, category: cat } });
       const team =
         existing ??
-        (await this.prisma.team.create({ data: { companyId, clubId: club.id, leagueId, name: club.name } }));
+        (await this.prisma.team.create({
+          data: { companyId, clubId: club.id, leagueId, category: cat, name: cat ? `${club.name} · ${cat}` : club.name },
+        }));
       map.set(club.id, team.id);
     }
     return map;
@@ -95,7 +107,7 @@ export class LeagueFixtureService {
     if (played > 0) throw new BadRequestException('Hay partidos jugados o en curso: no se puede regenerar');
 
     const clubs = t.clubs.map((c) => c.club);
-    const teams = await this.teamsByClub(companyId, leagueId, clubs);
+    const teams = await this.teamsByClub(companyId, leagueId, clubs, t.category);
     const teamOf = (clubId: string) => teams.get(clubId) as string;
     const start = new Date(dto.startAt).getTime();
     const at = (round: number) => new Date(start + (round - 1) * dto.intervalDays * DAY_MS);
@@ -166,7 +178,7 @@ export class LeagueFixtureService {
     }
 
     const seededClubs = t.clubs.filter((c) => c.seed != null).sort((a, b) => (a.seed as number) - (b.seed as number));
-    const teams = await this.teamsByClub(companyId, leagueId, seededClubs.map((c) => c.club));
+    const teams = await this.teamsByClub(companyId, leagueId, seededClubs.map((c) => c.club), t.category);
     const seeds = seededClubs.map((c) => teams.get(c.clubId) as string);
 
     const round = Math.max(...knockout.map((m) => m.round ?? 1));
@@ -348,6 +360,7 @@ export class LeagueFixtureService {
       companyId,
       leagueId,
       t.clubs.map((c) => c.club).filter((c) => c.id === dto.homeClubId || c.id === dto.awayClubId),
+      t.category,
     );
     return this.prisma.match.create({
       data: {
@@ -379,8 +392,10 @@ export class LeagueFixtureService {
     });
 
     const groups = this.groupTables(all.filter((m) => m.stage === 'group'));
+    // Equipos que realmente juegan este torneo (sirve tanto para equipos por categoría como para los históricos).
+    const teamIds = Array.from(new Set(all.flatMap((m) => [m.homeTeamId, m.awayTeamId])));
     const teams = await this.prisma.team.findMany({
-      where: { companyId, leagueId, clubId: { in: t.clubs.map((c) => c.clubId) } },
+      where: { companyId, leagueId, id: { in: teamIds } },
       select: { id: true, name: true },
     });
     const table = buildTable(
