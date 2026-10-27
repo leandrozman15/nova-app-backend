@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { dniHash } from '../common/pii-crypto';
 import { todayIn } from '../bookings/booking-time';
 import { AuditService, type AuditActor } from '../platform/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -106,7 +107,10 @@ export class PlayerImportService {
 
     const [byDni, byEmail] = await Promise.all([
       this.prisma.player.findMany({
-        where: { companyId: club.companyId, dni: { in: dnis } },
+        where: {
+          companyId: club.companyId,
+          dniHash: { in: dnis.flatMap((dni) => dniHash(dni) ?? []) },
+        },
         select: { dni: true, firstName: true, lastName: true, clubId: true },
       }),
       emails.length
@@ -117,7 +121,9 @@ export class PlayerImportService {
         : Promise.resolve([] as Array<{ email: string | null }>),
     ]);
 
-    const known = new Map(byDni.map((player) => [player.dni, player]));
+    const known = new Map(
+      byDni.map((player) => [(player.dni ?? '').replace(/\D/g, ''), player]),
+    );
     const takenEmails = new Set(
       byEmail.map((player) => (player.email ?? '').toLowerCase()),
     );

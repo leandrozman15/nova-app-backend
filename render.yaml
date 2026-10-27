@@ -18,6 +18,11 @@ services:
         value: "1"
       - key: DATABASE_URL
         sync: false
+      # Clave AES-256 de los datos personales de jugadores/socios (32 bytes en base64:
+      # `openssl rand -base64 32`). Guardala también fuera de Render: sin ella los datos
+      # cifrados no se pueden recuperar. No la cambies sin migrar los datos.
+      - key: PII_ENCRYPTION_KEY
+        sync: false
       - key: CORS_ORIGIN
         sync: false
       - key: FIREBASE_PROJECT_ID
