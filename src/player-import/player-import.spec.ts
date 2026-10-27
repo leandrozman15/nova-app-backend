@@ -28,6 +28,8 @@ const base = {
   category: 'sub 15',
 };
 
+process.env.PII_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString('base64');
+
 describe('reglas de la implantación', () => {
   it('parses the usual birth date formats and Excel serials', () => {
     expect(parseBirthDate('03/05/2011')).toBe('2011-05-03');

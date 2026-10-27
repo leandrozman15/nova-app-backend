@@ -57,6 +57,8 @@ describe('padrón: forma de la ficha', () => {
       firstName: 'Ana',
       lastName: 'Paz',
       dni: '1',
+      dniHash: null,
+      birthDateEnc: null,
       position: null,
       birthDate: new Date('2011-05-03T12:00:00Z'),
       phone: null,

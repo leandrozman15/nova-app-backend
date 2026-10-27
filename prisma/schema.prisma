@@ -354,9 +354,13 @@ model Player {
   photoUrl           String?
   firstName          String
   lastName           String
+  /// Cifrado (AES-256-GCM, ver src/common/pii-crypto.ts). La búsqueda/unicidad va por dniHash.
   dni                String?
+  dniHash            String?
   position           String?
+  /// Legado: queda en null; la fecha real vive cifrada en birthDateEnc.
   birthDate          DateTime?
+  birthDateEnc       String?
   phone              String?
   address            String?
   locality           String?
@@ -411,7 +415,7 @@ model Player {
   @@index([teamId])
   @@index([membershipPlanId])
   @@index([clubId, divisionId])
-  @@unique([companyId, dni])
+  @@unique([companyId, dniHash])
 }
 
 model Member {
@@ -421,8 +425,12 @@ model Member {
   photoUrl           String?
   firstName          String
   lastName           String
+  /// Cifrado (AES-256-GCM, ver src/common/pii-crypto.ts). La búsqueda/unicidad va por dniHash.
   dni                String?
+  dniHash            String?
+  /// Legado: queda en null; la fecha real vive cifrada en birthDateEnc.
   birthDate          DateTime?
+  birthDateEnc       String?
   phone              String?
   address            String?
   locality           String?
@@ -457,7 +465,7 @@ model Member {
   @@index([authUid])
   @@index([membershipPlanId])
   @@index([isFan])
-  @@unique([companyId, dni])
+  @@unique([companyId, dniHash])
 }
 
 model Match {
