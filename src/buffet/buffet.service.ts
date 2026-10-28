@@ -11,6 +11,7 @@ import {
   UpdateBuffetDto,
   UpdateProductDto,
 } from './dto/buffet.dto';
+import { toPublicMenu } from './buffet.logic';
 import { BuffetMode, expectedCash, saleTotal, treasuryAmountForClose, treasuryCategory } from './buffet.logic';
 
 const num = (d: Prisma.Decimal | number | null | undefined) => (d == null ? 0 : Number(d));
@@ -33,6 +34,28 @@ export class BuffetService {
     const existing = await this.prisma.buffet.findUnique({ where: { clubId } });
     if (existing) return existing;
     return this.prisma.buffet.create({ data: { companyId, clubId } });
+  }
+
+  /** Carta de solo lectura para atletas, entrenadores, coordinadores y directores (sin costos ni stock). */
+  async publicMenu(companyId: string, clubId: string) {
+    const club = await this.prisma.club.findFirst({ where: { id: clubId, companyId }, select: { id: true, name: true } });
+    if (!club) throw new NotFoundException('Club no encontrado');
+    const buffet = await this.prisma.buffet.findUnique({ where: { clubId } });
+    if (!buffet || !buffet.active) return null;
+    const [products, openSession] = await Promise.all([
+      this.prisma.buffetProduct.findMany({ where: { companyId, clubId, active: true } }),
+      this.prisma.buffetCashSession.findFirst({ where: { companyId, clubId, status: 'open' }, select: { id: true } }),
+    ]);
+    const items = toPublicMenu(products);
+    if (items.length === 0) return null;
+    return {
+      clubId,
+      clubName: club.name,
+      buffetName: buffet.name,
+      concessionaire: buffet.concessionaire ?? null,
+      open: !!openSession,
+      products: items,
+    };
   }
 
   async updateBuffet(companyId: string, clubId: string, dto: UpdateBuffetDto) {
