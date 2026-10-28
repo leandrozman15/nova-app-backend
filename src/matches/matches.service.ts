@@ -14,6 +14,45 @@ import { UpdateMatchDto } from './dto/update-match.dto';
 export class MatchesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async clubFeed(companyId: string, clubId: string) {
+    const clubWhere = {
+      companyId,
+      OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }],
+    };
+    const select = {
+      id: true,
+      scheduledAt: true,
+      status: true,
+      homeScore: true,
+      awayScore: true,
+      venue: true,
+      label: true,
+      round: true,
+      homeTeam: { select: { id: true, name: true, clubId: true } },
+      awayTeam: { select: { id: true, name: true, clubId: true } },
+      tournament: { select: { id: true, name: true } },
+    } as const;
+    // Un partido "programado" sigue siendo próximo hasta 3 h después de su horario.
+    const since = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+    const [live, upcoming, recent] = await Promise.all([
+      this.prisma.match.findMany({ where: { ...clubWhere, status: MatchStatus.live }, select, orderBy: { scheduledAt: 'asc' } }),
+      this.prisma.match.findMany({
+        where: { ...clubWhere, status: MatchStatus.scheduled, scheduledAt: { gte: since } },
+        select,
+        orderBy: { scheduledAt: 'asc' },
+        take: 15,
+      }),
+      this.prisma.match.findMany({
+        where: { ...clubWhere, status: MatchStatus.played },
+        select,
+        orderBy: { scheduledAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+    return { live, upcoming, recent };
+  }
+
   async list(companyId: string, pagination?: { skip?: number; take?: number; withMeta?: boolean }) {
     const where = { companyId };
     const baseQuery = {
