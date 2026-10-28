@@ -103,6 +103,12 @@ export class GuardianChildrenController {
     return this.fees.listChildren((req as RequestWithAuth).auth!);
   }
 
+  /** En vivo, próximos y últimos partidos de los clubes de mis hijos. */
+  @Get('club-matches')
+  clubMatches(@Req() req: unknown) {
+    return this.fees.clubMatchesForGuardian((req as RequestWithAuth).auth!);
+  }
+
   @Get(':playerId/payments')
   payments(@Req() req: unknown, @Param('playerId') playerId: string) {
     return this.fees.listChildFees((req as RequestWithAuth).auth!, playerId);
