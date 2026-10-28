@@ -48,6 +48,7 @@ export const norm = (s: string | null | undefined) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+type TournamentMatchRow = { tournamentId: string | null; homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number; status: string };
 type Played = { homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number; status: string };
 
 /** Tabla por puntos (3/1/0), diferencia de gol y goles a favor. Incluye a todos los equipos del torneo. */
@@ -108,14 +109,14 @@ export async function buildRivalCards(
           where: { tournamentId: { in: tournamentIds }, OR: [{ stage: null }, { stage: { notIn: ['knockout', 'third_place'] } }] },
           select: { tournamentId: true, homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true, status: true },
         })
-      : Promise.resolve([]),
+      : Promise.resolve([] as TournamentMatchRow[]),
   ]);
 
   const clubById = new Map(clubs.map((c) => [c.id, c]));
   const opponents = opponentDocs.map((d) => (d.data ?? {}) as Record<string, unknown>);
   const tables = new Map<string, ReturnType<typeof buildTable>>();
   for (const tid of tournamentIds) {
-    tables.set(tid, buildTable(tournamentMatches.filter((m) => m.tournamentId === tid) as Played[]));
+    tables.set(tid, buildTable(tournamentMatches.filter((m) => m.tournamentId === tid)));
   }
 
   /** Datos de un club: la ficha cargada en "Clubes rivales" tiene prioridad sobre la del club en la plataforma. */
