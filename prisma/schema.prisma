@@ -1783,6 +1783,8 @@ model BuffetProduct {
   stock     Int      @default(0)
   minStock  Int      @default(0)
   trackStock Boolean @default(true)
+  /// Foto del producto para el punto de venta (data URL chica o https).
+  imageUrl  String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

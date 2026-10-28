@@ -68,6 +68,7 @@ export class BuffetService {
           stock: dto.stock ?? 0,
           minStock: dto.minStock ?? 0,
           trackStock: dto.trackStock ?? true,
+          imageUrl: dto.imageUrl ?? null,
         },
       });
       if ((dto.stock ?? 0) > 0) {

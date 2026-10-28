@@ -13,10 +13,15 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
 import { BUFFET_MODES, PAYMENT_METHODS } from '../buffet.logic';
+
+/** Foto chica (data URL webp/jpeg/png) o URL https. */
+export const PRODUCT_IMAGE_REGEX = /^(data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+|https:\/\/\S+)$/;
+export const PRODUCT_IMAGE_MAX = 150_000;
 
 export class UpdateBuffetDto {
   @IsOptional() @IsString() @MaxLength(80) name?: string;
@@ -35,6 +40,7 @@ export class CreateProductDto {
   @IsOptional() @IsInt() @Min(0) stock?: number;
   @IsOptional() @IsInt() @Min(0) minStock?: number;
   @IsOptional() @IsBoolean() trackStock?: boolean;
+  @IsOptional() @IsString() @MaxLength(PRODUCT_IMAGE_MAX) @Matches(PRODUCT_IMAGE_REGEX) imageUrl?: string;
 }
 
 export class UpdateProductDto {
@@ -45,6 +51,8 @@ export class UpdateProductDto {
   @IsOptional() @IsInt() @Min(0) minStock?: number;
   @IsOptional() @IsBoolean() trackStock?: boolean;
   @IsOptional() @IsBoolean() active?: boolean;
+  @ValidateIf((_, v) => v !== null)
+  @IsOptional() @IsString() @MaxLength(PRODUCT_IMAGE_MAX) @Matches(PRODUCT_IMAGE_REGEX) imageUrl?: string | null;
 }
 
 export class AdjustStockDto {
