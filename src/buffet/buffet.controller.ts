@@ -17,6 +17,8 @@ import {
 } from './dto/buffet.dto';
 
 const MANAGE = ['admin', 'manager'] as const;
+/** Carta de solo lectura: todo el club (jugadores, staff, directores). */
+const VIEW_MENU = ['admin', 'manager', 'coach', 'player', 'member', 'buffet'] as const;
 const OPERATE = ['admin', 'manager', 'buffet'] as const;
 
 function ctx(req: unknown, clubId: string) {
@@ -29,6 +31,12 @@ function ctx(req: unknown, clubId: string) {
 @Controller('buffet/:clubId')
 export class BuffetController {
   constructor(private readonly buffet: BuffetService) {}
+
+  @Roles(...VIEW_MENU)
+  @Get('menu')
+  menu(@Req() req: unknown, @Param('clubId') clubId: string) {
+    return this.buffet.publicMenu(ctx(req, clubId).companyId, clubId);
+  }
 
   @Roles(...OPERATE)
   @Get()
