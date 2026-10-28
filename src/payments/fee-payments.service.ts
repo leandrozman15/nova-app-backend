@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { roundMoney } from '../bookings/booking-time';
+import { buildClubFeed } from '../matches/club-feed';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   MercadoPagoClient,
@@ -110,6 +111,20 @@ export class FeePaymentsService {
     });
     if (!player || guardianEmailOf(player.extra) !== email)
       throw new ForbiddenException('Este atleta no está vinculado a tu cuenta');
+  }
+
+  /** Partidos de los clubes de los hijos del padre/tutor (en vivo, próximos y últimos resultados). */
+  async clubMatchesForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+    const children = await this.listChildren(auth);
+    const clubs = new Map<string, string>();
+    for (const c of children) clubs.set(c.clubId, c.companyId);
+    const feeds = await Promise.all(
+      [...clubs.entries()].map(async ([clubId, companyId]) => ({
+        clubId,
+        ...(await buildClubFeed(this.prisma, companyId, clubId)),
+      })),
+    );
+    return feeds;
   }
 
   async listChildren(auth: { email?: string; emailVerified?: boolean }) {

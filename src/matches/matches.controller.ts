@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
-import { requireCompanyId } from '../common/http/request-context';
+import { requireClubScope, requireCompanyId } from '../common/http/request-context';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { SetMatchCallupDto } from './dto/set-match-callup.dto';
@@ -38,6 +38,15 @@ export class MatchesController {
   @Post(':id/suspensions/:sid/lift')
   lift(@Req() req: unknown, @Param('id') id: string, @Param('sid') sid: string) {
     return this.suspensions.lift(requireCompanyId(req), id, sid, req as RequestWithAuth);
+  }
+
+  /** Partidos del club para familias/jugadores: en vivo, próximos (con horario) y últimos resultados. */
+  @Roles('admin', 'manager', 'coach', 'coordinator', 'player', 'member')
+  @Get('club-feed')
+  clubFeed(@Req() req: unknown, @Query('clubId') clubId: string) {
+    if (!clubId) throw new BadRequestException('clubId es obligatorio');
+    requireClubScope(req, clubId);
+    return this.matchesService.clubFeed(requireCompanyId(req), clubId);
   }
 
   @Roles('admin', 'manager', 'coach')

@@ -10,9 +10,15 @@ import { UpdateMatchCallupStatusDto } from './dto/update-match-callup-status.dto
 import { UpdateMatchOperationsDto } from './dto/update-match-operations.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 
+import { buildClubFeed } from './club-feed';
+
 @Injectable()
 export class MatchesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  clubFeed(companyId: string, clubId: string) {
+    return buildClubFeed(this.prisma, companyId, clubId);
+  }
 
   async list(companyId: string, pagination?: { skip?: number; take?: number; withMeta?: boolean }) {
     const where = { companyId };
