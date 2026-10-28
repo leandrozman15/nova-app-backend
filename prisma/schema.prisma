@@ -519,6 +519,7 @@ model Match {
   events    MatchEvent[]
   callups   MatchCallup[]
   suspensions MatchSuspension[]
+  scheduleChanges MatchScheduleChange[]
   categoryResults MatchCategoryResult[]
 
   @@index([tournamentId])
@@ -530,6 +531,26 @@ model Match {
 }
 
 /// Suspensión de un partido por un club: de todas sus categorías (categories vacío) o solo de algunas.
+/// Cambios de horario de un partido (atrasos, adelantos, reprogramaciones) que se avisan a familias y jugadores.
+model MatchScheduleChange {
+  id           String   @id @default(cuid())
+  companyId    String
+  matchId      String
+  /// delay | advance | reschedule
+  kind         String
+  previousAt   DateTime
+  newAt        DateTime
+  deltaMinutes Int
+  reason       String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+  @@index([companyId])
+}
+
 model MatchSuspension {
   id           String    @id @default(cuid())
   companyId    String

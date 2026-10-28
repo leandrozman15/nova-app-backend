@@ -12,6 +12,8 @@ import { UpdateMatchOperationsDto } from './dto/update-match-operations.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { RescheduleMatchDto, SuspendMatchDto } from './dto/suspend-match.dto';
 import { MatchSuspensionsService } from './match-suspensions.service';
+import { MatchScheduleService } from './match-schedule.service';
+import { ScheduleChangeDto } from './dto/schedule-change.dto';
 import { MatchesService } from './matches.service';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 
@@ -20,7 +22,15 @@ export class MatchesController {
   constructor(
     private readonly matchesService: MatchesService,
     private readonly suspensions: MatchSuspensionsService,
+    private readonly schedule: MatchScheduleService,
   ) {}
+
+  /** Atraso/adelanto o nueva fecha de un partido programado; se avisa a familias y jugadores. */
+  @Roles('admin', 'manager', 'coach')
+  @Post(':id/schedule-change')
+  scheduleChange(@Req() req: unknown, @Param('id') id: string, @Body() dto: ScheduleChangeDto) {
+    return this.schedule.change(requireCompanyId(req), id, dto, req as RequestWithAuth);
+  }
 
   @Roles('admin', 'manager')
   @Post(':id/suspend')

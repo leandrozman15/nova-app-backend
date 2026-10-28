@@ -20,6 +20,11 @@ export async function buildClubFeed(prisma: Pick<PrismaService, 'match'>, compan
     homeTeam: { select: { id: true, name: true, clubId: true } },
     awayTeam: { select: { id: true, name: true, clubId: true } },
     tournament: { select: { id: true, name: true } },
+    scheduleChanges: {
+      orderBy: { createdAt: 'desc' as const },
+      take: 1,
+      select: { kind: true, previousAt: true, newAt: true, deltaMinutes: true, reason: true, createdAt: true },
+    },
   } as const;
   // Un partido "programado" sigue siendo próximo hasta 3 h después de su horario.
   const since = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -39,5 +44,8 @@ export async function buildClubFeed(prisma: Pick<PrismaService, 'match'>, compan
       take: 10,
     }),
   ]);
-  return { live, upcoming, recent };
+  // El último cambio de horario viaja como `scheduleChange` (solo importa en partidos no jugados).
+  const shape = (list: typeof live, withChange: boolean) =>
+    list.map(({ scheduleChanges, ...m }) => ({ ...m, scheduleChange: withChange ? (scheduleChanges[0] ?? null) : null }));
+  return { live: shape(live, true), upcoming: shape(upcoming, true), recent: shape(recent, false) };
 }
