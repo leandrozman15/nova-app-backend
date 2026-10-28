@@ -33,6 +33,7 @@ const GLOBAL_ROLES = new Set([
 const PLATFORM_ROLES = new Set(['admin', 'fed_admin']);
 const CLUB_ROLES = new Set([
   'club_admin',
+  'buffet',
   'manager',
   'coordinator',
   'coach_lvl1',
