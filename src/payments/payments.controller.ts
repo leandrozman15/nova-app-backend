@@ -109,6 +109,12 @@ export class GuardianChildrenController {
     return this.fees.clubMatchesForGuardian((req as RequestWithAuth).auth!);
   }
 
+  /** Carta (lista de precios) del buffet de los clubes de mis hijos. */
+  @Get('buffet')
+  buffetMenu(@Req() req: unknown) {
+    return this.fees.buffetMenuForGuardian((req as RequestWithAuth).auth!);
+  }
+
   @Get(':playerId/payments')
   payments(@Req() req: unknown, @Param('playerId') playerId: string) {
     return this.fees.listChildFees((req as RequestWithAuth).auth!, playerId);

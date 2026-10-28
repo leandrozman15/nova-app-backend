@@ -1,4 +1,4 @@
-import { expectedCash, saleTotal, treasuryAmountForClose, treasuryCategory } from './buffet.logic';
+import { expectedCash, saleTotal, toPublicMenu, treasuryAmountForClose, treasuryCategory } from './buffet.logic';
 
 describe('buffet logic', () => {
   it('suma el total de la venta con redondeo a centavos', () => {
@@ -25,5 +25,22 @@ describe('buffet logic', () => {
   it('categoría de tesorería según el modo', () => {
     expect(treasuryCategory('own')).toBe('Buffet - ventas');
     expect(treasuryCategory('percent')).toContain('participación');
+  });
+});
+
+describe('toPublicMenu', () => {
+  const base = { category: 'Bebidas', imageUrl: null, trackStock: true, active: true };
+  it('oculta inactivos, no expone costo/stock y marca disponibilidad', () => {
+    const menu = toPublicMenu([
+      { ...base, id: '1', name: 'Coca', price: '2500.00', stock: 0 },
+      { ...base, id: '2', name: 'Agua', price: 1500, stock: 10 },
+      { ...base, id: '3', name: 'Viejo', price: 1, stock: 5, active: false },
+      { ...base, id: '4', name: 'Pancho', category: 'Comidas', price: 3000, stock: 0, trackStock: false },
+    ]);
+    expect(menu.map((m) => m.name)).toEqual(['Agua', 'Coca', 'Pancho']);
+    expect(menu.find((m) => m.name === 'Coca')).toEqual({ id: '1', name: 'Coca', category: 'Bebidas', price: 2500, imageUrl: null, available: false });
+    expect(menu.find((m) => m.name === 'Pancho')?.available).toBe(true);
+    expect(Object.keys(menu[0])).not.toContain('stock');
+    expect(Object.keys(menu[0])).not.toContain('cost');
   });
 });

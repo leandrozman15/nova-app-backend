@@ -9,6 +9,7 @@ import {
 
 import { roundMoney } from '../bookings/booking-time';
 import { buildClubFeed } from '../matches/club-feed';
+import { toPublicMenu } from '../buffet/buffet.logic';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   MercadoPagoClient,
@@ -125,6 +126,34 @@ export class FeePaymentsService {
       })),
     );
     return feeds;
+  }
+
+  /** Carta del buffet de los clubes de mis hijos (solo lectura: sin costos ni stock). */
+  async buffetMenuForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+    const children = await this.listChildren(auth);
+    const clubs = new Map<string, { companyId: string; clubName: string | null }>();
+    for (const c of children) clubs.set(c.clubId, { companyId: c.companyId, clubName: c.clubName });
+    const menus = await Promise.all(
+      [...clubs.entries()].map(async ([clubId, { companyId, clubName }]) => {
+        const buffet = await this.prisma.buffet.findUnique({ where: { clubId } });
+        if (!buffet || !buffet.active) return null;
+        const [products, openSession] = await Promise.all([
+          this.prisma.buffetProduct.findMany({ where: { companyId, clubId, active: true } }),
+          this.prisma.buffetCashSession.findFirst({ where: { companyId, clubId, status: 'open' }, select: { id: true } }),
+        ]);
+        const items = toPublicMenu(products);
+        if (items.length === 0) return null;
+        return {
+          clubId,
+          clubName,
+          buffetName: buffet.name,
+          concessionaire: buffet.concessionaire ?? null,
+          open: !!openSession,
+          products: items,
+        };
+      }),
+    );
+    return menus.filter((m): m is NonNullable<typeof m> => m !== null);
   }
 
   async listChildren(auth: { email?: string; emailVerified?: boolean }) {

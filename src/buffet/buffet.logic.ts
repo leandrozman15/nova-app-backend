@@ -29,3 +29,30 @@ export function treasuryAmountForClose(mode: BuffetMode, salesTotal: number, per
 export function treasuryCategory(mode: BuffetMode): string {
   return mode === 'percent' ? 'Buffet - participación en ventas' : 'Buffet - ventas';
 }
+
+
+/** Producto tal como lo ve una familia: sin costo ni cantidades de stock. */
+export type PublicMenuItem = {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  imageUrl: string | null;
+  available: boolean;
+};
+
+export function toPublicMenu(
+  products: { id: string; name: string; category: string; price: unknown; imageUrl: string | null; stock: number; trackStock: boolean; active: boolean }[],
+): PublicMenuItem[] {
+  return products
+    .filter((p) => p.active)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      price: Number(p.price),
+      imageUrl: p.imageUrl,
+      available: !p.trackStock || p.stock > 0,
+    }))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
