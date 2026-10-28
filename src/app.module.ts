@@ -34,6 +34,7 @@ import { StandingsModule } from './standings/standings.module';
 import { ShopModule } from './shop/shop.module';
 import { TeamsModule } from './teams/teams.module';
 import { TrainingSessionsModule } from './training-sessions/training-sessions.module';
+import { BuffetModule } from './buffet/buffet.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { UsersModule } from './users/users.module';
 
@@ -58,6 +59,7 @@ import { UsersModule } from './users/users.module';
     FacilitiesModule,
     PlayerPaymentsModule,
     TrainingSessionsModule,
+    BuffetModule,
     AttendanceModule,
     InjuriesModule,
     JoinRequestsModule,

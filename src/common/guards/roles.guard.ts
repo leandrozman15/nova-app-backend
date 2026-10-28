@@ -44,6 +44,7 @@ function normalizeRoles(rawRole: string): string[] {
 // Roles de club que pueden venir en claims emitidos antes de ClubMembership.
 const LEGACY_CLUB_ROLES = new Set([
   'club_admin',
+  'buffet',
   'manager',
   'coordinator',
   'coach',

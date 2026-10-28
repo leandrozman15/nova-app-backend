@@ -96,6 +96,11 @@ model Company {
   matchEvents           MatchEvent[]
   matchCallups          MatchCallup[]
   financialTransactions FinancialTransaction[]
+  buffets               Buffet[]
+  buffetProducts        BuffetProduct[]
+  buffetCashSessions    BuffetCashSession[]
+  buffetSales           BuffetSale[]
+  buffetStockMovements  BuffetStockMovement[]
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
   shopOrders            ShopOrder[]
@@ -218,6 +223,11 @@ model Club {
   members      Member[]
   memberships  ClubMembership[]
   financialTransactions FinancialTransaction[]
+  buffets               Buffet[]
+  buffetProducts        BuffetProduct[]
+  buffetCashSessions    BuffetCashSession[]
+  buffetSales           BuffetSale[]
+  buffetStockMovements  BuffetStockMovement[]
   playerPayments        PlayerPayment[]
   shopProducts          ShopProduct[]
   shopOrders            ShopOrder[]
@@ -1716,4 +1726,138 @@ model AttendanceRecord {
 
   @@unique([sessionId, playerId])
   @@index([playerId])
+}
+
+
+// ─── Buffet ──────────────────────────────────────────────────────────────
+
+/// Un buffet por club. mode: own (propio) | canon (tercerizado, canon fijo) | percent (tercerizado, % de ventas) | none (sin reporte).
+model Buffet {
+  id            String   @id @default(cuid())
+  companyId     String
+  clubId        String   @unique
+  name          String   @default("Buffet")
+  mode          String   @default("own")
+  canonAmount   Decimal? @db.Decimal(12, 2)
+  percent       Decimal? @db.Decimal(5, 2)
+  concessionaire String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model BuffetProduct {
+  id        String   @id @default(cuid())
+  companyId String
+  clubId    String
+  name      String
+  category  String   @default("General")
+  price     Decimal  @db.Decimal(12, 2)
+  cost      Decimal  @default(0) @db.Decimal(12, 2)
+  stock     Int      @default(0)
+  minStock  Int      @default(0)
+  trackStock Boolean @default(true)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club      Club                  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  saleItems BuffetSaleItem[]
+  movements BuffetStockMovement[]
+
+  @@index([companyId, clubId])
+}
+
+model BuffetCashSession {
+  id                    String    @id @default(cuid())
+  companyId             String
+  clubId                String
+  status                String    @default("open")
+  openedByUid           String
+  openedByName          String?
+  openedAt              DateTime  @default(now())
+  openingAmount         Decimal   @default(0) @db.Decimal(12, 2)
+  closedAt              DateTime?
+  closedByUid           String?
+  expectedCash          Decimal?  @db.Decimal(12, 2)
+  countedCash           Decimal?  @db.Decimal(12, 2)
+  difference            Decimal?  @db.Decimal(12, 2)
+  salesTotal            Decimal?  @db.Decimal(12, 2)
+  note                  String?
+  reportedToTreasury    Boolean   @default(false)
+  treasuryAmount        Decimal?  @db.Decimal(12, 2)
+  treasuryTransactionId String?
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  sales   BuffetSale[]
+
+  @@index([companyId, clubId, status])
+  @@index([clubId, openedAt])
+}
+
+model BuffetSale {
+  id            String    @id @default(cuid())
+  companyId     String
+  clubId        String
+  sessionId     String
+  total         Decimal   @db.Decimal(12, 2)
+  paymentMethod String
+  status        String    @default("completed")
+  voidReason    String?
+  voidedAt      DateTime?
+  createdByUid  String
+  createdByName String?
+  createdAt     DateTime  @default(now())
+
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  session BuffetCashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  items   BuffetSaleItem[]
+
+  @@index([sessionId])
+  @@index([clubId, createdAt])
+}
+
+model BuffetSaleItem {
+  id        String  @id @default(cuid())
+  saleId    String
+  productId String?
+  name      String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  unitCost  Decimal @default(0) @db.Decimal(12, 2)
+
+  sale    BuffetSale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product BuffetProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model BuffetStockMovement {
+  id           String   @id @default(cuid())
+  companyId    String
+  clubId       String
+  productId    String
+  delta        Int
+  /// sale | void | purchase | adjust | loss
+  reason       String
+  saleId       String?
+  note         String?
+  createdByUid String?
+  createdAt    DateTime @default(now())
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  product BuffetProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, createdAt])
+  @@index([clubId, createdAt])
 }
