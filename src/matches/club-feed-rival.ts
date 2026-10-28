@@ -18,6 +18,8 @@ export type PlaceInfo = {
   coverUrl: string | null;
   address: string | null;
   city: string | null;
+  /** Enlace de Google Maps pegado por el club para un destino exacto. */
+  mapsUrl: string | null;
   latitude: number | null;
   longitude: number | null;
 };
@@ -131,6 +133,7 @@ export async function buildRivalCards(
       coverUrl: str(opp?.coverUrl) ?? club?.coverUrl ?? null,
       address: str(opp?.address) ?? club?.address ?? null,
       city: str(opp?.city) ?? club?.city ?? null,
+      mapsUrl: str(opp?.mapsUrl),
       latitude: num(opp?.latitude) ?? club?.latitude ?? null,
       longitude: num(opp?.longitude) ?? club?.longitude ?? null,
     };
