@@ -1,9 +1,10 @@
 import { MatchStatus } from '@prisma/client';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { buildRivalCards } from './club-feed-rival';
 
 /** Partidos del club para familias/jugadores: en vivo, próximos (con el horario cargado) y últimos resultados. */
-export async function buildClubFeed(prisma: Pick<PrismaService, 'match'>, companyId: string, clubId: string) {
+export async function buildClubFeed(prisma: Pick<PrismaService, 'match' | 'club' | 'storeDocument'>, companyId: string, clubId: string) {
   const clubWhere = {
     companyId,
     OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }],
@@ -45,7 +46,13 @@ export async function buildClubFeed(prisma: Pick<PrismaService, 'match'>, compan
     }),
   ]);
   // El último cambio de horario viaja como `scheduleChange` (solo importa en partidos no jugados).
+  // Ficha del rival (escudo, portada, sede, posición en la tabla) solo para los partidos por jugarse.
+  const cards = await buildRivalCards(prisma, clubId, [...live, ...upcoming]);
   const shape = (list: typeof live, withChange: boolean) =>
-    list.map(({ scheduleChanges, ...m }) => ({ ...m, scheduleChange: withChange ? (scheduleChanges[0] ?? null) : null }));
+    list.map(({ scheduleChanges, ...m }) => ({
+      ...m,
+      scheduleChange: withChange ? (scheduleChanges[0] ?? null) : null,
+      ...(withChange ? (cards.get(m.id) ?? { rival: null, place: null }) : {}),
+    }));
   return { live: shape(live, true), upcoming: shape(upcoming, true), recent: shape(recent, false) };
 }
