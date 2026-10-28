@@ -172,6 +172,10 @@ export class FeePaymentsService {
         photoUrl: true,
         birthDate: true,
         extra: true,
+        position: true,
+        sport: true,
+        divisionId: true,
+        branch: true,
         club: { select: { name: true } },
       },
     });
@@ -196,6 +200,23 @@ export class FeePaymentsService {
         clubName: c.club?.name ?? null,
         teamId: typeof extra.teamId === 'string' ? extra.teamId : null,
         teamName: typeof extra.teamName === 'string' ? extra.teamName : null,
+        divisionId:
+          c.divisionId ??
+          (typeof extra.divisionId === 'string' ? extra.divisionId : null),
+        divisionName:
+          typeof extra.divisionName === 'string' ? extra.divisionName : null,
+        sport: c.sport ?? null,
+        position: c.position ?? null,
+        secondaryPosition:
+          typeof extra.secondaryPosition === 'string'
+            ? extra.secondaryPosition
+            : null,
+        jerseyNumber:
+          typeof extra.jerseyNumber === 'number' ? extra.jerseyNumber : null,
+        heightCm: typeof extra.heightCm === 'number' ? extra.heightCm : null,
+        weightKg: typeof extra.weightKg === 'number' ? extra.weightKg : null,
+        dominantSide:
+          typeof extra.dominantSide === 'string' ? extra.dominantSide : null,
         firstName: c.firstName,
         lastName: c.lastName,
         photoUrl: c.photoUrl,
