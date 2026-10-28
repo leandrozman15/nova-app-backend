@@ -104,6 +104,7 @@ model Company {
   clubActivities        ClubActivity[]
   clubTournaments       ClubTournament[]
   trainingSessions      TrainingSession[]
+  attendanceSessions    AttendanceSession[]
   trainingAttendances   TrainingAttendance[]
   injuryReports         InjuryReport[]
   membershipPlans       MembershipPlan[]
@@ -223,6 +224,7 @@ model Club {
   facilities            Facility[]
   facilityRentals       FacilityRental[]
   trainingSessions      TrainingSession[]
+  attendanceSessions    AttendanceSession[]
   injuryReports         InjuryReport[]
   membershipPlans       MembershipPlan[]
   bookings              Booking[]
@@ -406,6 +408,7 @@ model Player {
   matchEvents         MatchEvent[]
   playerPayments      PlayerPayment[]
   trainingAttendances TrainingAttendance[]
+  attendanceRecords   AttendanceRecord[]
   injuryReports       InjuryReport[]
   clubMemberships     ClubMembership[]
 
@@ -1675,4 +1678,42 @@ model LeagueTournamentClub {
 
   @@id([tournamentId, clubId])
   @@index([clubId])
+}
+
+
+/// Presentismo: planilla de asistencia a un entrenamiento de un equipo (un registro por equipo y día).
+/// teamId/divisionId son ids de la estructura deportiva del club (no FK: viven en el docstore).
+model AttendanceSession {
+  id         String   @id @default(cuid())
+  companyId  String
+  clubId     String
+  divisionId String?
+  teamId     String
+  date       DateTime @db.Date
+  takenBy    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club               @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  records AttendanceRecord[]
+
+  @@unique([clubId, teamId, date])
+  @@index([companyId, clubId, date])
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  sessionId String
+  playerId  String
+  /// present | late | absent | justified
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  player  Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, playerId])
+  @@index([playerId])
 }

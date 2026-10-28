@@ -34,6 +34,7 @@ import { StandingsModule } from './standings/standings.module';
 import { ShopModule } from './shop/shop.module';
 import { TeamsModule } from './teams/teams.module';
 import { TrainingSessionsModule } from './training-sessions/training-sessions.module';
+import { AttendanceModule } from './attendance/attendance.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -57,6 +58,7 @@ import { UsersModule } from './users/users.module';
     FacilitiesModule,
     PlayerPaymentsModule,
     TrainingSessionsModule,
+    AttendanceModule,
     InjuriesModule,
     JoinRequestsModule,
     ActivitiesModule,
