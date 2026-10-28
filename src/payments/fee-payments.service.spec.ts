@@ -177,3 +177,37 @@ describe('FeePaymentsService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 });
+
+describe('FeePaymentsService.listChildren (vínculo padre/tutor)', () => {
+  const row = (id: string, guardianEmail: string) => ({
+    id,
+    companyId: 'c1',
+    clubId: 'club1',
+    firstName: 'Ana',
+    lastName: 'Gómez',
+    photoUrl: null,
+    birthDate: new Date('2015-05-05'),
+    extra: { guardianEmail, teamId: 't1', teamName: 'Sub 11' },
+    club: { name: 'Club Test' },
+  });
+  const build = (rows: any[]) => {
+    const prisma: any = {
+      player: { findMany: jest.fn().mockResolvedValue(rows) },
+      playerPayment: { groupBy: jest.fn().mockResolvedValue([{ playerId: 'p1', _count: { _all: 2 } }]) },
+    };
+    return { prisma, service: new FeePaymentsService(prisma, {} as any, {} as any) };
+  };
+
+  it('devuelve los hijos cuando el email del tutor coincide (sin importar mayúsculas)', async () => {
+    const { service } = build([row('p1', 'Padre@Mail.com'), row('p2', 'otro@mail.com')]);
+    const kids = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
+    expect(kids.map((k) => k.playerId)).toEqual(['p1']);
+    expect(kids[0]).toMatchObject({ clubId: 'club1', teamName: 'Sub 11', pendingFees: 2 });
+  });
+
+  it('no devuelve nada si el email del padre no está verificado', async () => {
+    const { service, prisma } = build([row('p1', 'padre@mail.com')]);
+    expect(await service.listChildren({ email: 'padre@mail.com', emailVerified: false })).toEqual([]);
+    expect(prisma.player.findMany).not.toHaveBeenCalled();
+  });
+});
