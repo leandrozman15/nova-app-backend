@@ -73,10 +73,19 @@ export class AttendanceService {
     if (Number.isNaN(day.getTime())) throw new BadRequestException('Fecha inválida');
     const session = await this.prisma.attendanceSession.findFirst({
       where: { companyId, clubId, teamId, date: day },
-      include: { records: { select: { playerId: true, status: true } } },
+      include: { records: { select: { playerId: true, status: true, player: { select: { legacyId: true } } } } },
     });
     return session
-      ? { id: session.id, date, teamId, records: session.records }
+      ? {
+          id: session.id,
+          date,
+          teamId,
+          records: session.records.map((r) => ({
+            playerId: r.playerId,
+            legacyId: r.player.legacyId ?? null,
+            status: r.status,
+          })),
+        }
       : { id: null, date, teamId, records: [] };
   }
 
