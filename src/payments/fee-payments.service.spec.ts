@@ -194,6 +194,7 @@ describe('FeePaymentsService.listChildren (vínculo padre/tutor)', () => {
     const prisma: any = {
       player: { findMany: jest.fn().mockResolvedValue(rows) },
       playerPayment: { groupBy: jest.fn().mockResolvedValue([{ playerId: 'p1', _count: { _all: 2 } }]) },
+      storeDocument: { findMany: jest.fn().mockResolvedValue([]) },
     };
     return { prisma, service: new FeePaymentsService(prisma, {} as any, {} as any) };
   };
@@ -203,6 +204,25 @@ describe('FeePaymentsService.listChildren (vínculo padre/tutor)', () => {
     const kids = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
     expect(kids.map((k) => k.playerId)).toEqual(['p1']);
     expect(kids[0]).toMatchObject({ clubId: 'club1', teamName: 'Sub 11', pendingFees: 2 });
+  });
+
+  it('trae el plantel del hijo (entrenador y horarios) desde el servidor', async () => {
+    const { service, prisma } = build([{ ...row('p1', 'padre@mail.com'), divisionId: 'd1' }]);
+    prisma.storeDocument.findMany.mockResolvedValue([
+      { path: 'clubs/club1/divisions/d1/teams/t1', parentPath: 'clubs/club1/divisions/d1/teams', docId: 't1', companyId: 'c1', data: { name: 'Categoría 2019', coachName: 'Seba Ruiz', trainingDays: ['Lunes', 'Miércoles'], trainingStartTime: '18:30', trainingEndTime: '20:00' } },
+    ]);
+    const [kid] = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
+    expect(kid.team).toMatchObject({ id: 't1', coachName: 'Seba Ruiz', trainingDays: ['Lunes', 'Miércoles'], trainingStartTime: '18:30' });
+  });
+
+  it('sin equipo en la ficha usa el único equipo de la rama', async () => {
+    const { service, prisma } = build([{ ...row('p1', 'padre@mail.com'), divisionId: 'd1', extra: { guardianEmail: 'padre@mail.com' } }]);
+    prisma.storeDocument.findMany.mockResolvedValue([
+      { path: 'clubs/club1/divisions/d1/teams/t9', parentPath: 'clubs/club1/divisions/d1/teams', docId: 't9', companyId: 'c1', data: { name: 'Única', coachName: 'DT' } },
+    ]);
+    const [kid] = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
+    expect(kid.teamId).toBe('t9');
+    expect(kid.team?.coachName).toBe('DT');
   });
 
   it('no devuelve nada si el email del padre no está verificado', async () => {
