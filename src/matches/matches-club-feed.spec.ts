@@ -3,7 +3,7 @@ import { MatchesService } from './matches.service';
 describe('MatchesService.clubFeed', () => {
   it('filtra por club (local o visitante) y separa en vivo, próximos y recientes', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const service = new MatchesService({ match: { findMany } } as never);
+    const service = new MatchesService({ match: { findMany }, club: { findMany: jest.fn(), findFirst: jest.fn() }, storeDocument: { findMany: jest.fn().mockResolvedValue([]) } } as never);
 
     const res = await service.clubFeed('co1', 'club1');
 

@@ -81,8 +81,8 @@ export function standingOf(table: ReturnType<typeof buildTable>, teamId: string)
   return { position: idx + 1, total: table.length, points: r.points, played: r.played, won: r.won, drawn: r.drawn, lost: r.lost };
 }
 
-const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-const num = (v: unknown) => {
+export const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+export const num = (v: unknown) => {
   const n = Number(v);
   return v !== null && v !== '' && Number.isFinite(n) ? n : null;
 };
