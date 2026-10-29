@@ -24,6 +24,8 @@ export type FixtureFeedMatch = {
   scheduleChange: null;
   rival: MatchRivalCard['rival'];
   place: MatchRivalCard['place'];
+  /** Amistoso: no cuenta para la tabla de posiciones. */
+  friendly: boolean;
 };
 
 /** "2026-11-07T17:30" (hora del club, sin zona) a instante UTC. Argentina no tiene horario de verano: -03:00. */
@@ -167,6 +169,7 @@ export async function loadFixtureFeed(
       awayTeam: { id: awayId, name: awayName, ...(!mineHome ? { clubId } : {}) },
       tournament: { id: tid, name: tournaments.get(tid) ?? 'Torneo' },
       scheduleChange: null,
+      friendly: d.friendly === true,
       rival: {
         ...placeOf(rivalId || null, rivalName, rivalLogo),
         teamId: rivalId,
