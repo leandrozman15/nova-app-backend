@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { loadClubLive } from '../matches/club-live';
 import { loadChildTeams } from './child-teams';
 import { loadChildCallups } from './guardian-callups';
 import { loadClubCompetitions } from './guardian-competitions';
@@ -129,6 +130,19 @@ export class FeePaymentsService {
       })),
     );
     return feeds;
+  }
+
+  /** Partidos en vivo de los clubes de mis hijos, con escudos, goles y tarjetas. */
+  async liveForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+    const children = await this.listChildren(auth);
+    const clubs = new Map<string, string>();
+    for (const c of children) clubs.set(c.clubId, c.companyId);
+    return Promise.all(
+      [...clubs.entries()].map(async ([clubId, companyId]) => ({
+        clubId,
+        matches: await loadClubLive(this.prisma, companyId, clubId),
+      })),
+    );
   }
 
   /** Torneos, tablas de posiciones y fixture completo de los clubes de mis hijos. */
