@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { loadChildCallups } from './guardian-callups';
 import { loadClubCompetitions } from './guardian-competitions';
 import { roundMoney } from '../bookings/booking-time';
 import { buildClubFeed } from '../matches/club-feed';
@@ -206,11 +207,13 @@ export class FeePaymentsService {
     });
     const pendingBy = new Map(pending.map((r) => [r.playerId, r._count._all]));
     const teams = await this.loadChildTeams(children);
+    const callups = await loadChildCallups(this.prisma, children);
     return children.map((c) => {
       const extra = (c.extra ?? {}) as Record<string, unknown>;
       const team = teams.get(c.id) ?? null;
       return {
         team,
+        callups: callups.get(c.id) ?? [],
         playerId: c.id,
         companyId: c.companyId,
         clubId: c.clubId,

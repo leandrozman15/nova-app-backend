@@ -195,6 +195,7 @@ describe('FeePaymentsService.listChildren (vínculo padre/tutor)', () => {
       player: { findMany: jest.fn().mockResolvedValue(rows) },
       playerPayment: { groupBy: jest.fn().mockResolvedValue([{ playerId: 'p1', _count: { _all: 2 } }]) },
       storeDocument: { findMany: jest.fn().mockResolvedValue([]) },
+      matchCallup: { findMany: jest.fn().mockResolvedValue([]) },
     };
     return { prisma, service: new FeePaymentsService(prisma, {} as any, {} as any) };
   };
