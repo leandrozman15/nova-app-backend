@@ -33,7 +33,10 @@ export const STAFF_ROLES = new Set([
 export const DIRECTION_ROLES = new Set(['admin', 'club_admin', 'manager']);
 
 /** Colecciones de primer nivel del club reservadas a la dirección. */
-export const DIRECTION_ONLY_TOP = new Set(['dues_followups']);
+export const DIRECTION_ONLY_TOP = new Set([
+  'dues_followups',
+  'document_access_log',
+]);
 
 /**
  * ¿La ruta es sensible? Seguimientos de morosidad, y la documentación de cada

@@ -20,6 +20,7 @@ import { StoreModule } from './store/store.module';
 import { PlayerImportModule } from './player-import/player-import.module';
 import { RosterModule } from './roster/roster.module';
 import { DocStoreModule } from './docstore/docstore.module';
+import { PlayerDocumentsModule } from './player-documents/player-documents.module';
 import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
@@ -71,6 +72,7 @@ import { UsersModule } from './users/users.module';
     PlayerImportModule,
     RosterModule,
     DocStoreModule,
+    PlayerDocumentsModule,
     PublicModule,
     PaymentsModule,
   ],
