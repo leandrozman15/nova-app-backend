@@ -81,6 +81,8 @@ export class CreateSaleDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => SaleItemDto)
   items!: SaleItemDto[];
   @IsIn(PAYMENT_METHODS as unknown as string[]) paymentMethod!: string;
+  /** Id único generado por el dispositivo; si ya existe, se devuelve la venta original. */
+  @IsOptional() @IsString() @MaxLength(80) clientRef?: string;
 }
 
 export class VoidSaleDto {
