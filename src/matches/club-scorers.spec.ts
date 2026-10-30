@@ -8,18 +8,23 @@ describe('club-scorers', () => {
     expect(parseStatsPath('clubs/c/divisions/d1/teams/t1/assignments')).toBeNull();
   });
 
-  it('suma goles y tries por jugador, ordena y cuenta partidos', () => {
+  it('arma una tabla por categoría (equipo), solo con sus jugadores y puestos propios', () => {
     const rows = [
-      { parentPath: P('d1', 't1', 'e1'), data: { playerId: 'a', playerName: 'Ana', goals: 2, minutesPlayed: 30 } },
-      { parentPath: P('d1', 't1', 'e2'), data: { playerId: 'a', playerName: 'Ana', goals: 1, yellowCards: 1, minutesPlayed: 20 } },
-      { parentPath: P('d1', 't1', 'e1'), data: { playerId: 'b', playerName: 'Beto', trys: 4, minutesPlayed: 40 } },
-      { parentPath: P('d1', 't1', 'e1'), data: { playerId: 'c', playerName: 'Cami', goals: 0, minutesPlayed: 40 } },
-      { parentPath: P('d2', 't2', 'e9'), data: { playerId: 'z', playerName: 'Zoe', goals: 9 } },
+      { parentPath: P('d1', 't19', 'e1'), data: { playerId: 'a', playerName: 'Ana', goals: 2, minutesPlayed: 30 } },
+      { parentPath: P('d1', 't19', 'e2'), data: { playerId: 'a', playerName: 'Ana', goals: 1, yellowCards: 1, minutesPlayed: 20 } },
+      { parentPath: P('d1', 't19', 'e1'), data: { playerId: 'b', playerName: 'Beto', trys: 1, minutesPlayed: 40 } },
+      { parentPath: P('d1', 't16', 'e5'), data: { playerId: 'z', playerName: 'Zoe', goals: 9, minutesPlayed: 10 } },
+      { parentPath: P('d1', 't16', 'e5'), data: { playerId: 'c', playerName: 'Cami', goals: 0, minutesPlayed: 40 } },
     ];
-    const all = buildScorers(rows, {}, new Map([['d1', '2019']]));
-    expect(all.map((r) => [r.playerName, r.total, r.position])).toEqual([['Zoe', 9, 1], ['Beto', 4, 2], ['Ana', 3, 3]]);
-    expect(all[2]).toMatchObject({ matches: 2, yellowCards: 1, divisionName: '2019' });
-    const d1 = buildScorers(rows, { divisionId: 'd1' });
-    expect(d1.map((r) => r.playerName)).toEqual(['Beto', 'Ana']);
+    const names = new Map([['t19', '2019'], ['t16', '2016']]);
+    const all = buildScorers(rows, {}, new Map([['d1', 'Infantil']]), names);
+    expect(all.map((r) => [r.teamName, r.playerName, r.position])).toEqual([
+      ['2016', 'Zoe', 1],
+      ['2019', 'Ana', 1],
+      ['2019', 'Beto', 2],
+    ]);
+    expect(all[1]).toMatchObject({ matches: 2, yellowCards: 1, divisionName: 'Infantil', total: 3 });
+    expect(buildScorers(rows, { teamId: 't19' }, new Map(), names).map((r) => r.playerName)).toEqual(['Ana', 'Beto']);
+    expect(buildScorers(rows, { teamIds: ['t16'] }, new Map(), names).map((r) => r.playerName)).toEqual(['Zoe']);
   });
 });
