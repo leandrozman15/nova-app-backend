@@ -35,7 +35,7 @@ export class UploadDocumentDto {
   @Matches(/^[A-Za-z0-9_-]{1,60}$/)
   docId!: string;
 
-  @IsIn(DOC_SLOTS as unknown as string[])
+  @IsIn(DOC_SLOTS)
   slot!: string;
 
   @IsOptional()

@@ -65,11 +65,7 @@ export class PlayerDocumentsService {
     return getStorage(getApp()).bucket(name);
   }
 
-  private async assertAccess(
-    viewer: Viewer,
-    clubId: string,
-    playerId: string,
-  ) {
+  private async assertAccess(viewer: Viewer, clubId: string, playerId: string) {
     if (!isDirection(viewer) || !inClub(viewer, clubId))
       throw new ForbiddenException(
         'Solo la dirección del club puede ver o cargar documentación',
@@ -168,9 +164,9 @@ export class PlayerDocumentsService {
     });
 
     const docPath = this.docPath(dto.clubId, playerId, dto.docId);
-    const previous = (await this.store.get(viewer, docPath).catch(() => null)) as
-      | { data?: Meta }
-      | null;
+    const previous = (await this.store
+      .get(viewer, docPath)
+      .catch(() => null)) as { data?: Meta } | null;
     const prevMeta = previous?.data;
     const meta: Meta = {
       id: dto.docId,
@@ -183,7 +179,9 @@ export class PlayerDocumentsService {
       uploadedAt: new Date().toISOString(),
       uploadedBy: viewer.uid,
       expiresAt:
-        dto.slot === 'medical' ? (dto.expiresAt ?? prevMeta?.expiresAt ?? null) : null,
+        dto.slot === 'medical'
+          ? (dto.expiresAt ?? prevMeta?.expiresAt ?? null)
+          : null,
     };
     await this.store.set(viewer, docPath, meta, false);
     if (prevMeta?.storagePath)
@@ -218,7 +216,8 @@ export class PlayerDocumentsService {
       this.docPath(clubId, playerId, docId),
     )) as { data?: Meta } | null;
     const meta = result?.data;
-    if (!meta?.storagePath) throw new NotFoundException('Documento inexistente');
+    if (!meta?.storagePath)
+      throw new NotFoundException('Documento inexistente');
     const safeName = (downloadName || meta.fileName || 'documento')
       .replace(/[^A-Za-z0-9._-]+/g, '_')
       .slice(0, 120);
@@ -229,9 +228,7 @@ export class PlayerDocumentsService {
         action: 'read',
         expires: Date.now() + SIGNED_URL_MINUTES * 60_000,
         responseDisposition:
-          mode === 'download'
-            ? `attachment; filename="${safeName}"`
-            : 'inline',
+          mode === 'download' ? `attachment; filename="${safeName}"` : 'inline',
       });
     await this.log(
       viewer,
@@ -254,9 +251,9 @@ export class PlayerDocumentsService {
   ) {
     await this.assertAccess(viewer, clubId, playerId);
     const path = this.docPath(clubId, playerId, docId);
-    const result = (await this.store.get(viewer, path).catch(() => null)) as
-      | { data?: Meta }
-      | null;
+    const result = (await this.store.get(viewer, path).catch(() => null)) as {
+      data?: Meta;
+    } | null;
     const meta = result?.data;
     if (meta?.storagePath)
       await this.bucket()

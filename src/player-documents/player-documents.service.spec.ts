@@ -38,7 +38,9 @@ function build() {
   const rows = new Map<string, unknown>();
   const store = {
     get: jest.fn((_v: unknown, path: string) =>
-      Promise.resolve(rows.has(path) ? { id: path, path, data: rows.get(path) } : null),
+      Promise.resolve(
+        rows.has(path) ? { id: path, path, data: rows.get(path) } : null,
+      ),
     ),
     set: jest.fn((_v: unknown, path: string, data: unknown) => {
       rows.set(path, data);
@@ -70,7 +72,11 @@ const dto = (extra: object = {}) => ({
   dataBase64: png,
   ...extra,
 });
-const consent = { acceptedBy: 'Ana', relationship: 'madre', textVersion: '2026-10' };
+const consent = {
+  acceptedBy: 'Ana',
+  relationship: 'madre',
+  textVersion: '2026-10',
+};
 
 describe('PlayerDocumentsService', () => {
   beforeEach(() => {
@@ -92,7 +98,7 @@ describe('PlayerDocumentsService', () => {
       service.upload(manager, 'm@x.com', 'p1', dto() as never),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    await service.upload(manager, 'm@x.com', 'p1', dto({ consent }) as never);
+    await service.upload(manager, 'm@x.com', 'p1', dto({ consent }));
     expect(rows.get('clubs/c1/players/p1/documents/consent')).toMatchObject({
       acceptedBy: 'Ana',
       relationship: 'madre',
@@ -102,31 +108,51 @@ describe('PlayerDocumentsService', () => {
       manager,
       'm@x.com',
       'p1',
-      dto({ docId: 'dni_back', slot: 'dni_back' }) as never,
+      dto({ docId: 'dni_back', slot: 'dni_back' }),
     );
     expect(saved).toHaveLength(2);
-    expect(saved[0].path).toContain('private/clubs/c1/players/p1/documents/dni_front-');
+    expect(saved[0].path).toContain(
+      'private/clubs/c1/players/p1/documents/dni_front-',
+    );
   });
 
   it('no guarda un enlace permanente en los metadatos', async () => {
     const { service, rows } = build();
-    await service.upload(manager, undefined, 'p1', dto({ consent }) as never);
-    const meta = rows.get('clubs/c1/players/p1/documents/dni_front') as Record<string, unknown>;
+    await service.upload(manager, undefined, 'p1', dto({ consent }));
+    const meta = rows.get('clubs/c1/players/p1/documents/dni_front') as Record<
+      string,
+      unknown
+    >;
     expect(meta.storagePath).toBeDefined();
     expect(meta.url).toBeUndefined();
   });
 
   it('el enlace vence a los 5 minutos y se registra el acceso', async () => {
     const { service, rows } = build();
-    await service.upload(manager, 'm@x.com', 'p1', dto({ consent }) as never);
+    await service.upload(manager, 'm@x.com', 'p1', dto({ consent }));
     const before = Date.now();
-    const out = await service.signedUrl(manager, 'm@x.com', 'c1', 'p1', 'dni_front', 'download', 'Perez DNI.png');
+    const out = await service.signedUrl(
+      manager,
+      'm@x.com',
+      'c1',
+      'p1',
+      'dni_front',
+      'download',
+      'Perez DNI.png',
+    );
     expect(out.expiresInSeconds).toBe(300);
     expect(signed[0].opts.version).toBe('v4');
-    expect(Number(signed[0].opts.expires) - before).toBeLessThanOrEqual(5 * 60_000 + 50);
+    expect(Number(signed[0].opts.expires) - before).toBeLessThanOrEqual(
+      5 * 60_000 + 50,
+    );
     expect(String(signed[0].opts.responseDisposition)).toContain('attachment');
-    const logs = [...rows.entries()].filter(([k]) => k.includes('document_access_log'));
-    expect(logs.map(([, v]) => (v as { action: string }).action)).toEqual(['upload', 'download']);
+    const logs = [...rows.entries()].filter(([k]) =>
+      k.includes('document_access_log'),
+    );
+    expect(logs.map(([, v]) => (v as { action: string }).action)).toEqual([
+      'upload',
+      'download',
+    ]);
     expect((logs[1][1] as { byEmail: string }).byEmail).toBe('m@x.com');
   });
 
@@ -144,7 +170,7 @@ describe('PlayerDocumentsService', () => {
 
   it('al borrar elimina el archivo y deja registro', async () => {
     const { service, rows } = build();
-    await service.upload(manager, undefined, 'p1', dto({ consent }) as never);
+    await service.upload(manager, undefined, 'p1', dto({ consent }));
     await service.remove(manager, undefined, 'c1', 'p1', 'dni_front');
     expect(deleted).toHaveLength(1);
     expect(rows.has('clubs/c1/players/p1/documents/dni_front')).toBe(false);

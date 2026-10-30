@@ -44,18 +44,39 @@ describe('reglas del almacén', () => {
   });
 
   it('reserva a la dirección los seguimientos de morosidad y la documentación de atletas', () => {
-    const manager = { uid: 'u3', role: 'manager', clubId: 'c1', companyId: 'co' };
-    const clubAdmin = { uid: 'u4', role: 'club_admin', clubId: 'c1', companyId: 'co' };
-    const coordinator = { uid: 'u5', role: 'coordinator', clubId: 'c1', companyId: 'co' };
+    const manager = {
+      uid: 'u3',
+      role: 'manager',
+      clubId: 'c1',
+      companyId: 'co',
+    };
+    const clubAdmin = {
+      uid: 'u4',
+      role: 'club_admin',
+      clubId: 'c1',
+      companyId: 'co',
+    };
+    const coordinator = {
+      uid: 'u5',
+      role: 'coordinator',
+      clubId: 'c1',
+      companyId: 'co',
+    };
     const docsPath = parsePath('clubs/c1/players/p1/documents/dni_front')!;
     const followPath = parsePath('clubs/c1/dues_followups/p1')!;
     const paymentsPath = parsePath('clubs/c1/players/p1/payments')!;
-    if (docsPath.kind !== 'club' || followPath.kind !== 'club' || paymentsPath.kind !== 'club')
+    if (
+      docsPath.kind !== 'club' ||
+      followPath.kind !== 'club' ||
+      paymentsPath.kind !== 'club'
+    )
       throw new Error('ruta inesperada');
 
     expect(isDirectionOnly(docsPath.top, docsPath.segments)).toBe(true);
     expect(isDirectionOnly(followPath.top, followPath.segments)).toBe(true);
-    expect(isDirectionOnly(paymentsPath.top, paymentsPath.segments)).toBe(false);
+    expect(isDirectionOnly(paymentsPath.top, paymentsPath.segments)).toBe(
+      false,
+    );
 
     for (const path of [docsPath, followPath]) {
       expect(canRead(manager, 'c1', path.top, path.segments)).toBe(true);
@@ -68,7 +89,9 @@ describe('reglas del almacén', () => {
       expect(canRead(manager, 'c2', path.top, path.segments)).toBe(false);
     }
     // El resto del club sigue igual para el personal.
-    expect(canRead(coach, 'c1', paymentsPath.top, paymentsPath.segments)).toBe(true);
+    expect(canRead(coach, 'c1', paymentsPath.top, paymentsPath.segments)).toBe(
+      true,
+    );
     expect(canWrite(coach, 'c1', 'divisions')).toBe(true);
     // Consultas de grupo (collectionGroup).
     expect(canRead(coach, 'c1', 'documents')).toBe(false);
