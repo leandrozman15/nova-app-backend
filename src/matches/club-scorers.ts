@@ -1,12 +1,15 @@
 import type { PrismaService } from '../prisma/prisma.service';
 
 export type ScorerRow = {
+  /** Puesto dentro de la tabla de su categoría. */
   position: number;
   playerId: string;
   playerName: string;
   divisionId: string;
   divisionName: string | null;
   teamId: string;
+  /** Categoría (equipo) a la que pertenece el jugador: cada una tiene su propia tabla. */
+  teamName: string | null;
   goals: number;
   trys: number;
   yellowCards: number;
@@ -35,8 +38,9 @@ export function parseStatsPath(parentPath: string) {
 /** Pura: suma las estadísticas por jugador y ordena la tabla de goleadores. */
 export function buildScorers(
   rows: Array<{ parentPath: string; data: unknown }>,
-  filter: { divisionId?: string; teamId?: string } = {},
+  filter: { divisionId?: string; teamId?: string; teamIds?: string[] } = {},
   divisionNames: Map<string, string> = new Map(),
+  teamNames: Map<string, string> = new Map(),
 ): ScorerRow[] {
   const acc = new Map<string, Omit<ScorerRow, 'position' | 'total'> & { events: Set<string> }>();
   for (const r of rows) {
@@ -44,10 +48,11 @@ export function buildScorers(
     if (!where) continue;
     if (filter.divisionId && where.divisionId !== filter.divisionId) continue;
     if (filter.teamId && where.teamId !== filter.teamId) continue;
+    if (filter.teamIds && !filter.teamIds.includes(where.teamId)) continue;
     const d = (r.data ?? {}) as Doc;
     const playerId = str(d.playerId);
     if (!playerId) continue;
-    const key = `${where.divisionId}:${playerId}`;
+    const key = `${where.teamId}:${playerId}`;
     const cur =
       acc.get(key) ??
       {
@@ -56,6 +61,7 @@ export function buildScorers(
         divisionId: where.divisionId,
         divisionName: divisionNames.get(where.divisionId) ?? null,
         teamId: where.teamId,
+        teamName: teamNames.get(where.teamId) ?? null,
         goals: 0,
         trys: 0,
         yellowCards: 0,
@@ -70,11 +76,19 @@ export function buildScorers(
     if (num(d.minutesPlayed) > 0 || num(d.goals) > 0 || num(d.trys) > 0) cur.events.add(where.eventId);
     acc.set(key, cur);
   }
-  return [...acc.values()]
-    .map(({ events, ...v }) => ({ ...v, matches: events.size, total: v.goals + v.trys }))
-    .filter((v) => v.total > 0)
-    .sort((a, b) => b.total - a.total || b.goals - a.goals || a.matches - b.matches || a.playerName.localeCompare(b.playerName, 'es'))
-    .map((v, i) => ({ ...v, position: i + 1 }));
+  // Una tabla por categoría (equipo): solo sus jugadores, con puestos propios.
+  const byTeam = new Map<string, Array<Omit<ScorerRow, 'position'>>>();
+  for (const { events, ...v } of acc.values()) {
+    const row = { ...v, matches: events.size, total: v.goals + v.trys };
+    if (row.total <= 0) continue;
+    byTeam.set(row.teamId, [...(byTeam.get(row.teamId) ?? []), row]);
+  }
+  const tables = [...byTeam.values()].sort((a, b) => (a[0].teamName ?? '').localeCompare(b[0].teamName ?? '', 'es'));
+  return tables.flatMap((rows) =>
+    rows
+      .sort((a, b) => b.total - a.total || b.goals - a.goals || a.matches - b.matches || a.playerName.localeCompare(b.playerName, 'es'))
+      .map((v, i) => ({ ...v, position: i + 1 })),
+  );
 }
 
 /** Tabla de goleadores del club (o de una categoría / equipo) a partir de los partidos jugados con el Live. */
@@ -82,7 +96,7 @@ export async function loadClubScorers(
   prisma: Pick<PrismaService, 'storeDocument'>,
   companyId: string,
   clubId: string,
-  filter: { divisionId?: string; teamId?: string } = {},
+  filter: { divisionId?: string; teamId?: string; teamIds?: string[] } = {},
 ): Promise<ScorerRow[]> {
   const rows = await prisma.storeDocument.findMany({
     where: { companyId, collection: 'stats', path: { startsWith: `clubs/${clubId}/divisions/` } },
@@ -97,5 +111,14 @@ export async function loadClubScorers(
     const n = str(((d.data ?? {}) as Doc).name);
     if (n) names.set(d.docId, n);
   }
-  return buildScorers(rows, filter, names);
+  const teams = await prisma.storeDocument.findMany({
+    where: { companyId, collection: 'teams', path: { startsWith: `clubs/${clubId}/divisions/` } },
+    select: { docId: true, data: true },
+  });
+  const teamNames = new Map<string, string>();
+  for (const t of teams) {
+    const n = str(((t.data ?? {}) as Doc).name);
+    if (n) teamNames.set(t.docId, n);
+  }
+  return buildScorers(rows, filter, names, teamNames);
 }

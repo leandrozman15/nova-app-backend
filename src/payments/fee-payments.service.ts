@@ -146,15 +146,21 @@ export class FeePaymentsService {
     );
   }
 
-  /** Tabla de goleadores de los clubes de mis hijos. */
+  /** Tablas de goleadores de las categorías de mis hijos (una por categoría, solo sus jugadores). */
   async scorersForGuardian(auth: { email?: string; emailVerified?: boolean }) {
     const children = await this.listChildren(auth);
-    const clubs = new Map<string, string>();
-    for (const c of children) clubs.set(c.clubId, c.companyId);
+    const clubs = new Map<string, { companyId: string; teamIds: Set<string>; allKnown: boolean }>();
+    for (const c of children) {
+      const cur = clubs.get(c.clubId) ?? { companyId: c.companyId, teamIds: new Set<string>(), allKnown: true };
+      const teamId = (c.team as { id?: string } | null)?.id || c.teamId || '';
+      if (teamId) cur.teamIds.add(teamId);
+      else cur.allKnown = false;
+      clubs.set(c.clubId, cur);
+    }
     return Promise.all(
-      [...clubs.entries()].map(async ([clubId, companyId]) => ({
+      [...clubs.entries()].map(async ([clubId, v]) => ({
         clubId,
-        scorers: await loadClubScorers(this.prisma, companyId, clubId),
+        scorers: await loadClubScorers(this.prisma, v.companyId, clubId, v.allKnown ? { teamIds: [...v.teamIds] } : {}),
       })),
     );
   }
