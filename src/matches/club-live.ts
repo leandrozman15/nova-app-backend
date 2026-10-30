@@ -63,6 +63,10 @@ export async function loadClubLive(
 ): Promise<LiveItem[]> {
   const out: LiveItem[] = [];
 
+  // Escudos: si el Live no los trajo (cliente viejo o sin logo cargado), se completan desde los clubes.
+  const ownClub = await prisma.club.findMany({ where: { id: clubId }, select: { id: true, logoUrl: true } });
+  const ownLogo = ownClub[0]?.logoUrl ?? null;
+
   const index = await prisma.storeDocument.findMany({
     where: { companyId, collection: 'live_matches_index', data: { path: ['clubId'], equals: clubId } },
     select: { docId: true, data: true },
@@ -78,7 +82,7 @@ export async function loadClubLive(
       source: 'club',
       homeName: str(d.teamName) ?? str(d.clubName) ?? 'Local',
       awayName: str(d.opponentName) ?? 'Visitante',
-      homeLogo: str(d.clubLogo),
+      homeLogo: str(d.clubLogo) ?? ownLogo,
       awayLogo: str(d.opponentLogo),
       homeScore: num(d.homeScore) ?? 0,
       awayScore: num(d.awayScore) ?? 0,
@@ -88,6 +92,16 @@ export async function loadClubLive(
       sport: str(d.sport),
       incidents: incidentsOf(d.incidents),
     });
+  }
+
+  const needOpp = out.filter((o) => o.source === 'club' && !o.awayLogo).map((o) => o.awayName);
+  if (needOpp.length > 0) {
+    const byName = await prisma.club.findMany({
+      where: { companyId, name: { in: needOpp, mode: 'insensitive' }, logoUrl: { not: null } },
+      select: { name: true, logoUrl: true },
+    });
+    const map = new Map(byName.map((c) => [c.name.toLowerCase(), c.logoUrl as string]));
+    for (const o of out) if (o.source === 'club' && !o.awayLogo) o.awayLogo = map.get(o.awayName.toLowerCase()) ?? null;
   }
 
   const league = await prisma.match.findMany({

@@ -24,7 +24,7 @@ describe('guardian-live', () => {
         ]),
       },
       match: { findMany: jest.fn().mockResolvedValue([]) },
-      club: { findMany: jest.fn() },
+      club: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const r = await loadClubLive(prisma, 'co', 'c', now);
     expect(r).toHaveLength(1);
@@ -58,5 +58,19 @@ describe('guardian-live', () => {
       ['goal', 'home', null],
       ['red', 'away', 'Lu Gil'],
     ]);
+  });
+
+  it('completa escudos desde los clubes si el Live no los trajo', async () => {
+    const prisma: any = {
+      storeDocument: { findMany: jest.fn().mockResolvedValue([{ docId: 'x', data: { status: 'live', teamName: 'Cat', opponentName: 'Rival FC', homeScore: 0, awayScore: 0, updatedAt: '2026-11-01T11:59:00Z' } }]) },
+      match: { findMany: jest.fn().mockResolvedValue([]) },
+      club: {
+        findMany: jest.fn().mockImplementation(({ where }: any) =>
+          Promise.resolve(where.id === 'c' ? [{ id: 'c', logoUrl: 'own.png' }] : [{ name: 'Rival FC', logoUrl: 'rival.png' }]),
+        ),
+      },
+    };
+    const r = await loadClubLive(prisma, 'co', 'c', now);
+    expect(r[0]).toMatchObject({ homeLogo: 'own.png', awayLogo: 'rival.png' });
   });
 });
