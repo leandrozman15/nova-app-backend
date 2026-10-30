@@ -1838,12 +1838,15 @@ model BuffetSale {
   createdByUid  String
   createdByName String?
   createdAt     DateTime  @default(now())
+  // Id generado en el dispositivo: evita duplicar una venta hecha sin señal al reenviarla.
+  clientRef     String?
 
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
   session BuffetCashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   items   BuffetSaleItem[]
 
+  @@unique([clubId, clientRef])
   @@index([sessionId])
   @@index([clubId, createdAt])
 }

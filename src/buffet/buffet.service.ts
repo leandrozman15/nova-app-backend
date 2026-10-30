@@ -227,6 +227,29 @@ export class BuffetService {
 
   // ─── Ventas ─────────────────────────────────────────────────────────
   async createSale(companyId: string, clubId: string, actor: Actor, dto: CreateSaleDto) {
+    if (dto.clientRef) {
+      const prev = await this.prisma.buffetSale.findFirst({
+        where: { companyId, clubId, clientRef: dto.clientRef },
+        include: { items: true },
+      });
+      if (prev) return prev;
+    }
+    try {
+      return await this.createSaleOnce(companyId, clubId, actor, dto);
+    } catch (e: any) {
+      // Dos reenvíos simultáneos: gana el primero, el otro devuelve esa misma venta.
+      if (e?.code === 'P2002' && dto.clientRef) {
+        const prev = await this.prisma.buffetSale.findFirst({
+          where: { companyId, clubId, clientRef: dto.clientRef },
+          include: { items: true },
+        });
+        if (prev) return prev;
+      }
+      throw e;
+    }
+  }
+
+  private async createSaleOnce(companyId: string, clubId: string, actor: Actor, dto: CreateSaleDto) {
     const session = await this.currentSession(companyId, clubId);
     if (!session) throw new ConflictException('Abrí la caja antes de vender');
 
@@ -255,6 +278,7 @@ export class BuffetService {
           sessionId: session.id,
           total,
           paymentMethod: dto.paymentMethod,
+          clientRef: dto.clientRef,
           createdByUid: actor.uid,
           createdByName: actor.name,
           items: {

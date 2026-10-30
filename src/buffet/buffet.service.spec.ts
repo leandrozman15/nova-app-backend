@@ -12,6 +12,7 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
     ...tx,
     buffetCashSession: { ...tx.buffetCashSession, findFirst: jest.fn() },
     buffet: { findUnique: jest.fn(), create: jest.fn() },
+    buffetSale: { ...tx.buffetSale, findFirst: jest.fn().mockResolvedValue(null) },
     club: { findFirst: jest.fn().mockResolvedValue({ id: 'c1' }) },
     $transaction: jest.fn((fn: any) => fn(tx)),
     ...overrides,
@@ -54,6 +55,35 @@ describe('BuffetService', () => {
     expect(tx.buffetSale.create.mock.calls[0][0].data.total).toBe(3000);
     expect(tx.buffetProduct.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { stock: { decrement: 3 } } });
     expect(tx.buffetStockMovement.create.mock.calls[0][0].data).toMatchObject({ delta: -3, reason: 'sale' });
+  });
+
+  it('reenviar una venta con el mismo clientRef devuelve la original sin volver a descontar', async () => {
+    const { prisma, tx } = makePrisma();
+    prisma.buffetSale.findFirst.mockResolvedValue({ id: 'sale1', items: [] });
+    const service = new BuffetService(prisma);
+    const r = await service.createSale('co', 'c1', actor, {
+      items: [{ productId: 'p1', quantity: 1 }],
+      paymentMethod: 'cash',
+      clientRef: 'dev-123',
+    });
+    expect(r.id).toBe('sale1');
+    expect(tx.buffetSale.create).not.toHaveBeenCalled();
+    expect(tx.buffetProduct.update).not.toHaveBeenCalled();
+  });
+
+  it('dos reenvíos a la vez: el que choca con el índice único devuelve la venta ganadora', async () => {
+    const { prisma, tx } = makePrisma();
+    prisma.buffetCashSession.findFirst.mockResolvedValue({ id: 's1' });
+    prisma.buffetSale.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'sale1', items: [] });
+    tx.buffetProduct.findMany.mockResolvedValue([{ id: 'p1', name: 'Gaseosa', price: 1000, cost: 600, stock: 10, trackStock: true }]);
+    tx.buffetSale.create.mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+    const service = new BuffetService(prisma);
+    const r = await service.createSale('co', 'c1', actor, {
+      items: [{ productId: 'p1', quantity: 1 }],
+      paymentMethod: 'cash',
+      clientRef: 'dev-123',
+    });
+    expect(r.id).toBe('sale1');
   });
 
   it('el cierre de caja de un buffet propio crea el ingreso en tesorería', async () => {
