@@ -21,6 +21,9 @@ export type LiveItem = {
   awayScore: number;
   phase: 'en_curso' | 'entretiempo' | 'finalizado';
   timeDisplay: string | null;
+  /** Tiempo actual y cantidad de tiempos (2, 3 o 4 cuartos). */
+  period: number | null;
+  totalPeriods: number | null;
   divisionName: string | null;
   sport: string | null;
   incidents: LiveIncident[];
@@ -88,6 +91,8 @@ export async function loadClubLive(
       awayScore: num(d.awayScore) ?? 0,
       phase,
       timeDisplay: str(d.timeDisplay),
+      period: num(d.period),
+      totalPeriods: num(d.totalPeriods),
       divisionName: str(d.divisionName),
       sport: str(d.sport),
       incidents: incidentsOf(d.incidents),
@@ -151,6 +156,8 @@ export async function loadClubLive(
         awayScore: m.awayScore,
         phase: 'en_curso',
         timeDisplay: null,
+        period: null,
+        totalPeriods: null,
         divisionName: null,
         sport: null,
         incidents: m.events.map((e) => {
