@@ -109,6 +109,12 @@ export class GuardianChildrenController {
     return this.fees.clubMatchesForGuardian((req as RequestWithAuth).auth!);
   }
 
+  /** Torneos, tablas y fixture completo de los clubes de mis hijos. */
+  @Get('competitions')
+  competitions(@Req() req: unknown) {
+    return this.fees.competitionsForGuardian((req as RequestWithAuth).auth!);
+  }
+
   /** Carta (lista de precios) del buffet de los clubes de mis hijos. */
   @Get('buffet')
   buffetMenu(@Req() req: unknown) {

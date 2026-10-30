@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { loadChildCallups } from './guardian-callups';
+import { loadClubCompetitions } from './guardian-competitions';
 import { roundMoney } from '../bookings/booking-time';
 import { buildClubFeed } from '../matches/club-feed';
 import { toPublicMenu } from '../buffet/buffet.logic';
@@ -127,6 +128,19 @@ export class FeePaymentsService {
       })),
     );
     return feeds;
+  }
+
+  /** Torneos, tablas de posiciones y fixture completo de los clubes de mis hijos. */
+  async competitionsForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+    const children = await this.listChildren(auth);
+    const clubs = new Map<string, string>();
+    for (const c of children) clubs.set(c.clubId, c.companyId);
+    return Promise.all(
+      [...clubs.entries()].map(async ([clubId, companyId]) => ({
+        clubId,
+        tournaments: await loadClubCompetitions(this.prisma, companyId, clubId),
+      })),
+    );
   }
 
   /** Carta del buffet de los clubes de mis hijos (solo lectura: sin costos ni stock). */
