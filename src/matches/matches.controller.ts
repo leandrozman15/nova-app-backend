@@ -59,6 +59,15 @@ export class MatchesController {
     return this.matchesService.clubFeed(requireCompanyId(req), clubId);
   }
 
+  /** En vivo del club con escudos, goles (quién y minuto) y tarjetas: lo ve todo el club. */
+  @Roles('admin', 'manager', 'coach', 'coordinator', 'player', 'member')
+  @Get('club-live')
+  clubLive(@Req() req: unknown, @Query('clubId') clubId: string) {
+    if (!clubId) throw new BadRequestException('clubId es obligatorio');
+    requireClubScope(req, clubId);
+    return this.matchesService.clubLive(requireCompanyId(req), clubId);
+  }
+
   @Roles('admin', 'manager', 'coach')
   @Get()
   list(

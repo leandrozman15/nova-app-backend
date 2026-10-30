@@ -1,4 +1,4 @@
-import { incidentsOf, loadClubLive } from './guardian-live';
+import { incidentsOf, loadClubLive } from './club-live';
 
 describe('guardian-live', () => {
   const now = Date.parse('2026-11-01T12:00:00Z');

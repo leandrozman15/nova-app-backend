@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { loadClubLive } from './guardian-live';
+import { loadClubLive } from '../matches/club-live';
 import { loadChildTeams } from './child-teams';
 import { loadChildCallups } from './guardian-callups';
 import { loadClubCompetitions } from './guardian-competitions';

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { loadClubLive } from './club-live';
 import { MatchCallupStatus, MatchEventType, MatchStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,11 @@ export class MatchesService {
 
   clubFeed(companyId: string, clubId: string) {
     return buildClubFeed(this.prisma, companyId, clubId);
+  }
+
+  /** Partidos en vivo del club con escudos, goles y tarjetas. */
+  clubLive(companyId: string, clubId: string) {
+    return loadClubLive(this.prisma, companyId, clubId);
   }
 
   async list(companyId: string, pagination?: { skip?: number; take?: number; withMeta?: boolean }) {
