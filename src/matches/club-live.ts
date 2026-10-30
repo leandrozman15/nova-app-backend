@@ -24,6 +24,9 @@ export type LiveItem = {
   /** Tiempo actual y cantidad de tiempos (2, 3 o 4 cuartos). */
   period: number | null;
   totalPeriods: number | null;
+  /** Categoría del partido (equipo y división) para que cada pantalla muestre solo la suya. */
+  teamId: string | null;
+  divisionId: string | null;
   divisionName: string | null;
   sport: string | null;
   incidents: LiveIncident[];
@@ -93,6 +96,8 @@ export async function loadClubLive(
       timeDisplay: str(d.timeDisplay),
       period: num(d.period),
       totalPeriods: num(d.totalPeriods),
+      teamId: str(d.teamId),
+      divisionId: str(d.divisionId),
       divisionName: str(d.divisionName),
       sport: str(d.sport),
       incidents: incidentsOf(d.incidents),
@@ -158,6 +163,8 @@ export async function loadClubLive(
         timeDisplay: null,
         period: null,
         totalPeriods: null,
+        teamId: null,
+        divisionId: null,
         divisionName: null,
         sport: null,
         incidents: m.events.map((e) => {
