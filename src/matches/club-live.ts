@@ -77,11 +77,19 @@ export async function loadClubLive(
     where: { companyId, collection: 'live_matches_index', data: { path: ['clubId'], equals: clubId } },
     select: { docId: true, data: true },
   });
+  // Partidos de liga que ya muestra el Live del entrenador (con marcador, reloj y autores): no se repiten en cero.
+  const linkedMatchIds = new Set<string>();
+  const liveRivals = new Set<string>();
+  const normName = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
   for (const row of index) {
     const d = (row.data ?? {}) as Doc;
     if (d.status !== 'live') continue;
     const updated = Date.parse(String(d.updatedAt ?? ''));
     if (!Number.isNaN(updated) && now - updated > STALE_MS) continue; // un live olvidado no queda "en vivo" para siempre
+    const linked = str(d.backendMatchId);
+    if (linked) linkedMatchIds.add(linked);
+    const rival = str(d.opponentName);
+    if (rival) liveRivals.add(normName(rival));
     const phase = d.matchPhase === 'entretiempo' ? 'entretiempo' : d.matchPhase === 'finalizado' ? 'finalizado' : 'en_curso';
     out.push({
       id: `ix:${row.docId}`,
@@ -150,6 +158,9 @@ export async function loadClubLive(
     const clubs = await prisma.club.findMany({ where: { id: { in: clubIds } }, select: { id: true, logoUrl: true } });
     const logo = new Map(clubs.map((c) => [c.id, c.logoUrl ?? null]));
     for (const m of league) {
+      const rivalName = m.homeTeam?.clubId === clubId ? m.awayTeam?.name : m.homeTeam?.name;
+      // Si el entrenador está transmitiendo este partido, la tarjeta es la del Live (marcador, minuto y goleadores reales).
+      if (linkedMatchIds.has(m.id) || (rivalName && liveRivals.has(normName(rivalName)))) continue;
       out.push({
         id: `lg:${m.id}`,
         source: 'league',
