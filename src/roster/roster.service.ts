@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { loadChildTeams } from '../payments/child-teams';
 import { Prisma } from '@prisma/client';
 
 import { MediaStorageService } from '../firebase/media-storage.service';
@@ -330,7 +331,11 @@ export class RosterService {
       include: PLAYER_INCLUDE,
     });
     if (!player) throw new NotFoundException('No tenés ficha en este club');
-    return toPlayerDoc(player);
+    // El atleta no puede leer los documentos del club: el servidor le entrega su plantel (DT y horarios).
+    const teams = await loadChildTeams(this.prisma, [
+      { id: player.id, companyId: player.companyId, clubId: player.clubId, divisionId: player.divisionId, extra: player.extra },
+    ]);
+    return { ...toPlayerDoc(player), team: teams.get(player.id) ?? null };
   }
 
   private async checkDivision(clubId: string, data: Record<string, unknown>) {
