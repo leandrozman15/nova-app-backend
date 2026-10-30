@@ -94,14 +94,29 @@ export async function loadClubLive(
     });
   }
 
-  const needOpp = out.filter((o) => o.source === 'club' && !o.awayLogo).map((o) => o.awayName);
+  const needOpp = out.filter((o) => o.source === 'club' && !o.awayLogo);
   if (needOpp.length > 0) {
+    const norm = (v: string) => v.toLowerCase().replace(/\s+·\s+div\..*$/, '').replace(/\s+/g, ' ').trim();
+    const logos = new Map<string, string>();
+    // Rivales cargados en el club (los que se eligen al armar el fixture).
+    const opponents = await prisma.storeDocument.findMany({
+      where: { companyId, parentPath: `clubs/${clubId}/opponents` },
+      select: { data: true },
+    });
+    for (const r of opponents) {
+      const d = (r.data ?? {}) as Doc;
+      const n = str(d.name);
+      const l = str(d.logoUrl);
+      if (n && l) logos.set(norm(n), l);
+    }
+    // Y clubes registrados en la plataforma con el mismo nombre.
+    const names = [...new Set(needOpp.map((o) => o.awayName))];
     const byName = await prisma.club.findMany({
-      where: { companyId, name: { in: needOpp, mode: 'insensitive' }, logoUrl: { not: null } },
+      where: { companyId, name: { in: names, mode: 'insensitive' }, logoUrl: { not: null } },
       select: { name: true, logoUrl: true },
     });
-    const map = new Map(byName.map((c) => [c.name.toLowerCase(), c.logoUrl as string]));
-    for (const o of out) if (o.source === 'club' && !o.awayLogo) o.awayLogo = map.get(o.awayName.toLowerCase()) ?? null;
+    for (const c of byName) if (!logos.has(norm(c.name))) logos.set(norm(c.name), c.logoUrl as string);
+    for (const o of needOpp) o.awayLogo = logos.get(norm(o.awayName)) ?? null;
   }
 
   const league = await prisma.match.findMany({
