@@ -115,6 +115,12 @@ export class GuardianChildrenController {
     return this.fees.liveForGuardian((req as RequestWithAuth).auth!);
   }
 
+  /** Tabla de goleadores de los clubes de mis hijos. */
+  @Get('scorers')
+  scorers(@Req() req: unknown) {
+    return this.fees.scorersForGuardian((req as RequestWithAuth).auth!);
+  }
+
   /** Torneos, tablas y fixture completo de los clubes de mis hijos. */
   @Get('competitions')
   competitions(@Req() req: unknown) {

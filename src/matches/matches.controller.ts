@@ -68,6 +68,20 @@ export class MatchesController {
     return this.matchesService.clubLive(requireCompanyId(req), clubId);
   }
 
+  /** Tabla de goleadores del club (opcional: por categoría o equipo): la ve todo el club. */
+  @Roles('admin', 'manager', 'coach', 'coordinator', 'player', 'member')
+  @Get('club-scorers')
+  clubScorers(
+    @Req() req: unknown,
+    @Query('clubId') clubId: string,
+    @Query('divisionId') divisionId?: string,
+    @Query('teamId') teamId?: string,
+  ) {
+    if (!clubId) throw new BadRequestException('clubId es obligatorio');
+    requireClubScope(req, clubId);
+    return this.matchesService.clubScorers(requireCompanyId(req), clubId, { divisionId, teamId });
+  }
+
   @Roles('admin', 'manager', 'coach')
   @Get()
   list(
