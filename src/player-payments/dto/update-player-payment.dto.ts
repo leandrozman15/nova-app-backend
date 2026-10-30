@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class UpdatePlayerPaymentDto {
   @IsOptional()
@@ -29,4 +38,9 @@ export class UpdatePlayerPaymentDto {
   @IsString()
   @MaxLength(60)
   paymentMethod?: string;
+
+  /** Vencimiento de la cuota (YYYY-MM-DD). */
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  dueDate?: string;
 }

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { parseBooleanFlag, parsePagination } from '../common/http/pagination';
@@ -43,7 +52,11 @@ export class PlayerPaymentsController {
 
   @Roles('admin', 'manager')
   @Patch(':id')
-  update(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdatePlayerPaymentDto) {
+  update(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: UpdatePlayerPaymentDto,
+  ) {
     return this.playerPaymentsService.update(requireCompanyId(req), id, dto);
   }
 }

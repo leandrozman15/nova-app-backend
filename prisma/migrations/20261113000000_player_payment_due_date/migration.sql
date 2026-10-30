@@ -1,0 +1,1 @@
+ALTER TABLE "PlayerPayment" ADD COLUMN "dueDate" TIMESTAMP(3);
