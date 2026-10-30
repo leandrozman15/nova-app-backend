@@ -152,7 +152,7 @@ export class FeePaymentsService {
     const clubs = new Map<string, { companyId: string; teamIds: Set<string>; allKnown: boolean }>();
     for (const c of children) {
       const cur = clubs.get(c.clubId) ?? { companyId: c.companyId, teamIds: new Set<string>(), allKnown: true };
-      const teamId = (c.team as { id?: string } | null)?.id || c.teamId || '';
+      const teamId: string = String((c.team as { id?: string } | null)?.id ?? c.teamId ?? '');
       if (teamId) cur.teamIds.add(teamId);
       else cur.allKnown = false;
       clubs.set(c.clubId, cur);
