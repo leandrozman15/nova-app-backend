@@ -109,6 +109,12 @@ export class GuardianChildrenController {
     return this.fees.clubMatchesForGuardian((req as RequestWithAuth).auth!);
   }
 
+  /** Partidos en vivo de los clubes de mis hijos (escudos, goles y tarjetas). */
+  @Get('live')
+  live(@Req() req: unknown) {
+    return this.fees.liveForGuardian((req as RequestWithAuth).auth!);
+  }
+
   /** Torneos, tablas y fixture completo de los clubes de mis hijos. */
   @Get('competitions')
   competitions(@Req() req: unknown) {
