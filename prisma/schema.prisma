@@ -675,6 +675,8 @@ model PlayerPayment {
   status        PaymentStatus @default(pending)
   paymentMethod String?
   paymentDate   DateTime?
+  /// Vencimiento de la cuota (null = sin fecha: se considera vencida al pasar el mes).
+  dueDate       DateTime?
   // Cobro online de la cuota por Mercado Pago (cuenta del club).
   mpPreferenceId  String?
   mpPaymentId     String?

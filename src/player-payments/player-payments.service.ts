@@ -5,13 +5,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
 
+/** El vencimiento se guarda al mediodía UTC para que no cambie de día según la zona horaria. */
+export function toDueDate(value?: string): Date | undefined {
+  return value ? new Date(`${value}T12:00:00.000Z`) : undefined;
+}
+
 @Injectable()
 export class PlayerPaymentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(
     companyId: string,
-    filters?: { clubId?: string; playerId?: string; skip?: number; take?: number; withMeta?: boolean },
+    filters?: {
+      clubId?: string;
+      playerId?: string;
+      skip?: number;
+      take?: number;
+      withMeta?: boolean;
+    },
   ) {
     const where = {
       companyId,
@@ -35,7 +46,11 @@ export class PlayerPaymentsService {
           },
         },
       },
-      orderBy: [{ year: 'desc' as const }, { month: 'desc' as const }, { createdAt: 'desc' as const }],
+      orderBy: [
+        { year: 'desc' as const },
+        { month: 'desc' as const },
+        { createdAt: 'desc' as const },
+      ],
       skip: filters?.skip,
       take: filters?.take,
     };
@@ -93,9 +108,10 @@ export class PlayerPaymentsService {
         month: dto.month,
         year: dto.year,
         amount: dto.amount,
-        status: (dto.status as PaymentStatus | undefined) ?? PaymentStatus.paid,
+        status: dto.status ?? PaymentStatus.paid,
         paymentMethod: dto.paymentMethod,
         paymentDate,
+        dueDate: toDueDate(dto.dueDate),
       },
       include: {
         club: true,
@@ -106,10 +122,10 @@ export class PlayerPaymentsService {
 
   async update(companyId: string, id: string, dto: UpdatePlayerPaymentDto) {
     const current = await this.getById(companyId, id);
-    const nextStatus = dto.status as PaymentStatus | undefined;
+    const nextStatus = dto.status;
     const paymentDate = nextStatus
       ? nextStatus === PaymentStatus.paid
-        ? current.paymentDate ?? new Date()
+        ? (current.paymentDate ?? new Date())
         : null
       : undefined;
 
@@ -122,6 +138,7 @@ export class PlayerPaymentsService {
         status: nextStatus,
         paymentMethod: dto.paymentMethod,
         paymentDate,
+        dueDate: toDueDate(dto.dueDate),
       },
       include: {
         club: true,
@@ -130,7 +147,11 @@ export class PlayerPaymentsService {
     });
   }
 
-  private async ensurePlayer(companyId: string, playerId: string, clubId: string) {
+  private async ensurePlayer(
+    companyId: string,
+    playerId: string,
+    clubId: string,
+  ) {
     const player = await this.prisma.player.findFirst({
       where: { companyId, id: playerId, clubId },
       select: { id: true },
