@@ -74,7 +74,7 @@ export class DocStoreService {
   private async assertRead(viewer: Viewer, info: PathInfo, data?: Doc) {
     if (info.kind === 'club') {
       await this.checkClub(viewer, info.clubId);
-      if (!canRead(viewer, info.clubId, info.top))
+      if (!canRead(viewer, info.clubId, info.top, info.segments))
         throw new ForbiddenException('Sin permiso para ver esto');
       return;
     }
@@ -103,7 +103,7 @@ export class DocStoreService {
   ) {
     if (info.kind === 'club') {
       await this.checkClub(viewer, info.clubId);
-      if (!canWrite(viewer, info.clubId))
+      if (!canWrite(viewer, info.clubId, info.top, info.segments))
         throw new ForbiddenException('Sin permiso para modificar esto');
       return;
     }

@@ -29,6 +29,26 @@ export const STAFF_ROLES = new Set([
   'coach_lvl2',
 ]);
 
+/** Dirección del club: única que ve datos sensibles (seguimientos de morosidad, DNI y certificados). */
+export const DIRECTION_ROLES = new Set(['admin', 'club_admin', 'manager']);
+
+/** Colecciones de primer nivel del club reservadas a la dirección. */
+export const DIRECTION_ONLY_TOP = new Set(['dues_followups']);
+
+/**
+ * ¿La ruta es sensible? Seguimientos de morosidad, y la documentación de cada
+ * atleta (clubs/{club}/players/{id}/documents). `top` también puede ser el
+ * nombre de un grupo en consultas collectionGroup.
+ */
+export function isDirectionOnly(top: string | null, segments?: string[]) {
+  if (top && DIRECTION_ONLY_TOP.has(top)) return true;
+  if (top === 'documents') return true;
+  return top === 'players' && segments?.[4] === 'documents';
+}
+
+export const isDirection = (viewer: Viewer) =>
+  DIRECTION_ROLES.has((viewer.role ?? '').toLowerCase());
+
 /** Roles con alcance en toda la institución (no solo su club activo). */
 export const COMPANY_ROLES = new Set([
   'admin',
@@ -118,15 +138,29 @@ export function inClub(viewer: Viewer, clubId: string | null | undefined) {
   return isCompanyWide(viewer) || viewer.clubId === clubId;
 }
 
-export function canRead(viewer: Viewer, clubId: string, top: string | null) {
+export function canRead(
+  viewer: Viewer,
+  clubId: string,
+  top: string | null,
+  segments?: string[],
+) {
   if (!inClub(viewer, clubId)) return false;
+  if (isDirectionOnly(top, segments)) return isDirection(viewer);
   if (isStaff(viewer)) return true;
   if (top === null) return true; // la ficha del club
   return MEMBER_READABLE.has(top);
 }
 
-export function canWrite(viewer: Viewer, clubId: string) {
-  return inClub(viewer, clubId) && isStaff(viewer);
+export function canWrite(
+  viewer: Viewer,
+  clubId: string,
+  top?: string | null,
+  segments?: string[],
+) {
+  if (!inClub(viewer, clubId)) return false;
+  if (top !== undefined && isDirectionOnly(top, segments))
+    return isDirection(viewer);
+  return isStaff(viewer);
 }
 
 // ─── Consultas ───────────────────────────────────────────────────────────────
