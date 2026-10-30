@@ -18,7 +18,7 @@ describe('guardian-live', () => {
     const prisma: any = {
       storeDocument: {
         findMany: jest.fn().mockResolvedValue([
-          { docId: 'c_t_live', data: { status: 'live', teamName: 'Cat 2019', opponentName: 'Rival', clubLogo: 'a.png', opponentLogo: 'b.png', homeScore: 2, awayScore: 1, matchPhase: 'entretiempo', timeDisplay: '23:10', updatedAt: '2026-11-01T11:59:00Z', incidents: [{ type: 'goal', playerName: 'Juan', minute: 4 }] } },
+          { docId: 'c_t_live', data: { status: 'live', teamName: 'Cat 2019', teamId: 't19', divisionId: 'd1', opponentName: 'Rival', clubLogo: 'a.png', opponentLogo: 'b.png', homeScore: 2, awayScore: 1, matchPhase: 'entretiempo', timeDisplay: '23:10', updatedAt: '2026-11-01T11:59:00Z', incidents: [{ type: 'goal', playerName: 'Juan', minute: 4 }] } },
           { docId: 'old', data: { status: 'live', updatedAt: '2026-10-30T11:59:00Z' } },
           { docId: 'fin', data: { status: 'finished' } },
         ]),
@@ -28,7 +28,7 @@ describe('guardian-live', () => {
     };
     const r = await loadClubLive(prisma, 'co', 'c', now);
     expect(r).toHaveLength(1);
-    expect(r[0]).toMatchObject({ homeName: 'Cat 2019', homeLogo: 'a.png', awayLogo: 'b.png', homeScore: 2, phase: 'entretiempo' });
+    expect(r[0]).toMatchObject({ teamId: 't19', divisionId: 'd1', homeName: 'Cat 2019', homeLogo: 'a.png', awayLogo: 'b.png', homeScore: 2, phase: 'entretiempo' });
     expect(r[0].incidents[0]).toMatchObject({ type: 'goal', playerName: 'Juan', minute: 4, side: 'home' });
   });
 
