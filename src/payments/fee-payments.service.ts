@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { loadClubLive } from '../matches/club-live';
+import { loadClubScorers } from '../matches/club-scorers';
 import { loadChildTeams } from './child-teams';
 import { loadChildCallups } from './guardian-callups';
 import { loadClubCompetitions } from './guardian-competitions';
@@ -141,6 +142,19 @@ export class FeePaymentsService {
       [...clubs.entries()].map(async ([clubId, companyId]) => ({
         clubId,
         matches: await loadClubLive(this.prisma, companyId, clubId),
+      })),
+    );
+  }
+
+  /** Tabla de goleadores de los clubes de mis hijos. */
+  async scorersForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+    const children = await this.listChildren(auth);
+    const clubs = new Map<string, string>();
+    for (const c of children) clubs.set(c.clubId, c.companyId);
+    return Promise.all(
+      [...clubs.entries()].map(async ([clubId, companyId]) => ({
+        clubId,
+        scorers: await loadClubScorers(this.prisma, companyId, clubId),
       })),
     );
   }
