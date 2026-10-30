@@ -296,10 +296,15 @@ export class MatchesService {
       throw new BadRequestException('Missing player uid');
     }
 
+    // El entrenador cita con el id de la ficha; el jugador entra con su uid: se buscan los dos.
+    const own = await this.prisma.player.findMany({
+      where: { companyId, authUid: playerExternalId },
+      select: { id: true },
+    });
     return this.prisma.matchCallup.findMany({
       where: {
         companyId,
-        playerExternalId,
+        playerExternalId: { in: [playerExternalId, ...own.map((p) => p.id)] },
         publishedAt: { not: null },
       },
       include: {
