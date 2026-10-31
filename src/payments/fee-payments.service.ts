@@ -248,7 +248,7 @@ export class FeePaymentsService {
         sport: true,
         divisionId: true,
         branch: true,
-        club: { select: { name: true } },
+        club: { select: { name: true, logoUrl: true } },
       },
     });
     const children = candidates.filter(
@@ -275,6 +275,7 @@ export class FeePaymentsService {
         companyId: c.companyId,
         clubId: c.clubId,
         clubName: c.club?.name ?? null,
+        clubLogoUrl: c.club?.logoUrl ?? null,
         teamId:
           typeof extra.teamId === 'string' && extra.teamId !== c.divisionId
             ? extra.teamId
