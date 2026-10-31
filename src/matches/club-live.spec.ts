@@ -88,23 +88,44 @@ describe('guardian-live', () => {
     expect(r[0].awayLogo).toBe('vis.png');
   });
 
-  it('si el Live del entrenador transmite el partido de liga, no lo repite en cero', async () => {
+  it('partido de liga con transmisión del entrenador: la tarjeta lleva marcador, reloj, tiempo e incidencias reales', async () => {
     const prisma: any = {
       storeDocument: {
         findMany: jest.fn().mockResolvedValue([
-          { docId: 'c1_t1_live', data: { status: 'live', clubId: 'c1', teamName: 'Cat 2019', opponentName: 'Visita', backendMatchId: 'm1', homeScore: 2, awayScore: 0, timeDisplay: '12:30', updatedAt: '2026-11-01T11:59:00Z', incidents: [{ type: 'goal', playerName: 'Ana', minute: 5 }] } },
+          { docId: 'c1_t1_live', data: { status: 'live', clubId: 'c1', teamId: 't1', teamName: 'Cat 2019', opponentName: 'Visita', backendMatchId: 'm1', homeScore: 2, awayScore: 0, timeDisplay: '12:30', period: 1, totalPeriods: 2, matchPhase: 'en_curso', updatedAt: '2026-11-01T11:59:00Z', incidents: [{ type: 'goal', playerName: 'Ana', minute: 5, side: 'home' }] } },
         ]),
       },
       club: { findMany: jest.fn().mockResolvedValue([]) },
       match: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 'm1', homeScore: 0, awayScore: 0, homeTeamId: 'th', homeTeam: { name: 'Local', clubId: 'c1' }, awayTeam: { name: 'Visita', clubId: null }, events: [] },
+          { id: 'm1', homeScore: 0, awayScore: 0, homeTeamId: 'th', homeTeam: { name: 'Local', clubId: 'c1' }, awayTeam: { name: 'Visita', clubId: 'c2' }, events: [{ type: 'goal', minute: 5, teamId: 'th', player: null }] },
           { id: 'm2', homeScore: 0, awayScore: 0, homeTeamId: 'th', homeTeam: { name: 'Otro', clubId: 'c1' }, awayTeam: { name: 'Otra visita', clubId: null }, events: [] },
         ]),
       },
     };
     const r = await loadClubLive(prisma, 'co', 'c1', now);
-    expect(r.map((x) => x.id)).toEqual(['ix:c1_t1_live', 'lg:m2']);
-    expect(r[0]).toMatchObject({ homeScore: 2, timeDisplay: '12:30' });
+    expect(r.map((x) => x.id)).toEqual(['lg:m1', 'lg:m2']);
+    expect(r[0]).toMatchObject({ homeScore: 2, awayScore: 0, timeDisplay: '12:30', period: 1, totalPeriods: 2, phase: 'en_curso' });
+    expect(r[0].incidents[0]).toMatchObject({ playerName: 'Ana', minute: 5, side: 'home' });
+    expect(r[1]).toMatchObject({ homeScore: 0, timeDisplay: null });
+  });
+
+  it('si el que transmite es el visitante de la liga, se invierten marcador e incidencias', async () => {
+    const prisma: any = {
+      storeDocument: {
+        findMany: jest.fn().mockResolvedValue([
+          { docId: 'c2_t1_live', data: { status: 'live', clubId: 'c2', mineHome: false, backendMatchId: 'm1', homeScore: 3, awayScore: 1, timeDisplay: '40:00', updatedAt: '2026-11-01T11:59:00Z', incidents: [{ type: 'goal', playerName: 'Luz', minute: 8, side: 'home' }] } },
+        ]),
+      },
+      club: { findMany: jest.fn().mockResolvedValue([]) },
+      match: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'm1', homeScore: 0, awayScore: 0, homeTeamId: 'th', homeTeam: { name: 'Local', clubId: 'c1' }, awayTeam: { name: 'Visita', clubId: 'c2' }, events: [] },
+        ]),
+      },
+    };
+    const [m] = await loadClubLive(prisma, 'co', 'c1', now);
+    expect(m).toMatchObject({ homeScore: 1, awayScore: 3, timeDisplay: '40:00' });
+    expect(m.incidents[0].side).toBe('away');
   });
 });
