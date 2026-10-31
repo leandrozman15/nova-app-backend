@@ -24,6 +24,14 @@ export class ClubsController {
     return this.clubsService.leagueMatches(requireCompanyId(req), id);
   }
 
+  /** Cuadros de llaves de los torneos de liga donde juega el club (solo lectura). */
+  @Roles('admin', 'manager', 'coach', 'player', 'member')
+  @Get(':id/league-brackets')
+  leagueBrackets(@Req() req: unknown, @Param('id') id: string) {
+    requireClubScope(req, id);
+    return this.clubsService.leagueBrackets(requireCompanyId(req), id);
+  }
+
   @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get(':id')
   getById(@Req() req: unknown, @Param('id') id: string) {

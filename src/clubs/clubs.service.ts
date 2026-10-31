@@ -48,6 +48,50 @@ export class ClubsService {
     });
   }
 
+  /**
+   * Cuadros de llaves (eliminación directa y grupos + eliminación) de los torneos de la liga donde juega el club,
+   * con todos los partidos de la llave (no solo los del club) y los escudos de los clubes. Solo lectura.
+   */
+  async leagueBrackets(companyId: string, clubId: string) {
+    await this.getById(companyId, clubId);
+    const tournaments = await this.prisma.leagueTournament.findMany({
+      where: { companyId, formatType: { in: ['knockout', 'groups_knockout'] }, clubs: { some: { clubId } } },
+      select: {
+        id: true,
+        name: true,
+        formatType: true,
+        status: true,
+        groupCount: true,
+        advancePerGroup: true,
+        clubs: { select: { clubId: true, club: { select: { logoUrl: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const team = { select: { id: true, name: true, clubId: true } } as const;
+    return Promise.all(
+      tournaments.map(async (t) => {
+        const matches = await this.prisma.match.findMany({
+          where: { companyId, tournamentId: t.id, stage: { in: ['knockout', 'third_place'] } },
+          select: {
+            id: true, stage: true, round: true, bracketSlot: true, label: true, status: true, scheduledAt: true, venue: true,
+            homeScore: true, awayScore: true, homePens: true, awayPens: true,
+            homeTeam: team, awayTeam: team,
+          },
+          orderBy: [{ round: 'asc' }, { bracketSlot: 'asc' }],
+        });
+        return {
+          id: t.id,
+          name: t.name,
+          formatType: t.formatType,
+          status: t.status,
+          teamCount: t.formatType === 'knockout' ? t.clubs.length : (t.groupCount ?? 0) * (t.advancePerGroup ?? 0) || null,
+          logos: Object.fromEntries(t.clubs.map((c) => [c.clubId, c.club?.logoUrl ?? null])),
+          matches,
+        };
+      }),
+    );
+  }
+
   async getById(companyId: string, id: string) {
     const club = await this.prisma.club.findFirst({
       where: { id, companyId },
