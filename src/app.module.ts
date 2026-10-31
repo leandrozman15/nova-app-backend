@@ -18,6 +18,7 @@ import { PlatformModule } from './platform/platform.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { StoreModule } from './store/store.module';
 import { PlayerImportModule } from './player-import/player-import.module';
+import { StaffImportModule } from './staff-import/staff-import.module';
 import { RosterModule } from './roster/roster.module';
 import { DocStoreModule } from './docstore/docstore.module';
 import { PlayerDocumentsModule } from './player-documents/player-documents.module';
@@ -70,6 +71,7 @@ import { UsersModule } from './users/users.module';
     SubscriptionsModule,
     StoreModule,
     PlayerImportModule,
+    StaffImportModule,
     RosterModule,
     DocStoreModule,
     PlayerDocumentsModule,
