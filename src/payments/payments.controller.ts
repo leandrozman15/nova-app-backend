@@ -8,6 +8,7 @@ import {
   HttpCode,
   Logger,
   Param,
+  Put,
   Post,
   Query,
   Req,
@@ -165,6 +166,18 @@ export class GuardianChildrenController {
       feeId,
       String(body?.paymentId ?? ''),
     );
+  }
+}
+
+/** Confirmar asistencia a una citación: lo hace el padre/tutor del atleta o el propio atleta. */
+@NoTenant()
+@Controller('users/me/callup-responses')
+export class CallupResponsesController {
+  constructor(private readonly fees: FeePaymentsService) {}
+
+  @Put()
+  respond(@Req() req: unknown, @Body() body: { playerId?: string; callupId?: string; status?: string }) {
+    return this.fees.respondCallup((req as RequestWithAuth).auth!, body);
   }
 }
 

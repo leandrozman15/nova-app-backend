@@ -11,6 +11,7 @@ import { loadClubLive } from '../matches/club-live';
 import { loadClubScorers } from '../matches/club-scorers';
 import { loadChildTeams } from './child-teams';
 import { loadChildCallups } from './guardian-callups';
+import { respondToCallup } from './callup-response';
 import { loadClubCompetitions } from './guardian-competitions';
 import { roundMoney } from '../bookings/booking-time';
 import { buildClubFeed } from '../matches/club-feed';
@@ -117,6 +118,27 @@ export class FeePaymentsService {
     });
     if (!player || guardianEmailOf(player.extra) !== email)
       throw new ForbiddenException('Este atleta no está vinculado a tu cuenta');
+  }
+
+  /** El padre/tutor o el propio atleta confirma o rechaza una citación publicada. */
+  async respondCallup(
+    auth: { uid?: string; email?: string; emailVerified?: boolean },
+    body: { playerId?: string; callupId?: string; status?: string },
+  ) {
+    const playerId = String(body?.playerId ?? '');
+    if (!playerId) throw new BadRequestException('Falta el atleta');
+    let by: 'guardian' | 'player' = 'guardian';
+    const own = auth.uid
+      ? await this.prisma.player.findFirst({ where: { id: playerId, authUid: auth.uid }, select: { id: true } })
+      : null;
+    if (own) by = 'player';
+    else await this.assertGuardian(auth, playerId);
+    return respondToCallup(this.prisma, {
+      playerId,
+      callupId: String(body?.callupId ?? ''),
+      status: String(body?.status ?? ''),
+      by,
+    });
   }
 
   /** Partidos de los clubes de los hijos del padre/tutor (en vivo, próximos y últimos resultados). */
