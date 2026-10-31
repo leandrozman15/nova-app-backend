@@ -77,17 +77,17 @@ export async function loadClubLive(
     where: { companyId, collection: 'live_matches_index', data: { path: ['clubId'], equals: clubId } },
     select: { docId: true, data: true },
   });
-  // Partidos de liga que ya muestra el Live del entrenador (con marcador, reloj y autores): no se repiten en cero.
-  const linkedMatchIds = new Set<string>();
   const liveRivals = new Set<string>();
   const normName = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
+  /** Tarjetas del Live que están enlazadas a un partido de liga (se reemplazan por la tarjeta de la liga con sus datos). */
+  const indexLinks = new Map<string, string>();
   for (const row of index) {
     const d = (row.data ?? {}) as Doc;
     if (d.status !== 'live') continue;
     const updated = Date.parse(String(d.updatedAt ?? ''));
     if (!Number.isNaN(updated) && now - updated > STALE_MS) continue; // un live olvidado no queda "en vivo" para siempre
     const linked = str(d.backendMatchId);
-    if (linked) linkedMatchIds.add(linked);
+    if (linked) indexLinks.set(`ix:${row.docId}`, linked);
     const rival = str(d.opponentName);
     if (rival) liveRivals.add(normName(rival));
     const phase = d.matchPhase === 'entretiempo' ? 'entretiempo' : d.matchPhase === 'finalizado' ? 'finalizado' : 'en_curso';
@@ -137,8 +137,30 @@ export async function loadClubLive(
     for (const o of needOpp) o.awayLogo = logos.get(norm(o.awayName)) ?? null;
   }
 
+  // Transmisiones del Live enlazadas a un partido de liga, de cualquiera de los dos clubes: así quien mira desde
+  // el club rival también ve marcador, reloj y tiempo (el índice solo está marcado con el club que transmite).
+  const allIndex = await prisma.storeDocument.findMany({
+    where: { companyId, collection: 'live_matches_index' },
+    select: { docId: true, data: true },
+  });
+  const liveByMatch = new Map<string, Doc>();
+  for (const row of allIndex) {
+    const d = (row.data ?? {}) as Doc;
+    const linked = str(d.backendMatchId);
+    if (!linked || d.status !== 'live') continue;
+    const updated = Date.parse(String(d.updatedAt ?? ''));
+    if (!Number.isNaN(updated) && now - updated > STALE_MS) continue;
+    liveByMatch.set(linked, d);
+  }
+
   const league = await prisma.match.findMany({
-    where: { companyId, status: MatchStatus.live, OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }] },
+    where: {
+      companyId,
+      AND: [
+        { OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }] },
+        { OR: [{ status: MatchStatus.live }, ...(liveByMatch.size > 0 ? [{ id: { in: [...liveByMatch.keys()] } }] : [])] },
+      ],
+    },
     select: {
       id: true,
       homeScore: true,
@@ -157,10 +179,17 @@ export async function loadClubLive(
     const clubIds = [...new Set(league.flatMap((m) => [m.homeTeam?.clubId, m.awayTeam?.clubId]).filter((x): x is string => !!x))];
     const clubs = await prisma.club.findMany({ where: { id: { in: clubIds } }, select: { id: true, logoUrl: true } });
     const logo = new Map(clubs.map((c) => [c.id, c.logoUrl ?? null]));
+    const includedLeague = new Set<string>();
     for (const m of league) {
+      const live = liveByMatch.get(m.id);
       const rivalName = m.homeTeam?.clubId === clubId ? m.awayTeam?.name : m.homeTeam?.name;
-      // Si el entrenador está transmitiendo este partido, la tarjeta es la del Live (marcador, minuto y goleadores reales).
-      if (linkedMatchIds.has(m.id) || (rivalName && liveRivals.has(normName(rivalName)))) continue;
+      // Sin datos del Live (cliente viejo): si el entrenador transmite a este rival, no se repite el partido en cero.
+      if (!live && rivalName && liveRivals.has(normName(rivalName))) continue;
+      includedLeague.add(m.id);
+      // El marcador y las incidencias del Live están desde la mirada del equipo que transmite; si es el visitante, se invierten.
+      const mineHome = live ? live.mineHome !== false : true;
+      const flip = (side: 'home' | 'away'): 'home' | 'away' => (mineHome ? side : side === 'home' ? 'away' : 'home');
+      const phase = live ? (live.matchPhase === 'entretiempo' ? 'entretiempo' : live.matchPhase === 'finalizado' ? 'finalizado' : 'en_curso') : 'en_curso';
       out.push({
         id: `lg:${m.id}`,
         source: 'league',
@@ -168,28 +197,35 @@ export async function loadClubLive(
         awayName: m.awayTeam?.name ?? 'Visitante',
         homeLogo: (m.homeTeam?.clubId && logo.get(m.homeTeam.clubId)) || null,
         awayLogo: (m.awayTeam?.clubId && logo.get(m.awayTeam.clubId)) || null,
-        homeScore: m.homeScore,
-        awayScore: m.awayScore,
-        phase: 'en_curso',
-        timeDisplay: null,
-        period: null,
-        totalPeriods: null,
-        teamId: null,
-        divisionId: null,
-        divisionName: null,
-        sport: null,
-        incidents: m.events.map((e) => {
-          const own = e.type === 'own_goal';
-          const fromHome = e.teamId === m.homeTeamId;
-          return {
-            type: e.type === 'yellow_card' ? 'yellow' : e.type === 'red_card' ? 'red' : 'goal',
-            playerName: e.player ? `${e.player.firstName} ${e.player.lastName}`.trim() : null,
-            minute: e.minute,
-            // Un gol en contra suma al otro equipo.
-            side: (own ? !fromHome : fromHome) ? 'home' : 'away',
-          } as LiveIncident;
-        }),
+        homeScore: live ? (mineHome ? num(live.homeScore) : num(live.awayScore)) ?? m.homeScore : m.homeScore,
+        awayScore: live ? (mineHome ? num(live.awayScore) : num(live.homeScore)) ?? m.awayScore : m.awayScore,
+        phase,
+        timeDisplay: live ? str(live.timeDisplay) : null,
+        period: live ? num(live.period) : null,
+        totalPeriods: live ? num(live.totalPeriods) : null,
+        teamId: live ? str(live.teamId) : null,
+        divisionId: live ? str(live.divisionId) : null,
+        divisionName: live ? str(live.divisionName) : null,
+        sport: live ? str(live.sport) : null,
+        incidents: live
+          ? incidentsOf(live.incidents).map((i) => ({ ...i, side: flip(i.side) }))
+          : m.events.map((e) => {
+              const own = e.type === 'own_goal';
+              const fromHome = e.teamId === m.homeTeamId;
+              return {
+                type: e.type === 'yellow_card' ? 'yellow' : e.type === 'red_card' ? 'red' : 'goal',
+                playerName: e.player ? `${e.player.firstName} ${e.player.lastName}`.trim() : null,
+                minute: e.minute,
+                // Un gol en contra suma al otro equipo.
+                side: (own ? !fromHome : fromHome) ? 'home' : 'away',
+              } as LiveIncident;
+            }),
       });
+    }
+    // La tarjeta del Live enlazada a un partido de liga ya está incluida arriba, con los datos del Live.
+    for (let i = out.length - 1; i >= 0; i--) {
+      const linked = indexLinks.get(out[i].id);
+      if (linked && includedLeague.has(linked)) out.splice(i, 1);
     }
   }
   return out;
