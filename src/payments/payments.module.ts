@@ -15,6 +15,7 @@ import {
   ClubPaymentsController,
   FeePaymentsController,
   GuardianChildrenController,
+  CallupResponsesController,
   MercadoPagoCallbacksController,
 } from './payments.controller';
 
@@ -29,6 +30,7 @@ import {
     MercadoPagoCallbacksController,
     FeePaymentsController,
     GuardianChildrenController,
+    CallupResponsesController,
   ],
   providers: [
     MercadoPagoClient,
