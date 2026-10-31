@@ -74,7 +74,12 @@ export async function loadClubLive(
   const ownLogo = ownClub[0]?.logoUrl ?? null;
 
   const index = await prisma.storeDocument.findMany({
-    where: { companyId, collection: 'live_matches_index', data: { path: ['clubId'], equals: clubId } },
+    // Por club, no por empresa: quien publica y quien mira pueden tener activa una empresa distinta (clubes registrados
+    // desde una liga) y el club ya está validado por el permiso del endpoint.
+    where: {
+      collection: 'live_matches_index',
+      OR: [{ clubId }, { data: { path: ['clubId'], equals: clubId } }],
+    },
     select: { docId: true, data: true },
   });
   const liveRivals = new Set<string>();
