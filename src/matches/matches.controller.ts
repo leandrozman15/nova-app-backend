@@ -185,6 +185,24 @@ export class MatchesController {
     return this.matchesService.addEvent(requireCompanyId(req), id, dto);
   }
 
+  @Roles('admin', 'manager', 'coach')
+  @Delete(':id/events')
+  removeEvent(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Query('type') type: string,
+    @Query('minute') minute?: string,
+    @Query('note') note?: string,
+  ) {
+    if (!type) throw new BadRequestException('type es obligatorio');
+    const m = minute === undefined || minute === '' ? undefined : Number(minute);
+    return this.matchesService.removeEventByMatch(requireCompanyId(req), id, {
+      type,
+      minute: m !== undefined && Number.isFinite(m) ? m : undefined,
+      note: note || undefined,
+    });
+  }
+
   @Roles('admin', 'manager')
   @Delete(':id')
   remove(@Req() req: unknown, @Param('id') id: string) {

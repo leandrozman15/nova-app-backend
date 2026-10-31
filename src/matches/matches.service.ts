@@ -184,6 +184,28 @@ export class MatchesService {
     });
   }
 
+  /**
+   * Borra la incidencia cargada por error desde el Live del entrenador (la más reciente que coincide
+   * en tipo, minuto y nota). Así la liga y las familias dejan de verla y los goleadores se corrigen.
+   */
+  async removeEventByMatch(companyId: string, matchId: string, filter: { type: string; minute?: number; note?: string }) {
+    await this.ensureMatchExists(companyId, matchId);
+    const found = await this.prisma.matchEvent.findFirst({
+      where: {
+        companyId,
+        matchId,
+        type: filter.type as MatchEventType,
+        ...(filter.minute !== undefined ? { minute: filter.minute } : {}),
+        ...(filter.note ? { note: filter.note } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!found) return { ok: true, removed: 0 };
+    await this.prisma.matchEvent.delete({ where: { id: found.id } });
+    return { ok: true, removed: 1 };
+  }
+
   async listCallups(companyId: string, matchId: string) {
     await this.ensureMatchExists(companyId, matchId);
 
