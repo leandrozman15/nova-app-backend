@@ -122,6 +122,8 @@ model Municipality {
   address   String?
   centerLat Float?
   centerLng Float?
+  /// Contorno dibujado en el mapa: lista de [lat, lng] (polígono abierto, mínimo 3 puntos).
+  boundary  Json?
   status    String?  @default("active")
   companyId String
   createdAt DateTime @default(now())
