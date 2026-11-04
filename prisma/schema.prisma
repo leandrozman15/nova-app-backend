@@ -85,6 +85,7 @@ model Company {
   updatedAt DateTime @updatedAt
 
   municipalities        Municipality[]
+  municipalPrograms     MunicipalProgram[]
   users                 User[]
   clubMemberships       ClubMembership[]
   clubs                 Club[]
@@ -129,9 +130,75 @@ model Municipality {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clubs   Club[]
   leagues League[]
+  programs MunicipalProgram[]
 
   @@index([companyId])
   @@index([companyId, name])
+}
+
+/// Actividad propia del municipio (yoga, aquagym, fútbol para mamás...), con cupos, inscriptos y asistencia.
+model MunicipalProgram {
+  id             String    @id @default(cuid())
+  companyId      String
+  municipalityId String
+  name           String
+  description    String?
+  discipline     String?
+  audience       String?
+  location       String?
+  scheduleText   String?
+  capacity       Int?
+  /// open | closed
+  status         String    @default("open")
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  municipality Municipality        @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  enrollments  ProgramEnrollment[]
+  attendances  ProgramAttendance[]
+
+  @@index([companyId, municipalityId])
+}
+
+/// Persona inscripta en un programa. DNI y teléfono se guardan cifrados.
+model ProgramEnrollment {
+  id        String    @id @default(cuid())
+  programId String
+  fullName  String
+  dni       String?
+  dniHash   String?
+  phone     String?
+  email     String?
+  birthDate DateTime?
+  notes     String?
+  /// active | cancelled
+  status    String    @default("active")
+  createdAt DateTime  @default(now())
+
+  program     MunicipalProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  attendances ProgramAttendance[]
+
+  @@unique([programId, dniHash])
+  @@index([programId])
+}
+
+model ProgramAttendance {
+  id           String   @id @default(cuid())
+  programId    String
+  enrollmentId String
+  /// Día de la clase, AAAA-MM-DD.
+  date         String
+  present      Boolean
+  createdAt    DateTime @default(now())
+
+  program    MunicipalProgram  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  enrollment ProgramEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, date])
+  @@index([programId, date])
 }
 
 model User {
