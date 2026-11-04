@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateMunicipalityDto {
   @IsOptional()
@@ -23,4 +23,9 @@ export class UpdateMunicipalityDto {
   @IsString()
   @MaxLength(40)
   status?: string;
+
+  /** Contorno [lat, lng][]; null borra el contorno. */
+  @IsOptional()
+  @IsArray()
+  boundary?: number[][] | null;
 }

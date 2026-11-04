@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseBoundary } from './boundary';
 import { CreateMunicipalityDto } from './dto/create-municipality.dto';
 import { UpdateMunicipalityDto } from './dto/update-municipality.dto';
 
@@ -43,6 +45,14 @@ export class MunicipalitiesService {
   async update(companyId: string, id: string, dto: UpdateMunicipalityDto) {
     await this.getById(companyId, id);
 
+    let boundary: ReturnType<typeof parseBoundary> | undefined;
+    if (dto.boundary !== undefined) {
+      boundary = dto.boundary === null ? null : parseBoundary(dto.boundary);
+      if (dto.boundary !== null && !boundary) {
+        throw new BadRequestException('El contorno debe tener entre 3 y 500 puntos [lat, lng] válidos');
+      }
+    }
+
     return this.prisma.municipality.update({
       where: { id },
       data: {
@@ -51,6 +61,7 @@ export class MunicipalitiesService {
         centerLat: dto.centerLat,
         centerLng: dto.centerLng,
         status: dto.status,
+        ...(boundary !== undefined && { boundary: boundary === null ? Prisma.DbNull : boundary }),
       },
     });
   }
