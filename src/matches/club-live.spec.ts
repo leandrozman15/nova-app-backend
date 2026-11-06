@@ -1,4 +1,4 @@
-import { incidentsOf, loadClubLive } from './club-live';
+import { incidentsOf, loadClubLive, rowsOf } from './club-live';
 
 describe('guardian-live', () => {
   const now = Date.parse('2026-11-01T12:00:00Z');
@@ -12,6 +12,24 @@ describe('guardian-live', () => {
     expect(r.map((x) => x.playerName)).toEqual(['A', 'B']);
     expect(r[0].side).toBe('home');
     expect(r[1].side).toBe('away');
+  });
+
+  it('rowsOf limpia y acota la tabla en vivo', () => {
+    const rows = rowsOf([{ label: 'Pérez', value: '1:02.34', place: 1 }, { label: '', value: 'x' }, { label: 'Gómez', value: '1:03.10' }]);
+    expect(rows).toEqual([{ label: 'Pérez', value: '1:02.34', place: 1 }, { label: 'Gómez', value: '1:03.10', place: null }]);
+    expect(rowsOf('nada')).toEqual([]);
+    expect(rowsOf(Array.from({ length: 30 }, (_, i) => ({ label: `n${i}`, value: '1' })))).toHaveLength(12);
+  });
+
+  it('publica el detalle de marcador de tenis y pádel', async () => {
+    const prisma: any = {
+      storeDocument: { findMany: jest.fn().mockResolvedValue([{ docId: 'c_s_live', data: { status: 'live', sport: 'tennis', teamName: 'Ana', opponentName: 'Beto', homeScore: 1, awayScore: 0, scoreDetail: '6-4 3-2 · 30-15', updatedAt: '2026-11-01T11:59:00Z' } }]) },
+      match: { findMany: jest.fn().mockResolvedValue([]) },
+      club: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const r = await loadClubLive(prisma, 'co', 'c', now);
+    expect(r[0].scoreDetail).toBe('6-4 3-2 · 30-15');
+    expect(r[0].sport).toBe('tennis');
   });
 
   it('arma el live del entrenador con escudos e incidencias y ignora los viejos', async () => {

@@ -30,13 +30,32 @@ export type LiveItem = {
   divisionName: string | null;
   sport: string | null;
   incidents: LiveIncident[];
+  /** Detalle del marcador para deportes sin gol: sets y games de tenis/pádel, parciales por cuarto de básquet. */
+  scoreDetail?: string | null;
+  /** Tabla de posiciones en vivo (natación: llegada de cada nadador). */
+  rows?: LiveRow[];
 };
+
+export type LiveRow = { label: string; value: string; place: number | null };
 
 type Doc = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 const STALE_MS = 6 * 60 * 60 * 1000;
+
+/** Filas de la tabla en vivo que publica el cliente: se limpian y se acotan a 12. */
+export function rowsOf(raw: unknown): LiveRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LiveRow[] = [];
+  for (const r of (raw as Doc[]).slice(0, 12)) {
+    const label = str(r?.label);
+    const value = str(r?.value);
+    if (!label || !value) continue;
+    out.push({ label: label.slice(0, 80), value: value.slice(0, 24), place: num(r.place) });
+  }
+  return out;
+}
 
 const INCIDENT_TYPES = new Set(['goal', 'try', 'yellow', 'red']);
 
@@ -114,6 +133,8 @@ export async function loadClubLive(
       divisionName: str(d.divisionName),
       sport: str(d.sport),
       incidents: incidentsOf(d.incidents),
+      scoreDetail: str(d.scoreDetail)?.slice(0, 160) ?? null,
+      rows: rowsOf(d.rows),
     });
   }
 
