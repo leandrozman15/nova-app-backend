@@ -86,6 +86,8 @@ model Company {
 
   municipalities        Municipality[]
   municipalPrograms     MunicipalProgram[]
+  swimCompetitions      SwimCompetition[]
+  swimTimes             SwimTime[]
   users                 User[]
   clubMemberships       ClubMembership[]
   clubs                 Club[]
@@ -302,6 +304,8 @@ model Club {
   shopOrders            ShopOrder[]
   facilities            Facility[]
   facilityRentals       FacilityRental[]
+  swimCompetitions      SwimCompetition[]
+  swimTimes             SwimTime[]
   trainingSessions      TrainingSession[]
   attendanceSessions    AttendanceSession[]
   injuryReports         InjuryReport[]
@@ -498,6 +502,7 @@ model Player {
   @@index([membershipPlanId])
   @@index([clubId, divisionId])
   @@unique([companyId, dniHash])
+  swimTimes SwimTime[]
 }
 
 model Member {
@@ -1957,4 +1962,83 @@ model BuffetStockMovement {
 
   @@index([productId, createdAt])
   @@index([clubId, createdAt])
+}
+
+/// Competencia de natación (torneo interno o amistoso) con sus pruebas y resultados por tiempo.
+model SwimCompetition {
+  id               String   @id @default(cuid())
+  companyId        String
+  clubId           String
+  name             String
+  date             DateTime
+  venue            String?
+  /// Largo de la pileta en metros: 25 o 50.
+  poolLength       Int      @default(25)
+  /// draft | open | finished
+  status           String   @default("open")
+  /// Torneo abierto del club al que corresponde (inscripciones), si lo hay.
+  clubTournamentId String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club        @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  events  SwimEvent[]
+
+  @@index([companyId, clubId, date])
+}
+
+/// Prueba: estilo + distancia + rama (ej. 100 m pecho femenino, categoría 2012).
+model SwimEvent {
+  id            String   @id @default(cuid())
+  companyId     String
+  competitionId String
+  /// freestyle | backstroke | breaststroke | butterfly | medley
+  stroke        String
+  distance      Int
+  /// F | M | X (mixto)
+  gender        String   @default("X")
+  category      String?
+  position      Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  competition SwimCompetition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  times       SwimTime[]
+
+  @@index([competitionId, position])
+}
+
+/// Un tiempo cronometrado de una persona, en entrenamiento o en competencia.
+model SwimTime {
+  id         String   @id @default(cuid())
+  companyId  String
+  clubId     String
+  playerId   String
+  stroke     String
+  distance   Int
+  poolLength Int      @default(25)
+  /// Tiempo final en milisegundos (0 si no hay tiempo válido: DQ/DNS/DNF).
+  timeMs     Int
+  /// Parciales acumulados en ms, por largo o por vuelta: [28340, 59120].
+  splits     Json     @default("[]")
+  /// ok | dq (descalificado) | dns (no largó) | dnf (no terminó)
+  status     String   @default("ok")
+  /// training | meet
+  source     String   @default("training")
+  eventId    String?
+  lane       Int?
+  heat       Int?
+  note       String?
+  recordedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  player  Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  event   SwimEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, clubId, recordedAt])
+  @@index([playerId, stroke, distance])
+  @@index([eventId])
 }
