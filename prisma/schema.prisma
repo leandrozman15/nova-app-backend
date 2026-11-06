@@ -86,8 +86,11 @@ model Company {
 
   municipalities        Municipality[]
   municipalPrograms     MunicipalProgram[]
+  municipalAnnouncements MunicipalAnnouncement[]
   swimCompetitions      SwimCompetition[]
   swimTimes             SwimTime[]
+  clubDocuments         ClubDocument[]
+  clubRequests          ClubRequest[]
   users                 User[]
   clubMemberships       ClubMembership[]
   clubs                 Club[]
@@ -135,6 +138,7 @@ model Municipality {
   clubs   Club[]
   leagues League[]
   programs MunicipalProgram[]
+  announcements MunicipalAnnouncement[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -306,6 +310,8 @@ model Club {
   facilityRentals       FacilityRental[]
   swimCompetitions      SwimCompetition[]
   swimTimes             SwimTime[]
+  clubDocuments         ClubDocument[]
+  clubRequests          ClubRequest[]
   trainingSessions      TrainingSession[]
   attendanceSessions    AttendanceSession[]
   injuryReports         InjuryReport[]
@@ -2041,4 +2047,71 @@ model SwimTime {
   @@index([companyId, clubId, recordedAt])
   @@index([playerId, stroke, distance])
   @@index([eventId])
+}
+
+/// Aviso del municipio a clubes y/o familias.
+model MunicipalAnnouncement {
+  id             String    @id @default(cuid())
+  companyId      String
+  municipalityId String
+  title          String
+  body           String
+  /// all | clubs | families
+  audience       String    @default("all")
+  pinned         Boolean   @default(false)
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  @@index([municipalityId, createdAt])
+}
+
+/// Documentación de una institución con vencimiento (estatuto, seguro, habilitación...).
+model ClubDocument {
+  id        String    @id @default(cuid())
+  companyId String
+  clubId    String
+  /// statute | legal_status | insurance | habilitation | other
+  kind      String
+  title     String
+  issuedAt  DateTime?
+  expiresAt DateTime?
+  /// Enlace al archivo (Drive, Dropbox...).
+  fileUrl   String?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, kind])
+  @@index([companyId])
+}
+
+/// Pedido de un club al municipio: subsidio, materiales, uso de cancha...
+model ClubRequest {
+  id              String    @id @default(cuid())
+  companyId       String
+  clubId          String
+  municipalityId  String
+  /// subsidy | materials | facility | other
+  type            String
+  title           String
+  description     String?
+  amountRequested Int?
+  /// pending | approved | rejected | delivered
+  status          String    @default("pending")
+  resolutionNote  String?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([municipalityId, status])
+  @@index([clubId, createdAt])
 }
