@@ -1,11 +1,17 @@
 import {
-  BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { buildDemo, demoPrefix, LatLng } from './municipal-demo-data';
+import {
+  buildDemo,
+  DEFAULT_DEMO_CENTER,
+  demoBoundary,
+  demoPrefix,
+  LatLng,
+} from './municipal-demo-data';
 
 @Injectable()
 export class MunicipalDemoService {
@@ -43,14 +49,36 @@ export class MunicipalDemoService {
     };
   }
 
-  async seed(companyId: string, municipalityId: string) {
+  /**
+   * Carga la demo. Un usuario del municipio solo puede hacerlo si el municipio no tiene clubes reales
+   * (así no se mezcla con datos verdaderos); la superadministración puede siempre.
+   * Si el municipio no tiene contorno, se le deja uno ficticio (y centro) para que el mapa se vea.
+   */
+  async seed(
+    companyId: string,
+    municipalityId: string,
+    platformAdmin: boolean,
+  ) {
     const m = await this.municipality(companyId, municipalityId);
-    const boundary = Array.isArray(m.boundary)
+    const startsWith = demoPrefix(municipalityId);
+
+    if (!platformAdmin) {
+      const real = await this.prisma.club.count({
+        where: { companyId, municipalityId, NOT: { id: { startsWith } } },
+      });
+      if (real > 0) {
+        throw new ForbiddenException(
+          'Este municipio ya tiene clubes reales: la demo solo puede cargarla la superadministración',
+        );
+      }
+    }
+
+    let boundary: LatLng[] = Array.isArray(m.boundary)
       ? (m.boundary as unknown as LatLng[]).filter(
           (p) => Array.isArray(p) && p.length === 2,
         )
       : [];
-    const center: LatLng | null =
+    let center: LatLng | null =
       m.centerLat != null && m.centerLng != null
         ? [m.centerLat, m.centerLng]
         : boundary.length >= 3
@@ -59,10 +87,14 @@ export class MunicipalDemoService {
               boundary.reduce((a, p) => a + p[1], 0) / boundary.length,
             ]
           : null;
-    if (!center) {
-      throw new BadRequestException(
-        'Definí primero el contorno del municipio en Territorio (o su centro) para ubicar los datos de demostración',
-      );
+
+    if (boundary.length < 3) {
+      center = center ?? DEFAULT_DEMO_CENTER;
+      boundary = demoBoundary(center, municipalityId);
+      await this.prisma.municipality.update({
+        where: { id: municipalityId },
+        data: { boundary, centerLat: center[0], centerLng: center[1] },
+      });
     }
 
     await this.clear(companyId, municipalityId);
@@ -70,7 +102,7 @@ export class MunicipalDemoService {
       municipalityId,
       municipalityName: m.name,
       companyId,
-      center,
+      center: center as LatLng,
       boundary,
     });
 
