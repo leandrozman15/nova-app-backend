@@ -1,8 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireCompanyId } from '../common/http/request-context';
 import {
+  AttachmentDto,
   ChangeStatusDto,
   CreateProjectDto,
   LineDto,
@@ -13,7 +24,12 @@ import {
 } from './dto/municipal-projects.dto';
 import { MunicipalProjectsService } from './municipal-projects.service';
 
-const MUNICIPAL = ['admin', 'fed_admin', 'municipal_secretary', 'municipal_admin'] as const;
+const MUNICIPAL = [
+  'admin',
+  'fed_admin',
+  'municipal_secretary',
+  'municipal_admin',
+] as const;
 
 function author(req: unknown): string | undefined {
   return (req as { auth?: { email?: string } })?.auth?.email;
@@ -25,7 +41,11 @@ export class MunicipalProjectsController {
   constructor(private readonly service: MunicipalProjectsService) {}
 
   @Get()
-  list(@Req() req: unknown, @Query('municipalityId') municipalityId: string, @Query('status') status?: string) {
+  list(
+    @Req() req: unknown,
+    @Query('municipalityId') municipalityId: string,
+    @Query('status') status?: string,
+  ) {
     return this.service.list(requireCompanyId(req), municipalityId, status);
   }
 
@@ -36,7 +56,10 @@ export class MunicipalProjectsController {
 
   // Equipo (rutas fijas antes de ':id')
   @Get('team/list')
-  listStaff(@Req() req: unknown, @Query('municipalityId') municipalityId: string) {
+  listStaff(
+    @Req() req: unknown,
+    @Query('municipalityId') municipalityId: string,
+  ) {
     return this.service.listStaff(requireCompanyId(req), municipalityId);
   }
 
@@ -51,23 +74,68 @@ export class MunicipalProjectsController {
   }
 
   @Patch(':id')
-  update(@Req() req: unknown, @Param('id') id: string, @Body() dto: UpdateProjectDto) {
+  update(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: UpdateProjectDto,
+  ) {
     return this.service.update(requireCompanyId(req), id, dto);
   }
 
   @Post(':id/status')
-  changeStatus(@Req() req: unknown, @Param('id') id: string, @Body() dto: ChangeStatusDto) {
-    return this.service.changeStatus(requireCompanyId(req), id, dto, author(req));
+  changeStatus(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: ChangeStatusDto,
+  ) {
+    return this.service.changeStatus(
+      requireCompanyId(req),
+      id,
+      dto,
+      author(req),
+    );
   }
 
   @Post(':id/notes')
   addNote(@Req() req: unknown, @Param('id') id: string, @Body() dto: NoteDto) {
-    return this.service.addNote(requireCompanyId(req), id, dto.note, author(req));
+    return this.service.addNote(
+      requireCompanyId(req),
+      id,
+      dto.note,
+      author(req),
+    );
   }
 
   @Delete(':id')
   remove(@Req() req: unknown, @Param('id') id: string) {
     return this.service.remove(requireCompanyId(req), id);
+  }
+
+  @Post(':id/attachments')
+  addAttachment(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: AttachmentDto,
+  ) {
+    return this.service.addAttachment(
+      requireCompanyId(req),
+      id,
+      dto,
+      author(req),
+    );
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  removeAttachment(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.service.removeAttachment(
+      requireCompanyId(req),
+      id,
+      attachmentId,
+    );
   }
 
   @Post(':id/lines')
@@ -76,12 +144,21 @@ export class MunicipalProjectsController {
   }
 
   @Patch(':id/lines/:lineId')
-  updateLine(@Req() req: unknown, @Param('id') id: string, @Param('lineId') lineId: string, @Body() dto: UpdateLineDto) {
+  updateLine(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: UpdateLineDto,
+  ) {
     return this.service.updateLine(requireCompanyId(req), id, lineId, dto);
   }
 
   @Delete(':id/lines/:lineId')
-  removeLine(@Req() req: unknown, @Param('id') id: string, @Param('lineId') lineId: string) {
+  removeLine(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+  ) {
     return this.service.removeLine(requireCompanyId(req), id, lineId);
   }
 }
