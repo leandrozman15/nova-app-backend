@@ -28,6 +28,7 @@ import { LeaguesModule } from './leagues/leagues.module';
 import { MatchesModule } from './matches/matches.module';
 import { MunicipalitiesModule } from './municipalities/municipalities.module';
 import { MunicipalProgramsModule } from './municipal-programs/municipal-programs.module';
+import { MunicipalProjectsModule } from './municipal-projects/municipal-projects.module';
 import { MunicipalOpsModule } from './municipal-ops/municipal-ops.module';
 import { SwimmingModule } from './swimming/swimming.module';
 import { PlayerPaymentsModule } from './player-payments/player-payments.module';
@@ -57,6 +58,7 @@ import { UsersModule } from './users/users.module';
     MunicipalProgramsModule,
     SwimmingModule,
     MunicipalOpsModule,
+    MunicipalProjectsModule,
     LeaguesModule,
     TeamsModule,
     PlayersModule,
