@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, MaxLength, Max, Min, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Max, Min, MinLength } from 'class-validator';
 
 import { PROJECT_CATEGORIES, PROJECT_PRIORITIES, PROJECT_STATUSES } from '../municipal-projects-rules';
 
@@ -14,6 +14,9 @@ export class CreateProjectDto {
   @IsOptional() @IsString() @MaxLength(140) responsible?: string;
   @IsOptional() @IsDateString() startDate?: string;
   @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsNumber() @Min(-90) @Max(90) lat?: number | null;
+  @IsOptional() @IsNumber() @Min(-180) @Max(180) lng?: number | null;
+  @IsOptional() @IsString() @MaxLength(200) address?: string | null;
 }
 
 export class UpdateProjectDto {
@@ -24,6 +27,9 @@ export class UpdateProjectDto {
   @IsOptional() @IsString() @MaxLength(140) responsible?: string;
   @IsOptional() @IsDateString() startDate?: string;
   @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsNumber() @Min(-90) @Max(90) lat?: number | null;
+  @IsOptional() @IsNumber() @Min(-180) @Max(180) lng?: number | null;
+  @IsOptional() @IsString() @MaxLength(200) address?: string | null;
 }
 
 export class ChangeStatusDto {

@@ -2136,6 +2136,10 @@ model MunicipalProject {
   responsible    String?
   startDate      DateTime?
   endDate        DateTime?
+  /// Ubicación en el mapa (opcional)
+  lat            Float?
+  lng            Float?
+  address        String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
