@@ -87,6 +87,8 @@ model Company {
   municipalities        Municipality[]
   municipalPrograms     MunicipalProgram[]
   municipalAnnouncements MunicipalAnnouncement[]
+  municipalProjects     MunicipalProject[]
+  municipalStaff        MunicipalStaff[]
   swimCompetitions      SwimCompetition[]
   swimTimes             SwimTime[]
   clubDocuments         ClubDocument[]
@@ -139,6 +141,8 @@ model Municipality {
   leagues League[]
   programs MunicipalProgram[]
   announcements MunicipalAnnouncement[]
+  projects MunicipalProject[]
+  staff MunicipalStaff[]
 
   @@index([companyId])
   @@index([companyId, name])
@@ -2114,4 +2118,80 @@ model ClubRequest {
 
   @@index([municipalityId, status])
   @@index([clubId, createdAt])
+}
+
+/// Proyecto del municipio (obra, evento, equipamiento...) con presupuesto y estado.
+model MunicipalProject {
+  id             String    @id @default(cuid())
+  companyId      String
+  municipalityId String
+  name           String
+  description    String?
+  /// infrastructure | event | program | equipment | other
+  category       String    @default("other")
+  /// draft | budgeting | approved | in_progress | paused | completed | cancelled
+  status         String    @default("draft")
+  /// low | medium | high
+  priority       String    @default("medium")
+  responsible    String?
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company      Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  municipality Municipality           @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+  lines        MunicipalProjectLine[]
+  events       MunicipalProjectEvent[]
+
+  @@index([municipalityId, status])
+}
+
+/// Renglón del presupuesto: monto previsto y gastado real.
+model MunicipalProjectLine {
+  id            String   @id @default(cuid())
+  projectId     String
+  concept       String
+  category      String?
+  plannedAmount Int      @default(0)
+  spentAmount   Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  project MunicipalProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// Historial del proyecto: cambios de estado y notas.
+model MunicipalProjectEvent {
+  id         String   @id @default(cuid())
+  projectId  String
+  /// status | note
+  kind       String
+  fromStatus String?
+  toStatus   String?
+  note       String?
+  author     String?
+  createdAt  DateTime @default(now())
+
+  project MunicipalProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
+
+/// Equipo del municipio: usuarios creados desde el propio portal.
+model MunicipalStaff {
+  id             String   @id @default(cuid())
+  companyId      String
+  municipalityId String
+  firebaseUid    String   @unique
+  email          String
+  name           String
+  role           String
+  createdAt      DateTime @default(now())
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
+
+  @@index([municipalityId])
 }
