@@ -11,6 +11,19 @@ import {
 } from './dto/municipal-projects.dto';
 import { approvalBlocker, budgetTotals, canMoveProject, isClosed } from './municipal-projects-rules';
 
+/** lat/lng van juntas: ambas o ninguna; null en ambas borra la ubicación. */
+function locationData(dto: { lat?: number | null; lng?: number | null; address?: string | null }) {
+  const hasLat = dto.lat !== undefined;
+  const hasLng = dto.lng !== undefined;
+  if (hasLat !== hasLng || (hasLat && (dto.lat === null) !== (dto.lng === null))) {
+    throw new BadRequestException('Latitud y longitud deben enviarse juntas');
+  }
+  return {
+    ...(hasLat && { lat: dto.lat, lng: dto.lng }),
+    ...(dto.address !== undefined && { address: dto.address }),
+  };
+}
+
 @Injectable()
 export class MunicipalProjectsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -58,6 +71,7 @@ export class MunicipalProjectsService {
         responsible: dto.responsible,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        ...locationData(dto),
         events: { create: { kind: 'status', toStatus: 'draft', note: 'Proyecto creado', author } },
       },
     });
@@ -86,6 +100,7 @@ export class MunicipalProjectsService {
         responsible: dto.responsible,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        ...locationData(dto),
       },
     });
   }
