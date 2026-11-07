@@ -2147,6 +2147,7 @@ model MunicipalProject {
   municipality Municipality           @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
   lines        MunicipalProjectLine[]
   events       MunicipalProjectEvent[]
+  attachments  MunicipalProjectAttachment[]
 
   @@index([municipalityId, status])
 }
@@ -2198,4 +2199,22 @@ model MunicipalStaff {
   municipality Municipality @relation(fields: [municipalityId], references: [id], onDelete: Cascade)
 
   @@index([municipalityId])
+}
+
+/// Archivos del proyecto: planos, presupuestos, fotos, PDFs (guardados en Firebase Storage).
+model MunicipalProjectAttachment {
+  id          String   @id @default(cuid())
+  projectId   String
+  /// plan | budget | photo | document | other
+  kind        String
+  name        String
+  url         String
+  contentType String
+  size        Int
+  author      String?
+  createdAt   DateTime @default(now())
+
+  project MunicipalProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
 }

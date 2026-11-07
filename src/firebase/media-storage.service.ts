@@ -70,6 +70,35 @@ export class MediaStorageService {
     );
   }
 
+  /** Sube un archivo ya validado (PDF o imagen) y devuelve su URL de descarga. */
+  async uploadBuffer(
+    buffer: Buffer,
+    contentType: string,
+    ext: string,
+    folder: string,
+  ): Promise<string> {
+    const safeFolder = folder
+      .split('/')
+      .filter((part) => part && part !== '.' && part !== '..')
+      .map((part) => part.replace(/[^A-Za-z0-9_-]/g, '_'))
+      .join('/');
+    const name = `media/${safeFolder}/${randomUUID()}.${ext}`;
+    const token = randomUUID();
+    const bucket = getStorage(getApp()).bucket(this.bucketName);
+    await bucket.file(name).save(buffer, {
+      resumable: false,
+      contentType,
+      metadata: {
+        cacheControl: 'private, max-age=3600',
+        metadata: { firebaseStorageDownloadTokens: token },
+      },
+    });
+    return (
+      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+      `${encodeURIComponent(name)}?alt=media&token=${token}`
+    );
+  }
+
   /** Igual que upload, pero si falla devuelve el valor original. */
   async externalize(value: string, folder: string): Promise<string> {
     try {

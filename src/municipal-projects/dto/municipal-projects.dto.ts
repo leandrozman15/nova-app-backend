@@ -1,6 +1,23 @@
-import { IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Max, Min, MinLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 
-import { PROJECT_CATEGORIES, PROJECT_PRIORITIES, PROJECT_STATUSES } from '../municipal-projects-rules';
+import {
+  ATTACHMENT_KINDS,
+  PROJECT_CATEGORIES,
+  PROJECT_PRIORITIES,
+  PROJECT_STATUSES,
+} from '../municipal-projects-rules';
 
 const cats = PROJECT_CATEGORIES as unknown as string[];
 const prios = PROJECT_PRIORITIES as unknown as string[];
@@ -60,4 +77,10 @@ export class RecordStaffDto {
   @IsString() firebaseUid!: string;
   @IsEmail() email!: string;
   @IsString() @MaxLength(140) name!: string;
+}
+
+export class AttachmentDto {
+  @IsString() @MinLength(1) @MaxLength(160) name!: string;
+  @IsIn(ATTACHMENT_KINDS as unknown as string[]) kind!: string;
+  @IsString() @MaxLength(4_400_000) dataUrl!: string;
 }

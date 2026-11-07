@@ -1,4 +1,11 @@
-import { approvalBlocker, budgetTotals, canMoveProject, isClosed, nextStatuses } from './municipal-projects-rules';
+import {
+  approvalBlocker,
+  budgetTotals,
+  canMoveProject,
+  isClosed,
+  nextStatuses,
+  parseAttachmentDataUrl,
+} from './municipal-projects-rules';
 
 describe('municipal-projects-rules', () => {
   it('flujo de estados válido', () => {
@@ -16,14 +23,53 @@ describe('municipal-projects-rules', () => {
     expect(isClosed('paused')).toBe(false);
   });
   it('totales de presupuesto', () => {
-    const t = budgetTotals([{ plannedAmount: 1000, spentAmount: 400 }, { plannedAmount: 500, spentAmount: 200 }]);
-    expect(t).toEqual({ planned: 1500, spent: 600, remaining: 900, executionPct: 40, overBudget: false });
+    const t = budgetTotals([
+      { plannedAmount: 1000, spentAmount: 400 },
+      { plannedAmount: 500, spentAmount: 200 },
+    ]);
+    expect(t).toEqual({
+      planned: 1500,
+      spent: 600,
+      remaining: 900,
+      executionPct: 40,
+      overBudget: false,
+    });
     expect(budgetTotals([]).executionPct).toBe(0);
-    expect(budgetTotals([{ plannedAmount: 100, spentAmount: 150 }]).overBudget).toBe(true);
+    expect(
+      budgetTotals([{ plannedAmount: 100, spentAmount: 150 }]).overBudget,
+    ).toBe(true);
   });
   it('exige presupuesto para aprobar', () => {
     expect(approvalBlocker('approved', [])).toMatch(/presupuesto/);
-    expect(approvalBlocker('approved', [{ plannedAmount: 10, spentAmount: 0 }])).toBeNull();
+    expect(
+      approvalBlocker('approved', [{ plannedAmount: 10, spentAmount: 0 }]),
+    ).toBeNull();
     expect(approvalBlocker('budgeting', [])).toBeNull();
+  });
+});
+
+describe('parseAttachmentDataUrl', () => {
+  it('acepta PDF e imágenes', () => {
+    const pdf = parseAttachmentDataUrl(
+      'data:application/pdf;base64,' +
+        Buffer.from('%PDF-1.4').toString('base64'),
+    );
+    expect(pdf.ext).toBe('pdf');
+    expect(
+      parseAttachmentDataUrl('data:image/jpg;base64,AAAA').contentType,
+    ).toBe('image/jpeg');
+  });
+  it('rechaza tipos no permitidos, vacíos y grandes', () => {
+    expect(() => parseAttachmentDataUrl('data:text/html;base64,AAAA')).toThrow(
+      /PDF e imágenes/,
+    );
+    expect(() => parseAttachmentDataUrl('hola')).toThrow();
+    expect(() =>
+      parseAttachmentDataUrl('data:application/pdf;base64,'),
+    ).toThrow();
+    const big = Buffer.alloc(3 * 1024 * 1024 + 1).toString('base64');
+    expect(() =>
+      parseAttachmentDataUrl('data:application/pdf;base64,' + big),
+    ).toThrow(/3 MB/);
   });
 });
