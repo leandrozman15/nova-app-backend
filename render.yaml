@@ -25,6 +25,8 @@ services:
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_ADMIN_CREDENTIALS_PATH
