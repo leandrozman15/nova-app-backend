@@ -323,6 +323,7 @@ model Club {
   bookings              Booking[]
   recurringBookings     RecurringBooking[]
   paymentAccount        ClubPaymentAccount?
+  instagramAccount      ClubInstagramAccount?
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
   tournaments           ClubTournament[]
@@ -2217,4 +2218,24 @@ model MunicipalProjectAttachment {
   project MunicipalProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt])
+}
+
+/// Cuenta de Instagram (profesional) conectada por el club para publicar sus novedades.
+model ClubInstagramAccount {
+  id                   String    @id @default(cuid())
+  companyId            String
+  clubId               String    @unique
+  igUserId             String
+  username             String?
+  accessTokenEncrypted String
+  /// El token de larga duración vence a los ~60 días; se renueva solo.
+  expiresAt            DateTime?
+  connectedByUserId    String?
+  lastPublishedAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
