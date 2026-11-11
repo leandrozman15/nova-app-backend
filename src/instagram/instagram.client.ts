@@ -1,12 +1,15 @@
 import { BadGatewayException } from '@nestjs/common';
 
-const GRAPH = 'https://graph.instagram.com';
 const API_VERSION = 'v22.0';
+const GRAPH = `https://graph.facebook.com/${API_VERSION}`;
 const DEFAULT_PUBLIC_API_URL = 'https://nova-app-backend.onrender.com';
 
+/** Permisos del inicio de sesión unificado (Facebook) para publicar en la cuenta profesional de Instagram. */
 export const IG_SCOPES = [
-  'instagram_business_basic',
-  'instagram_business_content_publish',
+  'instagram_basic',
+  'instagram_content_publish',
+  'pages_show_list',
+  'pages_read_engagement',
 ];
 
 export function igConfig() {
@@ -16,6 +19,8 @@ export function igConfig() {
   return {
     appId: process.env.INSTAGRAM_APP_ID ?? '',
     appSecret: process.env.INSTAGRAM_APP_SECRET ?? '',
+    /** Opcional: id de la configuración de "Facebook Login para empresas" creada en el panel de Meta. */
+    configId: process.env.INSTAGRAM_CONFIG_ID ?? '',
     redirectUri:
       process.env.INSTAGRAM_REDIRECT_URI ||
       `${publicApiUrl}/instagram/oauth/callback`,
@@ -31,15 +36,17 @@ type Json = Record<string, any>;
 
 async function parse(res: Response, what: string): Promise<Json> {
   const body = (await res.json().catch(() => ({}))) as Json;
-  if (!res.ok || body.error || body.error_message) {
-    const detail =
-      body.error?.message ?? body.error_message ?? `HTTP ${res.status}`;
+  if (!res.ok || body.error) {
+    const detail = body.error?.message ?? `HTTP ${res.status}`;
     throw new BadGatewayException(`Instagram (${what}): ${detail}`);
   }
   return body;
 }
 
-/** Cliente mínimo de la API de Instagram con inicio de sesión de Instagram (cuentas profesionales). */
+/**
+ * Cliente mínimo de la API de Instagram con inicio de sesión unificado:
+ * el club autoriza su cuenta en Facebook Login para empresas y se publica con el token de usuario del sistema.
+ */
 export class InstagramClient {
   authorizationUrl(state: string) {
     const c = igConfig();
@@ -47,76 +54,70 @@ export class InstagramClient {
       client_id: c.appId,
       redirect_uri: c.redirectUri,
       response_type: 'code',
-      scope: IG_SCOPES.join(','),
+      override_default_response_type: 'true',
       state,
     });
-    return `https://www.instagram.com/oauth/authorize?${q.toString()}`;
+    if (c.configId) q.set('config_id', c.configId);
+    else q.set('scope', IG_SCOPES.join(','));
+    return `https://www.facebook.com/${API_VERSION}/dialog/oauth?${q.toString()}`;
   }
 
-  /** Código → token corto → token largo (~60 días). */
-  async exchangeCode(rawCode: string) {
+  /**
+   * Código → token de usuario del sistema (no vence) atado a las cuentas de Instagram que el club autorizó.
+   * La cuenta se obtiene de los permisos granulares del token (debug_token).
+   */
+  async connect(
+    code: string,
+  ): Promise<{
+    accessToken: string;
+    igUserId: string;
+    username: string | null;
+  }> {
     const c = igConfig();
-    const code = rawCode.replace(/#_$/, '');
-    const short = await parse(
-      await fetch('https://api.instagram.com/oauth/access_token', {
-        method: 'POST',
-        body: new URLSearchParams({
+    const tok = await parse(
+      await fetch(
+        `${GRAPH}/oauth/access_token?${new URLSearchParams({
           client_id: c.appId,
           client_secret: c.appSecret,
-          grant_type: 'authorization_code',
           redirect_uri: c.redirectUri,
           code,
-        }),
-        signal: AbortSignal.timeout(10_000),
-      }),
-      'canje del código',
-    );
-    const first = Array.isArray(short.data) ? short.data[0] : short;
-    const long = await parse(
-      await fetch(
-        `${GRAPH}/access_token?${new URLSearchParams({
-          grant_type: 'ig_exchange_token',
-          client_secret: c.appSecret,
-          access_token: String(first.access_token),
         })}`,
         { signal: AbortSignal.timeout(10_000) },
       ),
-      'token de larga duración',
+      'canje del código',
     );
-    return {
-      accessToken: String(long.access_token),
-      expiresInSec: Number(long.expires_in ?? 0),
-      igUserId: String(first.user_id),
-    };
-  }
-
-  async refresh(token: string) {
-    const r = await parse(
+    const accessToken = String(tok.access_token);
+    const dbg = await parse(
       await fetch(
-        `${GRAPH}/refresh_access_token?${new URLSearchParams({ grant_type: 'ig_refresh_token', access_token: token })}`,
+        `${GRAPH}/debug_token?${new URLSearchParams({ input_token: accessToken, access_token: `${c.appId}|${c.appSecret}` })}`,
         { signal: AbortSignal.timeout(10_000) },
       ),
-      'renovación del token',
+      'permisos del token',
     );
+    const scopes = (dbg.data?.granular_scopes ?? []) as {
+      scope: string;
+      target_ids?: string[];
+    }[];
+    const igUserId =
+      scopes.find((s) => s.scope === 'instagram_content_publish')
+        ?.target_ids?.[0] ??
+      scopes.find((s) => s.scope === 'instagram_basic')?.target_ids?.[0];
+    if (!igUserId)
+      throw new BadGatewayException(
+        'No se autorizó ninguna cuenta profesional de Instagram.',
+      );
+    const me = await fetch(
+      `${GRAPH}/${igUserId}?${new URLSearchParams({ fields: 'username', access_token: accessToken })}`,
+      {
+        signal: AbortSignal.timeout(10_000),
+      },
+    )
+      .then((r) => r.json() as Promise<Json>)
+      .catch(() => ({}) as Json);
     return {
-      accessToken: String(r.access_token),
-      expiresInSec: Number(r.expires_in ?? 0),
-    };
-  }
-
-  async me(token: string) {
-    const r = await parse(
-      await fetch(
-        `${GRAPH}/${API_VERSION}/me?${new URLSearchParams({ fields: 'user_id,username', access_token: token })}`,
-        {
-          signal: AbortSignal.timeout(10_000),
-        },
-      ),
-      'datos de la cuenta',
-    );
-    return {
-      igUserId: String(r.user_id ?? r.id),
-      username: r.username ? String(r.username) : null,
+      accessToken,
+      igUserId: String(igUserId),
+      username: me.username ? String(me.username) : null,
     };
   }
 
@@ -127,10 +128,9 @@ export class InstagramClient {
     what: string,
   ) {
     return parse(
-      await fetch(`${GRAPH}/${API_VERSION}/${path}`, {
+      await fetch(`${GRAPH}/${path}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: new URLSearchParams(params),
+        body: new URLSearchParams({ ...params, access_token: token }),
         signal: AbortSignal.timeout(20_000),
       }),
       what,
@@ -162,9 +162,8 @@ export class InstagramClient {
         await new Promise((r) => setTimeout(r, 5000));
         const st = await parse(
           await fetch(
-            `${GRAPH}/${API_VERSION}/${id}?${new URLSearchParams({ fields: 'status_code' })}`,
+            `${GRAPH}/${id}?${new URLSearchParams({ fields: 'status_code', access_token: token })}`,
             {
-              headers: { Authorization: `Bearer ${token}` },
               signal: AbortSignal.timeout(10_000),
             },
           ),
