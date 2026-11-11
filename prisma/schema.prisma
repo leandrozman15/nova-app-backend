@@ -325,6 +325,7 @@ model Club {
   paymentAccount        ClubPaymentAccount?
   instagramAccount      ClubInstagramAccount?
   facebookPage          ClubFacebookPage?
+  tiktokAccount         ClubTiktokAccount?
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
   tournaments           ClubTournament[]
@@ -2289,4 +2290,26 @@ model EmailLog {
 
   @@unique([kind, refId])
   @@index([companyId, clubId])
+}
+
+/// Cuenta de TikTok conectada por el club para publicar videos de sus novedades.
+model ClubTiktokAccount {
+  id                    String    @id @default(cuid())
+  companyId             String
+  clubId                String    @unique
+  openId                String
+  displayName           String?
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  /// El acceso dura 24 h y se renueva solo; el refresh token dura ~365 días.
+  accessExpiresAt       DateTime
+  refreshExpiresAt      DateTime
+  connectedByUserId     String?
+  lastPublishedAt       DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
