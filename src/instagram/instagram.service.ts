@@ -107,7 +107,7 @@ export class InstagramService {
       igUserId: conn.igUserId,
       username: conn.username,
       accessTokenEncrypted: encryptSecret(conn.accessToken),
-      // El token de página derivado de uno de larga duración no vence.
+      // Token de usuario del sistema configurado sin vencimiento.
       expiresAt: null,
       connectedByUserId: user?.id ?? null,
     };

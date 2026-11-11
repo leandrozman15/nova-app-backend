@@ -45,7 +45,7 @@ async function parse(res: Response, what: string): Promise<Json> {
 
 /**
  * Cliente mínimo de la API de Instagram con inicio de sesión unificado:
- * el usuario autoriza en Facebook, y se publica con el token de la página vinculada a la cuenta profesional.
+ * el club autoriza su cuenta en Facebook Login para empresas y se publica con el token de usuario del sistema.
  */
 export class InstagramClient {
   authorizationUrl(state: string) {
@@ -54,6 +54,7 @@ export class InstagramClient {
       client_id: c.appId,
       redirect_uri: c.redirectUri,
       response_type: 'code',
+      override_default_response_type: 'true',
       state,
     });
     if (c.configId) q.set('config_id', c.configId);
@@ -62,8 +63,8 @@ export class InstagramClient {
   }
 
   /**
-   * Código → token de usuario corto → largo (~60 días) → token de la página con Instagram vinculado.
-   * El token de página derivado de uno largo no vence.
+   * Código → token de usuario del sistema (no vence) atado a las cuentas de Instagram que el club autorizó.
+   * La cuenta se obtiene de los permisos granulares del token (debug_token).
    */
   async connect(
     code: string,
@@ -71,10 +72,9 @@ export class InstagramClient {
     accessToken: string;
     igUserId: string;
     username: string | null;
-    pageName: string | null;
   }> {
     const c = igConfig();
-    const short = await parse(
+    const tok = await parse(
       await fetch(
         `${GRAPH}/oauth/access_token?${new URLSearchParams({
           client_id: c.appId,
@@ -86,43 +86,38 @@ export class InstagramClient {
       ),
       'canje del código',
     );
-    const long = await parse(
+    const accessToken = String(tok.access_token);
+    const dbg = await parse(
       await fetch(
-        `${GRAPH}/oauth/access_token?${new URLSearchParams({
-          grant_type: 'fb_exchange_token',
-          client_id: c.appId,
-          client_secret: c.appSecret,
-          fb_exchange_token: String(short.access_token),
-        })}`,
+        `${GRAPH}/debug_token?${new URLSearchParams({ input_token: accessToken, access_token: `${c.appId}|${c.appSecret}` })}`,
         { signal: AbortSignal.timeout(10_000) },
       ),
-      'token de larga duración',
+      'permisos del token',
     );
-    const pages = await parse(
-      await fetch(
-        `${GRAPH}/me/accounts?${new URLSearchParams({
-          fields: 'name,access_token,instagram_business_account{id,username}',
-          limit: '50',
-          access_token: String(long.access_token),
-        })}`,
-        { signal: AbortSignal.timeout(10_000) },
-      ),
-      'páginas vinculadas',
-    );
-    const page = (pages.data as Json[] | undefined)?.find(
-      (p) => p.instagram_business_account?.id,
-    );
-    if (!page)
+    const scopes = (dbg.data?.granular_scopes ?? []) as {
+      scope: string;
+      target_ids?: string[];
+    }[];
+    const igUserId =
+      scopes.find((s) => s.scope === 'instagram_content_publish')
+        ?.target_ids?.[0] ??
+      scopes.find((s) => s.scope === 'instagram_basic')?.target_ids?.[0];
+    if (!igUserId)
       throw new BadGatewayException(
-        'No encontramos una cuenta profesional de Instagram vinculada a una página de Facebook que administres.',
+        'No se autorizó ninguna cuenta profesional de Instagram.',
       );
+    const me = await fetch(
+      `${GRAPH}/${igUserId}?${new URLSearchParams({ fields: 'username', access_token: accessToken })}`,
+      {
+        signal: AbortSignal.timeout(10_000),
+      },
+    )
+      .then((r) => r.json() as Promise<Json>)
+      .catch(() => ({}) as Json);
     return {
-      accessToken: String(page.access_token),
-      igUserId: String(page.instagram_business_account.id),
-      username: page.instagram_business_account.username
-        ? String(page.instagram_business_account.username)
-        : null,
-      pageName: page.name ? String(page.name) : null,
+      accessToken,
+      igUserId: String(igUserId),
+      username: me.username ? String(me.username) : null,
     };
   }
 
