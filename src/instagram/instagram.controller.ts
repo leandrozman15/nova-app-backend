@@ -88,7 +88,7 @@ export class InstagramCallbackController {
     try {
       const { clubId } = await this.service.handleCallback(code, state);
       return res.redirect(
-        `${appUrl()}/dashboard/clubs/${encodeURIComponent(clubId)}/settings?instagram=conectado`,
+        `${appUrl()}/dashboard/clubs/${encodeURIComponent(clubId)}/settings/integraciones?open=instagram&instagram=conectado`,
       );
     } catch (e) {
       this.logger.warn(`OAuth de Instagram falló: ${String(e)}`);

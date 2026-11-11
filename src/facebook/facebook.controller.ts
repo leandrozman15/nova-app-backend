@@ -88,7 +88,7 @@ export class FacebookCallbackController {
     try {
       const { clubId } = await this.service.handleCallback(code, state);
       return res.redirect(
-        `${appUrl()}/dashboard/clubs/${encodeURIComponent(clubId)}/settings?facebook=conectado`,
+        `${appUrl()}/dashboard/clubs/${encodeURIComponent(clubId)}/settings/integraciones?open=facebook&facebook=conectado`,
       );
     } catch (e) {
       this.logger.warn(`OAuth de Facebook falló: ${String(e)}`);

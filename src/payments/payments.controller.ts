@@ -206,7 +206,7 @@ export class MercadoPagoCallbacksController {
     try {
       const { clubId } = await this.accounts.handleCallback(code, state);
       return res.redirect(
-        `${appUrl}/dashboard/clubs/${encodeURIComponent(clubId)}/settings?mercadopago=conectado`,
+        `${appUrl}/dashboard/clubs/${encodeURIComponent(clubId)}/settings/integraciones?open=mercadopago&mercadopago=conectado`,
       );
     } catch (error) {
       this.logger.warn(`OAuth de Mercado Pago falló: ${String(error)}`);
