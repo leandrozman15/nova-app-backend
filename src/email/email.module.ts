@@ -1,11 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 
-import { ClubEmailController } from './email.controller';
+import { ClubEmailController, EmailCronController } from './email.controller';
+import { EmailNotificationsService } from './email-notifications.service';
 import { EmailService } from './email.service';
 
+@Global()
 @Module({
-  controllers: [ClubEmailController],
-  providers: [EmailService],
-  exports: [EmailService],
+  controllers: [ClubEmailController, EmailCronController],
+  providers: [EmailService, EmailNotificationsService],
+  exports: [EmailService, EmailNotificationsService],
 })
 export class EmailModule {}

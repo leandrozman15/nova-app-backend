@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 
 import { loadClubLive } from '../matches/club-live';
@@ -16,6 +17,7 @@ import { loadClubCompetitions } from './guardian-competitions';
 import { roundMoney } from '../bookings/booking-time';
 import { buildClubFeed } from '../matches/club-feed';
 import { toPublicMenu } from '../buffet/buffet.logic';
+import { EmailNotificationsService } from '../email/email-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   MercadoPagoClient,
@@ -70,6 +72,7 @@ export class FeePaymentsService {
     private readonly prisma: PrismaService,
     private readonly mp: MercadoPagoClient,
     private readonly accounts: PaymentAccountsService,
+    @Optional() private readonly emails?: EmailNotificationsService,
   ) {}
 
   /** La cuota es del propio socio/jugador (ficha vinculada a su cuenta). */
@@ -511,6 +514,7 @@ export class FeePaymentsService {
         `Pago ${payment.id} sobre la cuota ${fee.id}, que ya estaba paga: revisar posible devolución`,
       );
     }
+    if (updated.count > 0) void this.emails?.notifyReceipt(fee.id);
     await this.recordInTreasury(fee, payment);
   }
 

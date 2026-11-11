@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PaymentStatus } from '@prisma/client';
 
+import { EmailNotificationsService } from '../email/email-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
@@ -12,7 +13,10 @@ export function toDueDate(value?: string): Date | undefined {
 
 @Injectable()
 export class PlayerPaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly emails?: EmailNotificationsService,
+  ) {}
 
   async list(
     companyId: string,
@@ -100,7 +104,7 @@ export class PlayerPaymentsService {
 
     const paymentDate = dto.status === 'paid' ? new Date() : null;
 
-    return this.prisma.playerPayment.create({
+    const created = await this.prisma.playerPayment.create({
       data: {
         companyId,
         clubId: dto.clubId,
@@ -118,6 +122,8 @@ export class PlayerPaymentsService {
         player: true,
       },
     });
+    if (created.status === PaymentStatus.paid) void this.emails?.notifyReceipt(created.id);
+    return created;
   }
 
   async update(companyId: string, id: string, dto: UpdatePlayerPaymentDto) {
@@ -129,7 +135,7 @@ export class PlayerPaymentsService {
         : null
       : undefined;
 
-    return this.prisma.playerPayment.update({
+    const updated = await this.prisma.playerPayment.update({
       where: { id },
       data: {
         month: dto.month,
@@ -145,6 +151,9 @@ export class PlayerPaymentsService {
         player: true,
       },
     });
+    if (nextStatus === PaymentStatus.paid && current.status !== PaymentStatus.paid)
+      void this.emails?.notifyReceipt(updated.id);
+    return updated;
   }
 
   private async ensurePlayer(
