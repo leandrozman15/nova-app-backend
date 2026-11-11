@@ -13,12 +13,20 @@ export type EmailMessage = {
   html: string;
   text?: string;
   replyTo?: string;
+  /** Nombre visible del remitente (la dirección sigue siendo la de EMAIL_FROM). */
+  fromName?: string;
 };
 
 export const isEmailConfigured = () =>
   Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim());
 
 /** Dominio del remitente (`Club <avisos@dominio.com>` o `avisos@dominio.com`), para mostrarlo en Integraciones. */
+/** Dirección sola de `Nombre <a@b.com>` o `a@b.com`. */
+export const senderAddress = (from: string | undefined) => {
+  const m = from?.match(/<([^>]+)>\s*$/);
+  return (m ? m[1] : from ?? '').trim() || null;
+};
+
 export const senderDomain = (from: string | undefined) => {
   const m = from?.match(/@([^>\s]+)>?\s*$/);
   return m ? m[1].toLowerCase() : null;
@@ -51,7 +59,9 @@ export class EmailService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM!.trim(),
+        from: msg.fromName
+          ? `${msg.fromName.replace(/[<>"\r\n]/g, '')} <${senderAddress(process.env.EMAIL_FROM)}>`
+          : process.env.EMAIL_FROM!.trim(),
         to: Array.isArray(msg.to) ? msg.to : [msg.to],
         subject: msg.subject,
         html: msg.html,

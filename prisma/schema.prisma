@@ -340,6 +340,7 @@ model Club {
   @@index([leagueId])
   @@index([municipalityId])
   @@index([isPublic])
+  emailSettings ClubEmailSettings?
 }
 
 model ClubMembership {
@@ -2257,4 +2258,35 @@ model ClubFacebookPage {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+/// Qué avisos automáticos por email envía Fluxion en nombre de cada club (todo apagado hasta que el club lo active).
+model ClubEmailSettings {
+  id         String   @id @default(cuid())
+  companyId  String
+  clubId     String   @unique
+  receipts   Boolean  @default(false)
+  invoices   Boolean  @default(false)
+  feeNotices Boolean  @default(false)
+  overdue    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+/// Registro de emails automáticos enviados (evita duplicados: un aviso por cuota y tipo).
+model EmailLog {
+  id        String   @id @default(cuid())
+  companyId String
+  clubId    String
+  kind      String
+  refId     String
+  toEmail   String
+  sentAt    DateTime @default(now())
+
+  @@unique([kind, refId])
+  @@index([companyId, clubId])
 }
