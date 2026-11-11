@@ -31,6 +31,7 @@ import { MunicipalProgramsModule } from './municipal-programs/municipal-programs
 import { MunicipalDemoModule } from './municipal-demo/municipal-demo.module';
 import { WeatherModule } from './weather/weather.module';
 import { InstagramModule } from './instagram/instagram.module';
+import { EmailModule } from './email/email.module';
 import { FacebookModule } from './facebook/facebook.module';
 import { MunicipalProjectsModule } from './municipal-projects/municipal-projects.module';
 import { MunicipalOpsModule } from './municipal-ops/municipal-ops.module';
@@ -66,6 +67,7 @@ import { UsersModule } from './users/users.module';
     MunicipalDemoModule,
     WeatherModule,
     InstagramModule,
+    EmailModule,
     FacebookModule,
     LeaguesModule,
     TeamsModule,
