@@ -84,7 +84,15 @@ export class InstagramCallbackController {
     @Query('error') error: string | undefined,
     @Res() res: Response,
   ) {
-    if (error) return res.redirect(`${appUrl()}/dashboard?instagram=cancelado`);
+    const back = (result: string) => {
+      const clubId = this.service.clubIdFromState(state);
+      return res.redirect(
+        clubId
+          ? `${appUrl()}/dashboard/clubs/${encodeURIComponent(clubId)}/settings/integraciones?open=instagram&instagram=${result}`
+          : `${appUrl()}/dashboard?instagram=${result}`,
+      );
+    };
+    if (error) return back('cancelado');
     try {
       const { clubId } = await this.service.handleCallback(code, state);
       return res.redirect(
@@ -92,7 +100,9 @@ export class InstagramCallbackController {
       );
     } catch (e) {
       this.logger.warn(`OAuth de Instagram falló: ${String(e)}`);
-      return res.redirect(`${appUrl()}/dashboard?instagram=error`);
+      return back(
+        String(e).includes('SIN_CUENTA_PROFESIONAL') ? 'sin_cuenta' : 'error',
+      );
     }
   }
 }

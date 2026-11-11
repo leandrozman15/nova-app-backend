@@ -120,6 +120,12 @@ export class InstagramService {
     return { clubId: state.clubId };
   }
 
+  /** Club del `state` firmado, para volver a su pantalla aun cuando la conexión falle o se cancele. */
+  clubIdFromState(rawState: string | undefined): string | null {
+    if (!rawState) return null;
+    return verifyState<OAuthState>(rawState)?.clubId ?? null;
+  }
+
   async disconnect(companyId: string, clubId: string) {
     await this.requireClub(companyId, clubId);
     await this.prisma.clubInstagramAccount.deleteMany({ where: { clubId } });
