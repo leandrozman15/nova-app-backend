@@ -324,6 +324,7 @@ model Club {
   recurringBookings     RecurringBooking[]
   paymentAccount        ClubPaymentAccount?
   instagramAccount      ClubInstagramAccount?
+  facebookPage          ClubFacebookPage?
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
   tournaments           ClubTournament[]
@@ -2230,6 +2231,24 @@ model ClubInstagramAccount {
   accessTokenEncrypted String
   /// El token de larga duración vence a los ~60 días; se renueva solo.
   expiresAt            DateTime?
+  connectedByUserId    String?
+  lastPublishedAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+/// Página de Facebook conectada por el club para publicar sus novedades.
+model ClubFacebookPage {
+  id                   String    @id @default(cuid())
+  companyId            String
+  clubId               String    @unique
+  pageId               String
+  pageName             String?
+  accessTokenEncrypted String
   connectedByUserId    String?
   lastPublishedAt      DateTime?
   createdAt            DateTime  @default(now())

@@ -31,6 +31,8 @@ services:
         sync: false
       - key: INSTAGRAM_APP_SECRET
         sync: false
+      - key: FACEBOOK_CONFIG_ID
+        sync: false
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_ADMIN_CREDENTIALS_PATH
