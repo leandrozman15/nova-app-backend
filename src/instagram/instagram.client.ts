@@ -104,7 +104,7 @@ export class InstagramClient {
       scopes.find((s) => s.scope === 'instagram_basic')?.target_ids?.[0];
     if (!igUserId)
       throw new BadGatewayException(
-        'No se autorizó ninguna cuenta profesional de Instagram.',
+        'SIN_CUENTA_PROFESIONAL',
       );
     const me = await fetch(
       `${GRAPH}/${igUserId}?${new URLSearchParams({ fields: 'username', access_token: accessToken })}`,
