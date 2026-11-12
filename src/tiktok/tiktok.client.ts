@@ -147,7 +147,7 @@ export class TiktokClient {
       'datos del creador',
     );
     const options = (creator.data?.privacy_level_options ?? []) as string[];
-    const privacy = options.includes('PUBLIC_TO_EVERYONE')
+    let privacy = options.includes('PUBLIC_TO_EVERYONE')
       ? 'PUBLIC_TO_EVERYONE'
       : (options[0] ?? 'SELF_ONLY');
 
@@ -160,12 +160,12 @@ export class TiktokClient {
         'El video tiene que pesar menos de 64 MB para TikTok',
       );
 
-    const init = await parse(
-      await fetch(`${API}/v2/post/publish/video/init/`, {
+    const initPost = (level: string) =>
+      fetch(`${API}/v2/post/publish/video/init/`, {
         method: 'POST',
         headers: this.auth(accessToken),
         body: JSON.stringify({
-          post_info: { title: input.title, privacy_level: privacy },
+          post_info: { title: input.title, privacy_level: level },
           source_info: {
             source: 'FILE_UPLOAD',
             video_size: bytes.length,
@@ -174,9 +174,23 @@ export class TiktokClient {
           },
         }),
         signal: AbortSignal.timeout(15_000),
-      }),
-      'iniciar la publicación',
-    );
+      });
+
+    let res = await initPost(privacy);
+    // Una app sin auditar solo puede publicar en privado: si TikTok rechaza la
+    // visibilidad elegida, se reintenta como "solo yo".
+    if (!res.ok && privacy !== 'SELF_ONLY') {
+      const code = ((await res.clone().json().catch(() => ({}))) as Json).error
+        ?.code;
+      if (
+        code === 'unaudited_client_can_only_post_to_private_accounts' ||
+        code === 'privacy_level_option_mismatch'
+      ) {
+        privacy = 'SELF_ONLY';
+        res = await initPost(privacy);
+      }
+    }
+    const init = await parse(res, 'iniciar la publicación');
     const publishId = String(init.data?.publish_id);
     const uploadUrl = String(init.data?.upload_url);
 
