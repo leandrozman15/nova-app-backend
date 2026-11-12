@@ -3,10 +3,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { ClubMembershipStatus } from '@prisma/client';
 
+import { EmailNotificationsService } from '../email/email-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ApproveJoinRequestDto,
@@ -28,7 +30,10 @@ const REQUEST_SELECT = {
 
 @Injectable()
 export class JoinRequestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly emails?: EmailNotificationsService,
+  ) {}
 
   async list(companyId: string, clubId: string, status?: ClubMembershipStatus) {
     await this.requireClub(companyId, clubId);
@@ -88,7 +93,7 @@ export class JoinRequestsService {
     const userUid = request.user.firebaseUid;
     const role = dto.role ?? request.role;
 
-    return this.prisma.$transaction(async (tx) => {
+    const approved = await this.prisma.$transaction(async (tx) => {
       if (dto.playerId) {
         const player = await tx.player.findFirst({
           where: { id: dto.playerId, companyId, clubId },
@@ -144,6 +149,8 @@ export class JoinRequestsService {
         select: REQUEST_SELECT,
       });
     });
+    void this.emails?.notifyWelcome(clubId, approved.id, approved.user.email, approved.user.name ?? '');
+    return approved;
   }
 
   async reject(

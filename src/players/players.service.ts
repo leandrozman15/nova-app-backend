@@ -1,6 +1,7 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { EmailNotificationsService } from '../email/email-notifications.service';
 import { FirebaseAdminService } from '../firebase/firebase-admin.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvisionProfileActor, UsersService } from '../users/users.service';
@@ -13,6 +14,7 @@ export class PlayersService {
     private readonly prisma: PrismaService,
     private readonly firebaseAdminService: FirebaseAdminService,
     private readonly usersService: UsersService,
+    @Optional() private readonly emails?: EmailNotificationsService,
   ) {}
 
   list(companyId: string) {
@@ -67,6 +69,8 @@ export class PlayersService {
       },
     });
     await this.syncPlayerClaims(player, actor);
+    if (player.clubId)
+      void this.emails?.notifyWelcome(player.clubId, player.id, player.email, player.firstName);
     return player;
   }
 

@@ -2272,6 +2272,7 @@ model ClubEmailSettings {
   invoices   Boolean  @default(false)
   feeNotices Boolean  @default(false)
   overdue    Boolean  @default(false)
+  welcome    Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
