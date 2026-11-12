@@ -8,6 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 
+import { InvoicingService } from '../invoicing/invoicing.service';
 import { loadClubLive } from '../matches/club-live';
 import { loadClubScorers } from '../matches/club-scorers';
 import { loadChildTeams } from './child-teams';
@@ -73,6 +74,7 @@ export class FeePaymentsService {
     private readonly mp: MercadoPagoClient,
     private readonly accounts: PaymentAccountsService,
     @Optional() private readonly emails?: EmailNotificationsService,
+    @Optional() private readonly invoicing?: InvoicingService,
   ) {}
 
   /** La cuota es del propio socio/jugador (ficha vinculada a su cuenta). */
@@ -514,7 +516,10 @@ export class FeePaymentsService {
         `Pago ${payment.id} sobre la cuota ${fee.id}, que ya estaba paga: revisar posible devolución`,
       );
     }
-    if (updated.count > 0) void this.emails?.notifyReceipt(fee.id);
+    if (updated.count > 0) {
+      void this.emails?.notifyReceipt(fee.id);
+      void this.invoicing?.issueForPayment(fee.id);
+    }
     await this.recordInTreasury(fee, payment);
   }
 

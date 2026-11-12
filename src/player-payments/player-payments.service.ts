@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PaymentStatus } from '@prisma/client';
 
 import { EmailNotificationsService } from '../email/email-notifications.service';
+import { InvoicingService } from '../invoicing/invoicing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
@@ -16,6 +17,7 @@ export class PlayerPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly emails?: EmailNotificationsService,
+    @Optional() private readonly invoicing?: InvoicingService,
   ) {}
 
   async list(
@@ -122,7 +124,10 @@ export class PlayerPaymentsService {
         player: true,
       },
     });
-    if (created.status === PaymentStatus.paid) void this.emails?.notifyReceipt(created.id);
+    if (created.status === PaymentStatus.paid) {
+      void this.emails?.notifyReceipt(created.id);
+      void this.invoicing?.issueForPayment(created.id);
+    }
     return created;
   }
 
@@ -151,8 +156,10 @@ export class PlayerPaymentsService {
         player: true,
       },
     });
-    if (nextStatus === PaymentStatus.paid && current.status !== PaymentStatus.paid)
+    if (nextStatus === PaymentStatus.paid && current.status !== PaymentStatus.paid) {
       void this.emails?.notifyReceipt(updated.id);
+      void this.invoicing?.issueForPayment(updated.id);
+    }
     return updated;
   }
 

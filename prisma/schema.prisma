@@ -326,6 +326,8 @@ model Club {
   instagramAccount      ClubInstagramAccount?
   facebookPage          ClubFacebookPage?
   tiktokAccount         ClubTiktokAccount?
+  invoicingAccount      ClubInvoicingAccount?
+  invoices              PaymentInvoice[]
   activities            ClubActivity[]
   activityInquiries     ActivityInquiry[]
   tournaments           ClubTournament[]
@@ -2312,4 +2314,47 @@ model ClubTiktokAccount {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+/// Facturación electrónica ARCA por club, vía Sistemas 360 (token de emisor cifrado).
+model ClubInvoicingAccount {
+  id             String   @id @default(cuid())
+  companyId      String
+  clubId         String   @unique
+  tokenEncrypted String
+  /// factura_c (monotributo/exento) o factura_b.
+  voucherType    String   @default("factura_c")
+  /// Emitir automáticamente al registrarse un cobro.
+  autoIssue      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+/// Comprobante emitido por un cobro de cuota (uno por cobro).
+model PaymentInvoice {
+  id            String    @id @default(cuid())
+  companyId     String
+  clubId        String
+  paymentId     String    @unique
+  externalId    String?
+  status        String
+  voucherType   String
+  pointOfSale   Int?
+  number        Int?
+  cae           String?
+  caeDueDate    String?
+  pdfUrl        String?
+  qrUrl         String?
+  error         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([clubId])
 }

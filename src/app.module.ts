@@ -33,6 +33,7 @@ import { WeatherModule } from './weather/weather.module';
 import { InstagramModule } from './instagram/instagram.module';
 import { EmailModule } from './email/email.module';
 import { FacebookModule } from './facebook/facebook.module';
+import { InvoicingModule } from './invoicing/invoicing.module';
 import { TiktokModule } from './tiktok/tiktok.module';
 import { MunicipalProjectsModule } from './municipal-projects/municipal-projects.module';
 import { MunicipalOpsModule } from './municipal-ops/municipal-ops.module';
@@ -71,6 +72,7 @@ import { UsersModule } from './users/users.module';
     EmailModule,
     FacebookModule,
     TiktokModule,
+    InvoicingModule,
     LeaguesModule,
     TeamsModule,
     PlayersModule,
