@@ -90,26 +90,40 @@ export class FacebookClient {
       scope: string;
       target_ids?: string[];
     }[];
-    const pageId =
+    let pageId =
       scopes.find((s) => s.scope === 'pages_manage_posts')?.target_ids?.[0] ??
       scopes.find((s) => s.scope === 'pages_show_list')?.target_ids?.[0];
+    let pageToken = accessToken;
+    let pageName: string | null = null;
+    if (!pageId) {
+      // Respaldo: con Login para empresas la página puede no venir en granular_scopes.
+      const accounts = await fetch(
+        `${GRAPH}/me/accounts?${new URLSearchParams({ fields: 'id,name,access_token', access_token: accessToken })}`,
+        { signal: AbortSignal.timeout(10_000) },
+      )
+        .then((r) => r.json() as Promise<Json>)
+        .catch(() => ({}) as Json);
+      const first = (accounts.data as Json[] | undefined)?.[0];
+      if (first?.id) {
+        pageId = String(first.id);
+        pageName = first.name ? String(first.name) : null;
+        if (first.access_token) pageToken = String(first.access_token);
+      }
+    }
     if (!pageId)
       throw new BadGatewayException(
-        'No se autorizó ninguna página de Facebook.',
+        `No se autorizó ninguna página de Facebook (permisos recibidos: ${scopes.map((s) => `${s.scope}:${s.target_ids?.length ?? 0}`).join(', ') || 'ninguno'}).`,
       );
-    const page = await fetch(
-      `${GRAPH}/${pageId}?${new URLSearchParams({ fields: 'name', access_token: accessToken })}`,
-      {
-        signal: AbortSignal.timeout(10_000),
-      },
-    )
-      .then((r) => r.json() as Promise<Json>)
-      .catch(() => ({}) as Json);
-    return {
-      accessToken,
-      pageId: String(pageId),
-      pageName: page.name ? String(page.name) : null,
-    };
+    if (!pageName) {
+      const page = await fetch(
+        `${GRAPH}/${pageId}?${new URLSearchParams({ fields: 'name', access_token: pageToken })}`,
+        { signal: AbortSignal.timeout(10_000) },
+      )
+        .then((r) => r.json() as Promise<Json>)
+        .catch(() => ({}) as Json);
+      pageName = page.name ? String(page.name) : null;
+    }
+    return { accessToken: pageToken, pageId: String(pageId), pageName };
   }
 
   private async post(
