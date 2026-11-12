@@ -78,3 +78,16 @@ export function overdueEmail(d: FeeEmailData) {
   const text = `${d.clubName}: la cuota de ${period(d)} de ${d.playerName} (${money(d.amount)}) está vencida. Podés regularizarla desde la app o en secretaría. Si ya pagaste, avisanos.`;
   return { subject, html, text };
 }
+
+export type WelcomeEmailData = { clubName: string; name: string; appUrl: string };
+
+export function welcomeEmail(d: WelcomeEmailData) {
+  const subject = `¡Bienvenido/a a ${d.clubName}!`;
+  const html = layout(
+    d.clubName,
+    `¡Bienvenido/a, ${d.name}!`,
+    `<p style="font-size:14px">Ya sos parte de <b>${escapeHtml(d.clubName)}</b>. Desde la app podés ver tu carnet, tus pagos y las novedades del club.</p><p style="margin:24px 0"><a href="${escapeHtml(d.appUrl)}" style="background:#0f5132;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold;font-size:14px">Entrar a la app</a></p><p style="font-size:12px;color:#64748b">Si tenés dudas, respondé este mail y te contesta el club.</p>`,
+  );
+  const text = `¡Bienvenido/a a ${d.clubName}, ${d.name}! Entrá a la app: ${d.appUrl}`;
+  return { subject, html, text };
+}

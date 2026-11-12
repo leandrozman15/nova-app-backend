@@ -19,3 +19,16 @@ describe('email templates', () => {
     expect(overdueEmail({ ...base, dueDate: due }).subject).toContain('vencida');
   });
 });
+
+import { welcomeEmail } from './email-templates';
+
+describe('welcomeEmail', () => {
+  it('saluda por nombre, nombra el club y enlaza a la app', () => {
+    const m = welcomeEmail({ clubName: 'Club <Demo>', name: 'Ana', appUrl: 'https://sport.fluxi-on.com' });
+    expect(m.subject).toContain('Club <Demo>');
+    expect(m.html).toContain('Ana');
+    expect(m.html).toContain('Club &#60;Demo&#62;');
+    expect(m.html).toContain('https://sport.fluxi-on.com');
+    expect(m.text).toContain('https://sport.fluxi-on.com');
+  });
+});
