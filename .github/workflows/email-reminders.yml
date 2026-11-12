@@ -1,0 +1,27 @@
+name: Recordatorios por email (diario)
+
+# Dispara la corrida diaria de avisos de cuota y mora del backend.
+# Requiere el secreto de repositorio CRON_SECRET (el mismo valor que en Render).
+on:
+  schedule:
+    - cron: "0 12 * * *" # 12:00 UTC = 09:00 en Argentina/Brasil
+  workflow_dispatch:
+
+jobs:
+  reminders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Llamar al backend
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          API_URL: ${{ vars.API_URL || 'https://nova-app-backend.onrender.com' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Falta el secreto CRON_SECRET en el repositorio" >&2
+            exit 1
+          fi
+          # Render puede estar dormido: reintenta con espera.
+          curl -fsS -X POST "$API_URL/internal/email/reminders" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            --retry 4 --retry-delay 20 --retry-all-errors --max-time 120
