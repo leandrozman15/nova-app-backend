@@ -18,6 +18,8 @@ export type EmailSettingsInput = {
 
 /** Días antes del vencimiento en que se avisa la cuota. */
 export const FEE_NOTICE_DAYS = 3;
+/** Solo se avisa la mora de cuotas vencidas hace como mucho estos días (evita una ráfaga de avisos viejos). */
+export const OVERDUE_WINDOW_DAYS = 30;
 const MAX_PER_RUN = 300;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -137,6 +139,7 @@ export class EmailNotificationsService {
     });
     const today = startOfTodayUtc();
     const soon = new Date(today.getTime() + (FEE_NOTICE_DAYS + 1) * DAY_MS);
+    const oldest = new Date(today.getTime() - OVERDUE_WINDOW_DAYS * DAY_MS);
     let sent = 0;
     for (const s of clubs) {
       if (sent >= MAX_PER_RUN) break;
@@ -144,7 +147,7 @@ export class EmailNotificationsService {
         where: {
           clubId: s.clubId,
           status: { not: 'paid' },
-          dueDate: { not: null, lt: soon },
+          dueDate: { gte: oldest, lt: soon },
           player: { email: { not: null }, active: true },
         },
         include: { player: true, club: true },
