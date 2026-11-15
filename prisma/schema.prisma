@@ -136,6 +136,20 @@ model Municipality {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Identidad y contacto de la secretaría (pantalla de configuración).
+  /// Logo comprimido (data URL o https). Se muestra en el menú, informes y comunicados.
+  logoUrl         String?
+  /// Nombre oficial del área, p. ej. "Secretaría de Deportes y Recreación".
+  secretariaName  String?
+  responsibleName String?
+  responsibleRole String?
+  contactEmail    String?
+  phone           String?
+  whatsapp        String?
+  website         String?
+  facebook        String?
+  instagram       String?
+
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clubs   Club[]
   leagues League[]
