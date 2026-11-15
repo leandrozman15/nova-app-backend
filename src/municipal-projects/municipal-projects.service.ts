@@ -331,6 +331,7 @@ export class MunicipalProjectsService {
         email: dto.email.toLowerCase(),
         name: dto.name,
         municipalityId: dto.municipalityId,
+        ...(dto.role && { role: dto.role }),
       },
       create: {
         companyId,
@@ -338,7 +339,7 @@ export class MunicipalProjectsService {
         firebaseUid: dto.firebaseUid,
         email: dto.email.toLowerCase(),
         name: dto.name,
-        role: 'municipal_secretary',
+        role: dto.role ?? 'municipal_secretary',
       },
     });
   }
