@@ -13,6 +13,7 @@ import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import { CreateJoinRequestDto } from './dto/create-join-request.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterFreeUserDto } from './dto/register-free-user.dto';
+import { canAssignGlobalRole } from './provision-scope';
 
 export type ProvisionProfileActor = {
   uid: string;
@@ -31,6 +32,7 @@ const GLOBAL_ROLES = new Set([
 ]);
 
 const PLATFORM_ROLES = new Set(['admin', 'fed_admin']);
+
 const CLUB_ROLES = new Set([
   'club_admin',
   'buffet',
@@ -507,6 +509,15 @@ export class UsersService {
       if (!isCompanyAuthority)
         throw new ForbiddenException(
           'Global profiles require an authority role',
+        );
+      // Cada autoridad solo puede crear perfiles de su mismo ámbito: una secretaría
+      // municipal o una liga no pueden fabricar un admin de toda la empresa.
+      if (
+        !isPlatformRole &&
+        !canAssignGlobalRole(actorRole, (targetRole ?? '').trim().toLowerCase())
+      )
+        throw new ForbiddenException(
+          'No podés asignar un rol de mayor alcance que el tuyo',
         );
       return;
     }
