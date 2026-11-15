@@ -1,4 +1,4 @@
-import { canMoveRequest, complianceFor, documentStatus, sortCalendar } from './municipal-ops-rules';
+import { canMoveRequest, canSettle, complianceFor, countByMonth, documentStatus, reminderBucket, sortCalendar } from './municipal-ops-rules';
 
 const now = new Date('2026-11-10T12:00:00Z');
 const inDays = (n: number) => new Date(now.getTime() + n * 86_400_000);
@@ -43,5 +43,27 @@ describe('municipal-ops-rules', () => {
     const it = (id: string, start: string) => ({ id, type: 'match' as const, title: id, start, end: null, place: null, clubId: null });
     const r = sortCalendar([it('b', '2026-11-12T10:00:00Z'), it('x', '2027-01-01T00:00:00Z'), it('a', '2026-11-11T10:00:00Z')], now, inDays(30));
     expect(r.map((i) => i.id)).toEqual(['a', 'b']);
+  });
+
+  it('rendición: solo se pasa a rendido desde entregado y con comprobantes que cubran el monto', () => {
+    expect(canMoveRequest('delivered', 'settled')).toBe(true);
+    expect(canMoveRequest('approved', 'settled')).toBe(false);
+    expect(canMoveRequest('settled', 'rejected')).toBe(false);
+    expect(canSettle(1000, [])).toBe(false);
+    expect(canSettle(1000, [{ amount: 400 }])).toBe(false);
+    expect(canSettle(1000, [{ amount: 400 }, { amount: 600 }])).toBe(true);
+    expect(canSettle(null, [{ amount: 1 }])).toBe(true);
+  });
+
+  it('evolución: cuenta por mes e incluye meses vacíos', () => {
+    const r = countByMonth([new Date('2026-11-02T00:00:00Z'), new Date('2026-11-09T00:00:00Z'), new Date('2026-09-15T00:00:00Z'), new Date('2025-01-01T00:00:00Z')], 3, now);
+    expect(r).toEqual([{ month: '2026-09', count: 1 }, { month: '2026-10', count: 0 }, { month: '2026-11', count: 2 }]);
+  });
+
+  it('avisos de vencimiento a 30 y 7 días', () => {
+    expect(reminderBucket(inDays(7), now)).toBe(7);
+    expect(reminderBucket(inDays(30), now)).toBe(30);
+    expect(reminderBucket(inDays(15), now)).toBeNull();
+    expect(reminderBucket(null, now)).toBeNull();
   });
 });
