@@ -43,3 +43,17 @@ export class ResolveRequestDto {
   @IsIn(REQUEST_STATUSES as unknown as string[]) status!: string;
   @IsOptional() @IsString() @MaxLength(1000) resolutionNote?: string;
 }
+
+export class AddReceiptDto {
+  @IsString() @MaxLength(140) concept!: string;
+  @IsInt() @Min(1) @Max(2_000_000_000) amount!: number;
+  @IsOptional() @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(500) fileUrl?: string;
+}
+
+export class RecordAuditDto {
+  @IsString() municipalityId!: string;
+  @IsIn(['dni_reveal', 'export']) action!: string;
+  @IsString() @MaxLength(60) entity!: string;
+  @IsOptional() @IsString() @MaxLength(80) entityId?: string;
+  @IsOptional() @IsString() @MaxLength(200) summary?: string;
+}

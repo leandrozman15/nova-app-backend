@@ -2091,6 +2091,9 @@ model ClubDocument {
   /// Enlace al archivo (Drive, Dropbox...).
   fileUrl   String?
   notes     String?
+  /// Validación por el municipio (el documento fue revisado).
+  validatedAt DateTime?
+  validatedBy String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -2112,15 +2115,18 @@ model ClubRequest {
   title           String
   description     String?
   amountRequested Int?
-  /// pending | approved | rejected | delivered
+  /// pending | approved | rejected | delivered | settled (rendido)
   status          String    @default("pending")
   resolutionNote  String?
   resolvedAt      DateTime?
+  /// Cuando el municipio dio por rendido el subsidio.
+  settledAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  company  Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club     Club                 @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  receipts ClubRequestReceipt[]
 
   @@index([municipalityId, status])
   @@index([clubId, createdAt])
@@ -2357,4 +2363,37 @@ model PaymentInvoice {
 
   @@index([companyId])
   @@index([clubId])
+}
+
+/// Comprobante con el que el club rinde un pedido entregado (gasto, monto y enlace al archivo).
+model ClubRequestReceipt {
+  id        String   @id @default(cuid())
+  companyId String
+  requestId String
+  concept   String
+  amount    Int
+  /// Enlace al comprobante (Drive, Dropbox...).
+  fileUrl   String?
+  createdAt DateTime @default(now())
+
+  request ClubRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+/// Registro de acciones sensibles en el panel municipal: quién hizo qué y cuándo.
+model MunicipalAuditLog {
+  id             String   @id @default(cuid())
+  companyId      String
+  municipalityId String
+  actorUid       String
+  actorEmail     String?
+  /// request.resolve | request.settle | announcement.create | announcement.remove | document.validate | athlete.dni_view | team.create ...
+  action         String
+  entity         String
+  entityId       String?
+  summary        String
+  createdAt      DateTime @default(now())
+
+  @@index([municipalityId, createdAt])
 }

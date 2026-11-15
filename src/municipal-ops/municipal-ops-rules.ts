@@ -2,7 +2,7 @@ export const DOCUMENT_KINDS = ['statute', 'legal_status', 'insurance', 'habilita
 /** Documentación que el municipio exige a cada institución. */
 export const REQUIRED_KINDS = ['statute', 'legal_status', 'insurance', 'habilitation'] as const;
 export const REQUEST_TYPES = ['subsidy', 'materials', 'facility', 'other'] as const;
-export const REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'delivered'] as const;
+export const REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'delivered', 'settled'] as const;
 
 export type DocStatus = 'valid' | 'expiring' | 'expired' | 'no_expiry';
 const DAY = 86_400_000;
@@ -46,13 +46,14 @@ const NEXT: Record<string, string[]> = {
   pending: ['approved', 'rejected'],
   approved: ['delivered', 'rejected'],
   rejected: [],
-  delivered: [],
+  delivered: ['settled'],
+  settled: [],
 };
 export const canMoveRequest = (from: string, to: string) => (NEXT[from] ?? []).includes(to);
 
 export type CalendarItem = {
   id: string;
-  type: 'match' | 'booking' | 'swim' | 'program';
+  type: 'match' | 'booking' | 'swim' | 'program' | 'project';
   title: string;
   start: string;
   end: string | null;
@@ -65,4 +66,37 @@ export function sortCalendar(items: CalendarItem[], from: Date, to: Date): Calen
   return items
     .filter((i) => { const t = Date.parse(i.start); return !Number.isNaN(t) && t >= from.getTime() && t <= to.getTime(); })
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+/** Suma de comprobantes cargados para un pedido. */
+export const receiptsTotal = (receipts: Array<{ amount: number }>) => receipts.reduce((t, r) => t + r.amount, 0);
+
+/** Un subsidio solo se puede dar por rendido si hay comprobantes que cubran al menos lo aprobado/pedido. */
+export function canSettle(amountRequested: number | null | undefined, receipts: Array<{ amount: number }>): boolean {
+  if (receipts.length === 0) return false;
+  return receiptsTotal(receipts) >= (amountRequested ?? 0);
+}
+
+/** Primer día (UTC) del mes en formato YYYY-MM. */
+export const monthKey = (d: Date) => d.toISOString().slice(0, 7);
+
+/** Cuenta registros por mes de los últimos `months` meses (incluye meses en cero). */
+export function countByMonth(dates: Date[], months: number, now = new Date()): Array<{ month: string; count: number }> {
+  const keys: string[] = [];
+  for (let i = months - 1; i >= 0; i--) keys.push(monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))));
+  const counts = new Map(keys.map((k) => [k, 0]));
+  for (const d of dates) {
+    const k = monthKey(d);
+    if (counts.has(k)) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return keys.map((month) => ({ month, count: counts.get(month) ?? 0 }));
+}
+
+/** Documentos que vencen a 7 o 30 días exactos (para avisos); devuelve el umbral alcanzado. */
+export function reminderBucket(expiresAt: Date | null, now = new Date()): 7 | 30 | null {
+  if (!expiresAt) return null;
+  const days = Math.ceil((expiresAt.getTime() - now.getTime()) / DAY);
+  if (days === 7) return 7;
+  if (days === 30) return 30;
+  return null;
 }

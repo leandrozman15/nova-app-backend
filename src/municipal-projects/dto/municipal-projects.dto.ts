@@ -77,6 +77,8 @@ export class RecordStaffDto {
   @IsString() firebaseUid!: string;
   @IsEmail() email!: string;
   @IsString() @MaxLength(140) name!: string;
+  /** Rol dentro del equipo; por defecto secretaría. El inspector es solo lectura. */
+  @IsOptional() @IsIn(['municipal_secretary', 'municipal_admin', 'municipal_inspector']) role?: string;
 }
 
 export class AttachmentDto {

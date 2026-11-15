@@ -2,15 +2,25 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post,
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireCompanyId } from '../common/http/request-context';
+import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 import {
+  AddReceiptDto,
   CreateAnnouncementDto,
   CreateDocumentDto,
   CreateRequestDto,
+  RecordAuditDto,
   ResolveRequestDto,
 } from './dto/municipal-ops.dto';
 import { MunicipalOpsService } from './municipal-ops.service';
 
+// Escritura: secretaría y dirección. Lectura: suma al inspector (solo consulta).
 const MUNICIPAL = ['admin', 'fed_admin', 'municipal_secretary', 'municipal_admin'] as const;
+const MUNICIPAL_READ = [...MUNICIPAL, 'municipal_inspector'] as const;
+
+function actorOf(req: unknown) {
+  const a = (req as RequestWithAuth).auth;
+  return { uid: a?.uid ?? 'unknown', email: a?.email };
+}
 const CLUB_STAFF = ['admin', 'manager', 'coordinator'] as const;
 
 @Controller('municipal-ops')
@@ -18,7 +28,7 @@ export class MunicipalOpsController {
   constructor(private readonly service: MunicipalOpsService) {}
 
   // ── Municipio ──
-  @Roles(...MUNICIPAL)
+  @Roles(...MUNICIPAL_READ)
   @Get('announcements')
   listAnnouncements(@Req() req: unknown, @Query('municipalityId') municipalityId: string) {
     return this.service.listAnnouncements(requireCompanyId(req), municipalityId);
@@ -27,22 +37,22 @@ export class MunicipalOpsController {
   @Roles(...MUNICIPAL)
   @Post('announcements')
   createAnnouncement(@Req() req: unknown, @Body() dto: CreateAnnouncementDto) {
-    return this.service.createAnnouncement(requireCompanyId(req), dto);
+    return this.service.createAnnouncement(requireCompanyId(req), dto, actorOf(req));
   }
 
   @Roles(...MUNICIPAL)
   @Delete('announcements/:id')
   removeAnnouncement(@Req() req: unknown, @Param('id') id: string) {
-    return this.service.removeAnnouncement(requireCompanyId(req), id);
+    return this.service.removeAnnouncement(requireCompanyId(req), id, actorOf(req));
   }
 
-  @Roles(...MUNICIPAL)
+  @Roles(...MUNICIPAL_READ)
   @Get('compliance')
   compliance(@Req() req: unknown, @Query('municipalityId') municipalityId: string) {
     return this.service.compliance(requireCompanyId(req), municipalityId);
   }
 
-  @Roles(...MUNICIPAL)
+  @Roles(...MUNICIPAL_READ)
   @Get('requests')
   listMunicipalRequests(@Req() req: unknown, @Query('municipalityId') municipalityId: string, @Query('status') status?: string) {
     return this.service.listMunicipalRequests(requireCompanyId(req), municipalityId, status);
@@ -51,10 +61,47 @@ export class MunicipalOpsController {
   @Roles(...MUNICIPAL)
   @Patch('requests/:id')
   resolveRequest(@Req() req: unknown, @Param('id') id: string, @Body() dto: ResolveRequestDto) {
-    return this.service.resolveRequest(requireCompanyId(req), id, dto);
+    return this.service.resolveRequest(requireCompanyId(req), id, dto, actorOf(req));
+  }
+
+  @Roles(...MUNICIPAL_READ)
+  @Get('overview')
+  overview(@Req() req: unknown, @Query('municipalityId') municipalityId: string) {
+    return this.service.overview(requireCompanyId(req), municipalityId);
+  }
+
+  @Roles(...MUNICIPAL_READ)
+  @Get('audit')
+  listAudit(@Req() req: unknown, @Query('municipalityId') municipalityId: string) {
+    return this.service.listAudit(requireCompanyId(req), municipalityId);
+  }
+
+  /** Registra acciones sensibles hechas en el cliente (ver DNI completo, exportar). */
+  @Roles(...MUNICIPAL_READ)
+  @Post('audit')
+  recordAudit(@Req() req: unknown, @Body() dto: RecordAuditDto) {
+    return this.service.recordAudit(requireCompanyId(req), actorOf(req), dto);
   }
 
   @Roles(...MUNICIPAL)
+  @Patch('club/documents/:id/validate')
+  validateDocument(@Req() req: unknown, @Param('id') id: string, @Body() body: { valid?: boolean }) {
+    return this.service.validateDocument(requireCompanyId(req), id, body?.valid !== false, actorOf(req));
+  }
+
+  @Roles(...CLUB_STAFF, ...MUNICIPAL)
+  @Post('requests/:id/receipts')
+  addReceipt(@Req() req: unknown, @Param('id') id: string, @Body() dto: AddReceiptDto) {
+    return this.service.addReceipt(requireCompanyId(req), id, dto, actorOf(req));
+  }
+
+  @Roles(...CLUB_STAFF, ...MUNICIPAL)
+  @Delete('receipts/:id')
+  removeReceipt(@Req() req: unknown, @Param('id') id: string) {
+    return this.service.removeReceipt(requireCompanyId(req), id, actorOf(req));
+  }
+
+  @Roles(...MUNICIPAL_READ)
   @Get('calendar')
   calendar(@Req() req: unknown, @Query('municipalityId') municipalityId: string, @Query('from') from?: string, @Query('to') to?: string) {
     const start = from ? new Date(from) : new Date();
@@ -80,7 +127,7 @@ export class MunicipalOpsController {
   @Roles(...CLUB_STAFF, ...MUNICIPAL)
   @Delete('club/documents/:id')
   removeDocument(@Req() req: unknown, @Param('id') id: string) {
-    return this.service.removeDocument(requireCompanyId(req), id);
+    return this.service.removeDocument(requireCompanyId(req), id, actorOf(req));
   }
 
   @Roles(...CLUB_STAFF, ...MUNICIPAL)
