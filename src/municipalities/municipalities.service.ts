@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseBoundary } from './boundary';
 import { CreateMunicipalityDto } from './dto/create-municipality.dto';
+import { UpdateMunicipalitySettingsDto } from './dto/update-municipality-settings.dto';
 import { UpdateMunicipalityDto } from './dto/update-municipality.dto';
 
 @Injectable()
@@ -64,6 +65,15 @@ export class MunicipalitiesService {
         ...(boundary !== undefined && { boundary: boundary === null ? Prisma.DbNull : boundary }),
       },
     });
+  }
+
+  /** Identidad y contacto de la secretaría. Un campo vacío ("") lo borra. */
+  async updateSettings(companyId: string, id: string, dto: UpdateMunicipalitySettingsDto) {
+    await this.getById(companyId, id);
+    const data = Object.fromEntries(
+      Object.entries(dto).map(([k, v]) => [k, typeof v === 'string' && v.trim() === '' ? null : typeof v === 'string' ? v.trim() : v]),
+    );
+    return this.prisma.municipality.update({ where: { id }, data });
   }
 
   async remove(companyId: string, id: string) {
