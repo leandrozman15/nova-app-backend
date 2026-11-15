@@ -5,6 +5,7 @@ import {
   feeNoticeEmail,
   overdueEmail,
   receiptEmail,
+  welcomeEmail,
   type FeeEmailData,
 } from './email-templates';
 import { EmailService, isEmailConfigured } from './email.service';
@@ -14,6 +15,7 @@ export type EmailSettingsInput = {
   invoices?: boolean;
   feeNotices?: boolean;
   overdue?: boolean;
+  welcome?: boolean;
 };
 
 /** Días antes del vencimiento en que se avisa la cuota. */
@@ -45,6 +47,7 @@ export class EmailNotificationsService {
       invoices: s?.invoices ?? false,
       feeNotices: s?.feeNotices ?? false,
       overdue: s?.overdue ?? false,
+      welcome: s?.welcome ?? false,
     };
   }
 
@@ -54,6 +57,7 @@ export class EmailNotificationsService {
       ...(input.invoices !== undefined && { invoices: input.invoices }),
       ...(input.feeNotices !== undefined && { feeNotices: input.feeNotices }),
       ...(input.overdue !== undefined && { overdue: input.overdue }),
+      ...(input.welcome !== undefined && { welcome: input.welcome }),
     };
     await this.prisma.clubEmailSettings.upsert({
       where: { clubId },
@@ -111,6 +115,22 @@ export class EmailNotificationsService {
       method: p.paymentMethod,
       receiptNumber: p.id.slice(-8).toUpperCase(),
     };
+  }
+
+  /** Bienvenida a quien se suma al club (alta o solicitud aprobada). Un solo mail por persona y club; nunca interrumpe el alta. */
+  async notifyWelcome(clubId: string, refId: string, to: string | null | undefined, name: string): Promise<void> {
+    try {
+      if (!isEmailConfigured() || !to) return;
+      const club = await this.prisma.club.findUnique({ where: { id: clubId } });
+      if (!club) return;
+      const settings = await this.getSettings(clubId);
+      if (!settings.welcome) return;
+      const appUrl = (process.env.PUBLIC_APP_URL || 'https://sport.fluxi-on.com').replace(/\/$/, '');
+      const data = { clubName: club.name, name: name.trim() || 'socio/a', appUrl };
+      await this.deliver('welcome', `${clubId}:${refId}`, club.companyId, clubId, to, club.name, club.email, () => welcomeEmail(data));
+    } catch (e) {
+      this.logger.warn(`Bienvenida ${refId}: ${String(e)}`);
+    }
   }
 
   /** Recibo al pagar una cuota. Nunca interrumpe el cobro: los errores solo se registran. */

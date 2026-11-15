@@ -5,4 +5,5 @@ export class EmailSettingsDto {
   @IsOptional() @IsBoolean() invoices?: boolean;
   @IsOptional() @IsBoolean() feeNotices?: boolean;
   @IsOptional() @IsBoolean() overdue?: boolean;
+  @IsOptional() @IsBoolean() welcome?: boolean;
 }
