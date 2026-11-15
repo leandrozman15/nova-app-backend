@@ -1,4 +1,7 @@
-import { IsEmail, IsOptional, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsString, IsUrl, Matches, MaxLength, ValidateIf } from 'class-validator';
+
+/** Opcional: undefined, null o vacío ("" borra el dato) se aceptan sin validar el formato. */
+const IsOptional = () => ValidateIf((_, v) => v !== undefined && v !== null && v !== '');
 
 /** Logo: imagen comprimida en data URL (≈ hasta 400 KB) o enlace https. */
 const LOGO = /^(data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+|https:\/\/\S+)$/;
