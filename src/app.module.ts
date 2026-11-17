@@ -50,6 +50,7 @@ import { TrainingSessionsModule } from './training-sessions/training-sessions.mo
 import { BuffetModule } from './buffet/buffet.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { UsersModule } from './users/users.module';
+import { PushModule } from './push/push.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { UsersModule } from './users/users.module';
     RosterModule,
     DocStoreModule,
     PlayerDocumentsModule,
+    PushModule,
     PublicModule,
     PaymentsModule,
   ],

@@ -2412,3 +2412,19 @@ model MunicipalAuditLog {
 
   @@index([municipalityId, createdAt])
 }
+
+/// Dispositivo (navegador o app instalada) que recibe notificaciones push por Firebase Cloud Messaging.
+model PushDevice {
+  id          String   @id @default(cuid())
+  /// Token de FCM: identifica la instalación; si se renueva, se reemplaza.
+  token       String   @unique
+  firebaseUid String
+  /// Email verificado del usuario, para alcanzar a madres/padres vinculados por guardianEmail.
+  email       String?
+  platform    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([firebaseUid])
+  @@index([email])
+}
