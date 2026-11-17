@@ -14,7 +14,9 @@ import {
   type Division,
   type RowResult,
 } from './player-import.rules';
-import { planMissing, withPlanned } from './player-import.plan';
+import { randomUUID } from 'node:crypto';
+
+import { placementOf, planMissing, sportFor, teamRama, withPlanned, type ExistingTeam } from './player-import.plan';
 
 /**
  * Implantación automática de jugadores de un club desde la plantilla Excel:
@@ -51,19 +53,40 @@ export class PlayerImportService {
   ) {
     const club = await this.requireClub(clubId);
     let { disciplines, divisions } = await this.clubLists(clubId);
-    // Disciplinas y categorías que la planilla usa y el club todavía no tiene.
+    let teams = await this.clubTeams(clubId);
+    // Disciplinas, ramas y categorías que la planilla usa y el club todavía no tiene.
     const plan = autoCreate
-      ? planMissing(rows, disciplines, divisions)
-      : { disciplines: [], divisions: [] };
-    const hasPlan = plan.disciplines.length > 0 || plan.divisions.length > 0;
+      ? planMissing(rows, disciplines, divisions, teams)
+      : { disciplines: [], divisions: [], teams: [] };
+    const hasPlan = plan.disciplines.length > 0 || plan.divisions.length > 0 || plan.teams.length > 0;
     if (hasPlan && dryRun) {
-      ({ disciplines, divisions } = withPlanned(disciplines, divisions, plan));
+      ({ disciplines, divisions, teams } = withPlanned(disciplines, divisions, teams, plan));
     } else if (hasPlan) {
       await this.createStructure(club, plan, actor);
       ({ disciplines, divisions } = await this.clubLists(clubId));
+      teams = await this.clubTeams(clubId);
     }
+
+    // Cada fila va a su rama (la valida el revisor) y a su categoría dentro de la rama.
+    const placed = rows.map((row) => {
+      const text = String(row.sport ?? '').trim();
+      const guess = text ? sportFor(text) : null;
+      const sport = text
+        ? disciplines.find((d) => fold(d.sportId) === fold(text) || fold(d.name) === fold(text) || d.sportId === guess?.sportId)
+        : undefined;
+      if (!autoCreate || !sport) return { row, teamName: null as string | null };
+      const place = placementOf(row, sport, divisions);
+      return { row: { ...row, category: place.divisionName }, teamName: place.teamName };
+    });
     const today = todayIn(club.timezone);
-    const results = validateRows(rows, { disciplines, divisions, today });
+    const results = validateRows(placed.map((p) => p.row), { disciplines, divisions, today });
+    results.forEach((result, index) => {
+      const teamName = placed[index].teamName;
+      if (!result.player || !teamName || !result.player.divisionId) return;
+      const team = teams.find((t) => t.divisionId === result.player!.divisionId && fold(t.name) === fold(teamName));
+      result.player.teamId = team?.id ?? null;
+      result.player.teamName = teamName;
+    });
     await this.markExisting(club, results);
 
     const importable = results.filter(
@@ -172,7 +195,7 @@ export class PlayerImportService {
     for (const result of rows) {
       const player = result.player!;
       try {
-        await this.prisma.player.create({
+        const row = await this.prisma.player.create({
           data: {
             companyId: club.companyId,
             clubId: club.id,
@@ -200,10 +223,13 @@ export class PlayerImportService {
             extra: {
               importBatch: batchId,
               importedBy: actor.email ?? actor.uid,
+              ...(player.teamId ? { teamId: player.teamId } : {}),
             },
           },
           select: { id: true },
         });
+        if (player.teamId && player.divisionId)
+          await this.assignToTeam(club, row.id, `${player.firstName} ${player.lastName}`, player.divisionId, player.teamId);
         created += 1;
       } catch (error) {
         result.status = 'error';
@@ -254,6 +280,16 @@ export class PlayerImportService {
         },
       });
     }
+    if (plan.teams.length) {
+      const divisions = await this.prisma.division.findMany({ where: { clubId: club.id }, select: { id: true, name: true, sport: true } });
+      for (const t of plan.teams) {
+        const division = divisions.find(
+          (d) => fold(d.name) === fold(t.divisionName) && (!d.sport || fold(d.sport) === fold(t.sport)),
+        );
+        if (!division) continue;
+        await this.createTeam(club, division.id, { name: t.name, sport: t.sport, branch: t.branch });
+      }
+    }
     if (plan.disciplines.length) await this.migration.syncClubSports(club.id);
     await this.audit.record(
       actor,
@@ -263,9 +299,122 @@ export class PlayerImportService {
         after: {
           disciplines: plan.disciplines.map((d) => d.name),
           divisions: plan.divisions.map((d) => `${d.sportName}: ${d.name}`),
+          teams: plan.teams.map((t) => `${t.divisionName} › ${t.name}`),
         },
       },
     );
+  }
+
+  /**
+   * Reacomoda lo que una implantación anterior creó como ramas sueltas ("2013", "2014"…):
+   * por deporte arma una rama (p. ej. "Fútbol infantil") y pasa cada una a categoría dentro de ella,
+   * con sus jugadores, su entrenador y su coordinador. Solo toca ramas creadas por la implantación y sin categorías.
+   */
+  async restructure(actor: AuditActor, clubId: string, dryRun: boolean, names: Record<string, string> = {}) {
+    const club = await this.requireClub(clubId);
+    const candidates = await this.prisma.division.findMany({
+      where: { clubId, extra: { path: ['createdBy'], equals: 'player-import' } },
+      select: { id: true, name: true, sport: true, branch: true, headCoachId: true, coordinatorId: true },
+    });
+    const withTeams = new Set((await this.clubTeams(clubId)).map((t) => t.divisionId));
+    const loose = candidates.filter((d) => !withTeams.has(d.id) && d.sport);
+    const disciplines = await this.prisma.clubDiscipline.findMany({ where: { clubId }, select: { sportId: true, name: true } });
+    const counts = await this.prisma.player.groupBy({ by: ['divisionId'], where: { clubId, divisionId: { in: loose.map((d) => d.id) } }, _count: { _all: true } });
+    const countOf = (id: string) => counts.find((c) => c.divisionId === id)?._count._all ?? 0;
+
+    const groups = new Map<string, typeof loose>();
+    for (const d of loose) groups.set(d.sport!, [...(groups.get(d.sport!) ?? []), d]);
+    const plan = [...groups.entries()].map(([sport, list]) => {
+      const sportName = disciplines.find((x) => x.sportId === sport)?.name ?? sport;
+      const branches = new Set<string>(list.map((d) => (d.branch as string | null) ?? 'mixto'));
+      const branch = branches.size === 1 ? [...branches][0] : 'mixto';
+      const rama = (names[sport] ?? '').trim().slice(0, 60) || `${sportName} ${branch}`;
+      return {
+        sport, sportName, rama, branch,
+        categories: list
+          .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }))
+          .map((d) => ({ id: d.id, name: d.name, players: countOf(d.id), headCoachId: d.headCoachId, coordinatorId: d.coordinatorId })),
+      };
+    });
+    const summary = plan.map(({ sport, sportName, rama, categories }) => ({
+      sport, sportName, rama, categories: categories.map((c) => ({ name: c.name, players: c.players })),
+    }));
+    if (dryRun || plan.length === 0) return { dryRun, groups: summary };
+
+    const nameOf = async (uid: string | null) => {
+      if (!uid) return '';
+      const doc = await this.prisma.storeDocument.findUnique({ where: { path: `users/${uid}` }, select: { data: true } });
+      return String(((doc?.data ?? {}) as Record<string, unknown>).name ?? '');
+    };
+    for (const g of plan) {
+      const existing = await this.prisma.division.findFirst({ where: { clubId, sport: g.sport, name: { equals: g.rama, mode: 'insensitive' } }, select: { id: true } });
+      const ramaId = existing?.id ?? (await this.prisma.division.create({
+        data: { companyId: club.companyId, clubId, sport: g.sport, name: g.rama, branch: g.branch, status: 'active', extra: { createdBy: 'player-import' } },
+        select: { id: true },
+      })).id;
+      for (const c of g.categories) {
+        const teamId = await this.createTeam(club, ramaId, {
+          name: c.name, sport: g.sport, branch: g.branch,
+          extra: {
+            coachId: c.headCoachId ?? '', coachName: await nameOf(c.headCoachId),
+            coordinatorId: c.coordinatorId ?? '', coordinatorName: await nameOf(c.coordinatorId),
+          },
+        });
+        const players = await this.prisma.player.findMany({ where: { clubId, divisionId: c.id }, select: { id: true, firstName: true, lastName: true, extra: true } });
+        for (const pl of players) {
+          await this.prisma.player.update({
+            where: { id: pl.id },
+            data: { divisionId: ramaId, extra: { ...((pl.extra ?? {}) as Record<string, unknown>), teamId } },
+          });
+          await this.assignToTeam(club, pl.id, `${pl.firstName} ${pl.lastName}`, ramaId, teamId);
+        }
+        await this.prisma.division.delete({ where: { id: c.id } });
+      }
+    }
+    await this.audit.record(actor, 'players.import.restructure', { type: 'Club', id: club.id }, { after: { groups: summary } });
+    return { dryRun, groups: summary };
+  }
+
+  /** Categoría (plantel) dentro de una rama, con el mismo formato que el formulario de la app. */
+  async createTeam(
+    club: { id: string; companyId: string },
+    divisionId: string,
+    t: { name: string; sport: string; branch: string | null; extra?: Record<string, unknown> },
+  ) {
+    const id = randomUUID().replace(/-/g, '').slice(0, 20);
+    const parentPath = `clubs/${club.id}/divisions/${divisionId}/teams`;
+    const data = {
+      id, name: t.name, sport: t.sport, rama: teamRama(t.branch), category: t.name,
+      season: String(new Date().getFullYear()), status: 'active',
+      coachId: '', coachName: '', assistantCoachId: '', assistantCoachName: '', coordinatorId: '', coordinatorName: '',
+      maxPlayers: 30, color: '#3b82f6', divisionId, clubId: club.id,
+      createdAt: new Date().toISOString(), createdBy: 'player-import', ...(t.extra ?? {}),
+    };
+    await this.prisma.storeDocument.create({
+      data: { path: `${parentPath}/${id}`, parentPath, collection: 'teams', docId: id, clubId: club.id, companyId: club.companyId, data },
+    });
+    return id;
+  }
+
+  /** Alta del jugador en el plantel de su categoría (lo que muestra la ficha del equipo). */
+  async assignToTeam(club: { id: string; companyId: string }, playerId: string, playerName: string, divisionId: string, teamId: string) {
+    const parentPath = `clubs/${club.id}/divisions/${divisionId}/teams/${teamId}/assignments`;
+    const data = { id: playerId, playerId, playerName, playerPhoto: '', teamId, season: String(new Date().getFullYear()), createdAt: new Date().toISOString() };
+    const fields = { parentPath, collection: 'assignments', docId: playerId, clubId: club.id, companyId: club.companyId, data };
+    await this.prisma.storeDocument.upsert({ where: { path: `${parentPath}/${playerId}` }, create: { path: `${parentPath}/${playerId}`, ...fields }, update: fields });
+  }
+
+  /** Categorías (planteles) del club, con su rama. */
+  async clubTeams(clubId: string): Promise<ExistingTeam[]> {
+    const rows = await this.prisma.storeDocument.findMany({
+      where: { clubId, collection: 'teams', parentPath: { startsWith: `clubs/${clubId}/divisions/` } },
+      select: { docId: true, parentPath: true, data: true },
+    });
+    return rows.map((r) => ({
+      id: r.docId,
+      name: String(((r.data ?? {}) as Record<string, unknown>).name ?? '').trim(),
+      divisionId: r.parentPath.split('/')[3] ?? '',
+    }));
   }
 
   private async clubLists(clubId: string) {

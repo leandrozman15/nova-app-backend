@@ -13,6 +13,7 @@ export type ImportRow = {
   gender?: unknown;
   sport?: unknown;
   category?: unknown;
+  division?: unknown;
   branch?: unknown;
   position?: unknown;
   membershipNumber?: unknown;
@@ -39,6 +40,9 @@ export type CleanPlayer = {
   sport: string;
   sportName: string;
   divisionId: string | null;
+  /** Categoría (plantel) dentro de la rama, cuando la planilla la indica. */
+  teamId?: string | null;
+  teamName?: string | null;
   divisionName: string | null;
   branch: 'masculino' | 'femenino' | 'mixto';
   position: string | null;

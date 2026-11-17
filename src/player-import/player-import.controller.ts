@@ -11,7 +11,7 @@ import {
 import { NoTenant } from '../common/decorators/no-tenant.decorator';
 import { PlatformAdminGuard } from '../platform/platform-admin.guard';
 import { actorOf } from '../platform/platform.controller';
-import { PlayerImportDto } from './player-import.dto';
+import { PlayerImportDto, RestructureDto } from './player-import.dto';
 import { PlayerImportService } from './player-import.service';
 
 /** Panel de Fluxion: implantación de jugadores de un club desde la plantilla. */
@@ -24,6 +24,16 @@ export class PlayerImportController {
   @Get('template')
   template(@Param('clubId') clubId: string) {
     return this.service.templateData(clubId);
+  }
+
+  /** Pasa las ramas sueltas que creó una implantación anterior a categorías dentro de una rama por deporte. */
+  @Post('restructure')
+  restructure(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Body() dto: RestructureDto,
+  ) {
+    return this.service.restructure(actorOf(req), clubId, dto.dryRun ?? true, dto.names ?? {});
   }
 
   @Post()

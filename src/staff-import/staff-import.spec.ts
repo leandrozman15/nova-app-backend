@@ -77,7 +77,7 @@ describe('validateStaffRows · categorías', () => {
 
   it('asigna una o varias categorías de su disciplina', () => {
     const [r] = v([{ row: 2, ...base, sport: 'Fútbol', category: '2013, 2014' }], ctx);
-    expect(r.staff.divisions.map((d: any) => d.id)).toEqual(['f13', 'f14']);
+    expect(r.staff.divisions.map((d: any) => `${d.kind}:${d.id}`)).toEqual(['division:f13', 'division:f14']);
     expect(r.warnings).toEqual([]);
   });
 
@@ -85,5 +85,25 @@ describe('validateStaffRows · categorías', () => {
     const [r] = v([{ row: 2, ...base, sport: 'Hockey', category: '2013' }], ctx);
     expect(r.staff.divisions).toEqual([]);
     expect(r.status).toBe('warning');
+  });
+});
+
+describe('validateStaffRows · categorías dentro de la rama', () => {
+  const { validateStaffRows: v } = require('./staff-import.rules');
+  const ctx = {
+    disciplines: [{ sportId: 'football', name: 'Fútbol' }, { sportId: 'hockey', name: 'Hockey' }],
+    divisions: [{ id: 'rf', name: 'Fútbol infantil', sport: 'football' }, { id: 'rh', name: 'Hockey femenino', sport: 'hockey' }],
+    teams: [{ id: 't13', name: '2013', divisionId: 'rf' }, { id: 'th1', name: 'Hockey 5 a 9', divisionId: 'rh' }],
+  };
+  const base = { firstName: 'ana', lastName: 'gómez', dni: '990100009', role: 'Entrenador Nivel 2 (Plantel)', email: 'ana2@example.com' };
+
+  it('el entrenador queda en la categoría (plantel) de su rama', () => {
+    const [r] = v([{ row: 2, ...base, sport: 'Fútbol', category: '2013' }], ctx);
+    expect(r.staff.divisions).toEqual([{ id: 't13', name: '2013', kind: 'team', divisionId: 'rf' }]);
+  });
+
+  it('un coordinador puede quedar a cargo de una rama entera', () => {
+    const [r] = v([{ row: 2, ...base, role: 'Coordinador de Rama', sport: 'Hockey', category: 'Hockey femenino' }], ctx);
+    expect(r.staff.divisions).toEqual([{ id: 'rh', name: 'Hockey femenino', kind: 'division', divisionId: 'rh' }]);
   });
 });
