@@ -32,6 +32,6 @@ export class PlayerImportController {
     @Param('clubId') clubId: string,
     @Body() dto: PlayerImportDto,
   ) {
-    return this.service.run(actorOf(req), clubId, dto.rows, dto.dryRun ?? true);
+    return this.service.run(actorOf(req), clubId, dto.rows, dto.dryRun ?? true, dto.autoCreate ?? true);
   }
 }
