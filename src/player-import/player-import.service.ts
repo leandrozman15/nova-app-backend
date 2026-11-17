@@ -336,8 +336,8 @@ export class PlayerImportService {
           .map((d) => ({ id: d.id, name: d.name, players: countOf(d.id), headCoachId: d.headCoachId, coordinatorId: d.coordinatorId })),
       };
     });
-    const summary = plan.map(({ sportName, rama, categories }) => ({
-      sportName, rama, categories: categories.map((c) => ({ name: c.name, players: c.players })),
+    const summary = plan.map(({ sport, sportName, rama, categories }) => ({
+      sport, sportName, rama, categories: categories.map((c) => ({ name: c.name, players: c.players })),
     }));
     if (dryRun || plan.length === 0) return { dryRun, groups: summary };
 
