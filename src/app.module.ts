@@ -51,6 +51,7 @@ import { BuffetModule } from './buffet/buffet.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { UsersModule } from './users/users.module';
 import { PushModule } from './push/push.module';
+import { ClubAccessModule } from './club-access/club-access.module';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { PushModule } from './push/push.module';
     DocStoreModule,
     PlayerDocumentsModule,
     PushModule,
+    ClubAccessModule,
     PublicModule,
     PaymentsModule,
   ],
