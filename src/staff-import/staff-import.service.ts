@@ -7,7 +7,7 @@ import { FirestoreMigrationService } from '../roster/firestore-migration.service
 import { UsersService } from '../users/users.service';
 import { fold, type Discipline } from '../player-import/player-import.rules';
 import type { StaffImportRowDto } from './staff-import.dto';
-import { tempPassword, validateStaffRows, type StaffRowResult } from './staff-import.rules';
+import { tempPassword, validateStaffRows, type CleanStaff, type StaffRowResult } from './staff-import.rules';
 
 export type StaffCredential = { row: number; name: string; email: string; role: string; password: string };
 
@@ -32,7 +32,8 @@ export class StaffImportService {
     const club = await this.prisma.club.findUnique({ where: { id: clubId }, select: { id: true, name: true, companyId: true } });
     if (!club) throw new NotFoundException('Club no encontrado');
     const disciplines = await this.disciplines(clubId);
-    const results = validateStaffRows(rows, { disciplines });
+    const divisions = await this.prisma.division.findMany({ where: { clubId }, select: { id: true, name: true, sport: true } });
+    const results = validateStaffRows(rows, { disciplines, divisions });
     await this.markExisting(results);
 
     const importable = results.filter((r) => r.staff && (r.status === 'ok' || r.status === 'warning'));
@@ -105,6 +106,9 @@ export class StaffImportService {
       };
       const fields = { parentPath: 'users', collection: 'users', docId: uid, clubId: club.id, companyId: club.companyId, data };
       await this.prisma.storeDocument.upsert({ where: { path: `users/${uid}` }, create: { path: `users/${uid}`, ...fields }, update: fields });
+      await this.assign(club.id, uid, name, s).catch((error) =>
+        this.logger.warn(`Fila ${result.row}: no se pudo asignar a sus categorías (${String(error)})`),
+      );
       return { row: result.row, name, email: s.email, role: s.role, password };
     } catch (error) {
       // Si quedó la cuenta a medias, se borra para poder reintentar la fila.
@@ -113,6 +117,21 @@ export class StaffImportService {
       result.errors.push('No se pudo crear la cuenta. Revisá la fila y probá de nuevo.');
       this.logger.warn(`Fila ${result.row}: ${String(error)}`);
       return null;
+    }
+  }
+
+  /**
+   * Deja a la persona a cargo de sus categorías: el coordinador como coordinador de cada una
+   * (o de toda la disciplina si no indica categorías) y el entrenador como entrenador a cargo.
+   */
+  private async assign(clubId: string, uid: string, name: string, s: CleanStaff) {
+    const ids = s.divisions.map((d) => d.id);
+    if (s.role === 'coordinator') {
+      if (ids.length) await this.prisma.division.updateMany({ where: { clubId, id: { in: ids } }, data: { coordinatorId: uid } });
+      else if (s.sport)
+        await this.prisma.clubDiscipline.updateMany({ where: { clubId, sportId: s.sport }, data: { coordinatorId: uid, coordinatorName: name } });
+    } else if ((s.role === 'coach_lvl1' || s.role === 'coach_lvl2') && ids.length) {
+      await this.prisma.division.updateMany({ where: { clubId, id: { in: ids } }, data: { headCoachId: uid } });
     }
   }
 

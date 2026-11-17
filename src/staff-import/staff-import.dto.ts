@@ -12,6 +12,7 @@ export class StaffImportRowDto {
   @Allow() email?: unknown;
   @Allow() phone?: unknown;
   @Allow() sport?: unknown;
+  @Allow() category?: unknown;
   @Allow() specialty?: unknown;
   @Allow() license?: unknown;
   @Allow() membershipNumber?: unknown;

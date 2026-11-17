@@ -17,6 +17,8 @@ export type StaffImportRow = {
   email?: unknown;
   phone?: unknown;
   sport?: unknown;
+  /** Categoría/s a cargo, separadas por coma ("2013, 2014"). */
+  category?: unknown;
   specialty?: unknown;
   license?: unknown;
   membershipNumber?: unknown;
@@ -47,6 +49,8 @@ export type CleanStaff = {
   email: string;
   phone: string | null;
   sport: string | null;
+  /** Categorías del club a cargo de la persona (entrenador o coordinador). */
+  divisions: Array<{ id: string; name: string }>;
   specialty: string | null;
   license: string | null;
   membershipNumber: string | null;
@@ -83,7 +87,10 @@ export function roleOf(value: unknown): StaffRoleCode | null {
 }
 
 /** Valida todas las filas: formato, rol, disciplina y repetidos dentro de la planilla. */
-export function validateStaffRows(rows: StaffImportRow[], ctx: { disciplines: Discipline[] }): StaffRowResult[] {
+export function validateStaffRows(
+  rows: StaffImportRow[],
+  ctx: { disciplines: Discipline[]; divisions?: Array<{ id: string; name: string; sport: string | null }> },
+): StaffRowResult[] {
   const seenEmail = new Map<string, number>();
   const seenDni = new Map<string, number>();
   return rows.map((r): StaffRowResult => {
@@ -121,6 +128,19 @@ export function validateStaffRows(rows: StaffImportRow[], ctx: { disciplines: Di
       else warnings.push(`La disciplina "${sportText}" no está cargada en el club: se deja vacía.`);
     }
 
+    const divisions: Array<{ id: string; name: string }> = [];
+    const categoryText = text(r.category, 300);
+    if (categoryText) {
+      for (const name of categoryText.split(/[,;\n]/).map((n) => n.trim()).filter(Boolean)) {
+        const hits = (ctx.divisions ?? []).filter(
+          (d) => fold(d.name) === fold(name) && (!sport || !d.sport || fold(d.sport) === fold(sport)),
+        );
+        if (hits.length === 1) divisions.push({ id: hits[0].id, name: hits[0].name });
+        else if (hits.length > 1) warnings.push(`La categoría "${name}" existe en más de una disciplina: indicá la disciplina.`);
+        else warnings.push(`La categoría "${name}" no existe en el club: no se asigna.`);
+      }
+    }
+
     let bloodType: string | null = null;
     const blood = str(r.bloodType).trim().toUpperCase().replace(/\s/g, '');
     if (blood) {
@@ -149,6 +169,7 @@ export function validateStaffRows(rows: StaffImportRow[], ctx: { disciplines: Di
       email,
       phone: text(r.phone, 30),
       sport,
+      divisions,
       specialty: text(r.specialty),
       license: text(r.license, 40),
       membershipNumber: text(r.membershipNumber, 30),

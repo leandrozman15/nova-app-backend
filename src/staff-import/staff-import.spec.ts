@@ -62,3 +62,28 @@ describe('tempPassword', () => {
     expect(tempPassword()).not.toBe(a);
   });
 });
+
+describe('validateStaffRows · categorías', () => {
+  const { validateStaffRows: v } = require('./staff-import.rules');
+  const ctx = {
+    disciplines: [{ sportId: 'football', name: 'Fútbol' }, { sportId: 'hockey', name: 'Hockey' }],
+    divisions: [
+      { id: 'f13', name: '2013', sport: 'football' },
+      { id: 'f14', name: '2014', sport: 'football' },
+      { id: 'h1', name: 'Hockey 5 a 9', sport: 'hockey' },
+    ],
+  };
+  const base = { firstName: 'ana', lastName: 'gómez', dni: '990100001', role: 'Entrenador Nivel 2 (Plantel)', email: 'ana@example.com' };
+
+  it('asigna una o varias categorías de su disciplina', () => {
+    const [r] = v([{ row: 2, ...base, sport: 'Fútbol', category: '2013, 2014' }], ctx);
+    expect(r.staff.divisions.map((d: any) => d.id)).toEqual(['f13', 'f14']);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('avisa si la categoría no existe, sin bloquear la fila', () => {
+    const [r] = v([{ row: 2, ...base, sport: 'Hockey', category: '2013' }], ctx);
+    expect(r.staff.divisions).toEqual([]);
+    expect(r.status).toBe('warning');
+  });
+});
