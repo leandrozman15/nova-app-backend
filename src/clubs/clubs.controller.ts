@@ -16,6 +16,13 @@ export class ClubsController {
     return this.clubsService.list(requireCompanyId(req));
   }
 
+  /** Accesos de dirección del club (para la edición desde la administración de la plataforma). */
+  @Roles('admin', 'fed_admin')
+  @Get(':id/admins')
+  admins(@Req() req: unknown, @Param('id') id: string) {
+    return this.clubsService.admins(requireCompanyId(req), id);
+  }
+
   /** Partidos de torneos de liga donde juega el club. */
   @Roles('admin', 'manager', 'coach', 'player', 'member')
   @Get(':id/league-matches')
