@@ -9,6 +9,7 @@ import {
   CloseSessionDto,
   CreateProductDto,
   CreateSaleDto,
+  DeleteProductsDto,
   OpenSessionDto,
   RegisterCanonDto,
   UpdateBuffetDto,
@@ -74,6 +75,13 @@ export class BuffetController {
   @Patch('products/:id')
   updateProduct(@Req() req: unknown, @Param('clubId') clubId: string, @Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.buffet.updateProduct(ctx(req, clubId).companyId, clubId, id, dto);
+  }
+
+  /** Borrado múltiple: los productos con ventas se archivan (inactivos) para no romper los reportes. */
+  @Roles(...MANAGE)
+  @Post('products/delete')
+  deleteProducts(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: DeleteProductsDto) {
+    return this.buffet.deleteProducts(ctx(req, clubId).companyId, clubId, dto.ids);
   }
 
   @Roles(...OPERATE)
