@@ -40,63 +40,127 @@ export function sportFor(text: string): { sportId: string; name: string; emoji: 
 }
 
 export type NewDiscipline = { sportId: string; name: string; emoji: string };
+/** Rama del club (Division): agrupa categorías, p. ej. "Fútbol infantil". */
 export type NewDivision = { sport: string; sportName: string; name: string; branch: string | null; players: number };
+/** Categoría (plantel) dentro de una rama, p. ej. "2013" dentro de "Fútbol infantil". */
+export type NewTeam = { sport: string; sportName: string; divisionName: string; name: string; branch: string | null; players: number };
+/** Categoría que ya existe en el club. */
+export type ExistingTeam = { id: string; name: string; divisionId: string };
 
-const branchKey = (v: unknown) => {
+export const branchKey = (v: unknown) => {
   const b = fold(String(v ?? ''));
   return ['masculino', 'm', 'masc'].includes(b) ? 'masculino' : ['femenino', 'f', 'fem'].includes(b) ? 'femenino' : ['mixto', 'mixta'].includes(b) ? 'mixto' : null;
 };
 
+const genderBranch = (v: unknown) => {
+  const g = fold(String(v ?? ''));
+  return ['femenino', 'f', 'mujer'].includes(g) ? 'femenino' : ['masculino', 'm', 'varon', 'hombre'].includes(g) ? 'masculino' : 'mixto';
+};
+
+const clean = (v: unknown, max = 60) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
+
+/** Rama por defecto cuando la planilla no la indica: deporte + rama ("Hockey femenino"). */
+export const defaultDivisionName = (sportName: string, branch: string) => `${sportName} ${branch}`;
+
+export type Placement = { sportId: string; sportName: string; divisionName: string; teamName: string | null; branch: string };
+
 /**
- * Disciplinas y categorías que la planilla usa y el club no tiene.
- * Una categoría se crea dentro de su deporte; si todas sus filas tienen la misma rama, la toma.
+ * Dónde va cada fila: disciplina → rama → categoría.
+ * - "Rama del club" de la planilla, o deporte + rama (masculino/femenino/mixto).
+ * - Compatibilidad: si la categoría coincide con una rama existente del deporte, va directo a esa rama.
  */
-export function planMissing(rows: ImportRowDto[], disciplines: Discipline[], divisions: Division[]) {
+export function placementOf(
+  row: ImportRowDto,
+  sport: { sportId: string; name: string },
+  divisions: Division[],
+): Placement {
+  const branch = branchKey(row.branch) ?? genderBranch(row.gender);
+  const categoryText = clean(row.category);
+  const divisionText = clean(row.division);
+  const ofSport = divisions.filter((d) => !d.sport || fold(d.sport) === fold(sport.sportId));
+  if (!divisionText && categoryText) {
+    const legacy = ofSport.find((d) => fold(d.name) === fold(categoryText));
+    if (legacy) return { sportId: sport.sportId, sportName: sport.name, divisionName: legacy.name, teamName: null, branch };
+  }
+  return {
+    sportId: sport.sportId,
+    sportName: sport.name,
+    divisionName: divisionText || defaultDivisionName(sport.name, branch),
+    teamName: categoryText || null,
+    branch,
+  };
+}
+
+/** Disciplinas, ramas y categorías que la planilla usa y el club no tiene. */
+export function planMissing(rows: ImportRowDto[], disciplines: Discipline[], divisions: Division[], teams: ExistingTeam[] = []) {
   const newDisciplines = new Map<string, NewDiscipline>();
-  const newDivisions = new Map<string, NewDivision & { branches: Set<string | null> }>();
+  const newDivisions = new Map<string, NewDivision & { branches: Set<string> }>();
+  const newTeams = new Map<string, NewTeam & { branches: Set<string> }>();
 
   const resolveSport = (text: string) => {
     const existing = disciplines.find((d) => fold(d.sportId) === fold(text) || fold(d.name) === fold(text));
-    if (existing) return { sportId: existing.sportId, name: existing.name, isNew: false };
+    if (existing) return { sportId: existing.sportId, name: existing.name, emoji: '', isNew: false };
     const s = sportFor(text);
     const sameId = disciplines.find((d) => d.sportId === s.sportId);
-    if (sameId) return { sportId: sameId.sportId, name: sameId.name, isNew: false };
+    if (sameId) return { sportId: sameId.sportId, name: sameId.name, emoji: '', isNew: false };
     return { ...s, isNew: true };
   };
 
   for (const row of rows) {
-    const sportText = String(row.sport ?? '').trim();
+    const sportText = clean(row.sport);
     if (!sportText) continue;
     const sport = resolveSport(sportText);
     if (sport.isNew && !newDisciplines.has(sport.sportId))
-      newDisciplines.set(sport.sportId, { sportId: sport.sportId, name: sport.name, emoji: (sport as NewDiscipline).emoji ?? '🎽' });
+      newDisciplines.set(sport.sportId, { sportId: sport.sportId, name: sport.name, emoji: sport.emoji || '🎽' });
 
-    const catText = String(row.category ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
-    if (!catText) continue;
-    const exists = divisions.some(
-      (d) => fold(d.name) === fold(catText) && (!d.sport || fold(d.sport) === fold(sport.sportId)),
+    const place = placementOf(row, { sportId: sport.sportId, name: sport.name }, divisions);
+    const division = divisions.find(
+      (d) => fold(d.name) === fold(place.divisionName) && (!d.sport || fold(d.sport) === fold(sport.sportId)),
     );
-    if (exists) continue;
-    const key = `${sport.sportId}|${fold(catText)}`;
-    const entry = newDivisions.get(key) ?? { sport: sport.sportId, sportName: sport.name, name: catText, branch: null, players: 0, branches: new Set() };
-    entry.players += 1;
-    entry.branches.add(branchKey(row.branch));
-    newDivisions.set(key, entry);
+    const dKey = `${sport.sportId}|${fold(place.divisionName)}`;
+    if (!division) {
+      const entry = newDivisions.get(dKey) ?? { sport: sport.sportId, sportName: sport.name, name: place.divisionName, branch: null, players: 0, branches: new Set<string>() };
+      entry.players += 1;
+      entry.branches.add(place.branch);
+      newDivisions.set(dKey, entry);
+    }
+    if (!place.teamName) continue;
+    const teamExists = division && teams.some((t) => t.divisionId === division.id && fold(t.name) === fold(place.teamName!));
+    if (teamExists) continue;
+    const tKey = `${dKey}|${fold(place.teamName)}`;
+    const team = newTeams.get(tKey) ?? { sport: sport.sportId, sportName: sport.name, divisionName: division?.name ?? place.divisionName, name: place.teamName, branch: null, players: 0, branches: new Set<string>() };
+    team.players += 1;
+    team.branches.add(place.branch);
+    newTeams.set(tKey, team);
   }
 
+  const one = (b: Set<string>) => (b.size === 1 ? [...b][0] : 'mixto');
   return {
     disciplines: [...newDisciplines.values()],
-    divisions: [...newDivisions.values()].map(({ branches, ...d }) => ({
-      ...d,
-      branch: branches.size === 1 ? [...branches][0] : null,
-    })),
+    divisions: [...newDivisions.values()].map(({ branches, ...d }) => ({ ...d, branch: one(branches) })),
+    teams: [...newTeams.values()].map(({ branches, ...t }) => ({ ...t, branch: one(branches) })),
   };
 }
 
 /** Lista del club más lo que se va a crear (para revisar la planilla antes de implantar). */
-export function withPlanned(disciplines: Discipline[], divisions: Division[], plan: ReturnType<typeof planMissing>) {
+export function withPlanned(
+  disciplines: Discipline[],
+  divisions: Division[],
+  teams: ExistingTeam[],
+  plan: ReturnType<typeof planMissing>,
+) {
+  const allDivisions = [...divisions, ...plan.divisions.map((d, i) => ({ id: `nueva-rama-${i}`, name: d.name, sport: d.sport }))];
+  const findDivision = (sport: string, name: string) =>
+    allDivisions.find((d) => fold(d.name) === fold(name) && (!d.sport || fold(d.sport) === fold(sport)));
   return {
     disciplines: [...disciplines, ...plan.disciplines.map((d) => ({ sportId: d.sportId, name: d.name }))],
-    divisions: [...divisions, ...plan.divisions.map((d, i) => ({ id: `nueva-${i}`, name: d.name, sport: d.sport }))],
+    divisions: allDivisions,
+    teams: [
+      ...teams,
+      ...plan.teams.map((t, i) => ({ id: `nueva-categoria-${i}`, name: t.name, divisionId: findDivision(t.sport, t.divisionName)?.id ?? '' })),
+    ],
   };
 }
+
+/** Rama de plantel en el formato del formulario de la app. */
+export const teamRama = (branch: string | null) => (branch === 'femenino' ? 'female' : branch === 'masculino' ? 'male' : 'both');

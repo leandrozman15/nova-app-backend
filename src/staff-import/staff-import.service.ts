@@ -33,7 +33,16 @@ export class StaffImportService {
     if (!club) throw new NotFoundException('Club no encontrado');
     const disciplines = await this.disciplines(clubId);
     const divisions = await this.prisma.division.findMany({ where: { clubId }, select: { id: true, name: true, sport: true } });
-    const results = validateStaffRows(rows, { disciplines, divisions });
+    const teamRows = await this.prisma.storeDocument.findMany({
+      where: { clubId, collection: 'teams', parentPath: { startsWith: `clubs/${clubId}/divisions/` } },
+      select: { docId: true, parentPath: true, data: true },
+    });
+    const teams = teamRows.map((t) => ({
+      id: t.docId,
+      name: String(((t.data ?? {}) as Record<string, unknown>).name ?? '').trim(),
+      divisionId: t.parentPath.split('/')[3] ?? '',
+    }));
+    const results = validateStaffRows(rows, { disciplines, divisions, teams });
     await this.markExisting(results);
 
     const importable = results.filter((r) => r.staff && (r.status === 'ok' || r.status === 'warning'));
@@ -125,14 +134,26 @@ export class StaffImportService {
    * (o de toda la disciplina si no indica categorías) y el entrenador como entrenador a cargo.
    */
   private async assign(clubId: string, uid: string, name: string, s: CleanStaff) {
-    const ids = s.divisions.map((d) => d.id);
-    if (s.role === 'coordinator') {
-      if (ids.length) await this.prisma.division.updateMany({ where: { clubId, id: { in: ids } }, data: { coordinatorId: uid } });
-      else if (s.sport)
-        await this.prisma.clubDiscipline.updateMany({ where: { clubId, sportId: s.sport }, data: { coordinatorId: uid, coordinatorName: name } });
-    } else if ((s.role === 'coach_lvl1' || s.role === 'coach_lvl2') && ids.length) {
-      await this.prisma.division.updateMany({ where: { clubId, id: { in: ids } }, data: { headCoachId: uid } });
+    const isCoach = s.role === 'coach_lvl1' || s.role === 'coach_lvl2';
+    const isCoordinator = s.role === 'coordinator';
+    if (!isCoach && !isCoordinator) return;
+    const ramas = s.divisions.filter((d) => d.kind === 'division').map((d) => d.id);
+    const teams = s.divisions.filter((d) => d.kind === 'team');
+    for (const t of teams) {
+      // Categoría: el entrenador queda como DT del plantel; el coordinador, como coordinador.
+      const path = `clubs/${clubId}/divisions/${t.divisionId}/teams/${t.id}`;
+      const doc = await this.prisma.storeDocument.findUnique({ where: { path }, select: { data: true } });
+      if (!doc) continue;
+      const patch = isCoach ? { coachId: uid, coachName: name } : { coordinatorId: uid, coordinatorName: name };
+      await this.prisma.storeDocument.update({ where: { path }, data: { data: { ...((doc.data ?? {}) as Record<string, unknown>), ...patch } } });
     }
+    if (ramas.length)
+      await this.prisma.division.updateMany({
+        where: { clubId, id: { in: ramas } },
+        data: isCoach ? { headCoachId: uid } : { coordinatorId: uid },
+      });
+    if (isCoordinator && !s.divisions.length && s.sport)
+      await this.prisma.clubDiscipline.updateMany({ where: { clubId, sportId: s.sport }, data: { coordinatorId: uid, coordinatorName: name } });
   }
 
   private async disciplines(clubId: string): Promise<Discipline[]> {

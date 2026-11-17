@@ -8,6 +8,7 @@ import {
   IsInt,
   IsOptional,
   ValidateNested,
+  IsObject,
 } from 'class-validator';
 
 /** Una fila de la planilla tal como llega (los valores se validan en el servicio). */
@@ -23,6 +24,8 @@ export class ImportRowDto {
   @Allow() gender?: unknown;
   @Allow() sport?: unknown;
   @Allow() category?: unknown;
+  /** Rama del club donde va la categoría ("Fútbol infantil"). Vacía = deporte + rama. */
+  @Allow() division?: unknown;
   @Allow() branch?: unknown;
   @Allow() position?: unknown;
   @Allow() membershipNumber?: unknown;
@@ -53,4 +56,16 @@ export class PlayerImportDto {
   @IsOptional()
   @IsBoolean()
   autoCreate?: boolean;
+}
+
+export class RestructureDto {
+  /** true (por defecto) = solo muestra lo que haría. */
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  /** Nombre de la rama por deporte ({ football: "Fútbol infantil" }). Vacío = deporte + rama. */
+  @IsOptional()
+  @IsObject()
+  names?: Record<string, string>;
 }

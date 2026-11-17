@@ -49,8 +49,8 @@ export type CleanStaff = {
   email: string;
   phone: string | null;
   sport: string | null;
-  /** Categorías del club a cargo de la persona (entrenador o coordinador). */
-  divisions: Array<{ id: string; name: string }>;
+  /** Categorías (planteles) o ramas del club a cargo de la persona (entrenador o coordinador). */
+  divisions: Array<{ id: string; name: string; kind: 'team' | 'division'; divisionId: string }>;
   specialty: string | null;
   license: string | null;
   membershipNumber: string | null;
@@ -89,7 +89,12 @@ export function roleOf(value: unknown): StaffRoleCode | null {
 /** Valida todas las filas: formato, rol, disciplina y repetidos dentro de la planilla. */
 export function validateStaffRows(
   rows: StaffImportRow[],
-  ctx: { disciplines: Discipline[]; divisions?: Array<{ id: string; name: string; sport: string | null }> },
+  ctx: {
+    disciplines: Discipline[];
+    divisions?: Array<{ id: string; name: string; sport: string | null }>;
+    /** Categorías (planteles) dentro de las ramas. */
+    teams?: Array<{ id: string; name: string; divisionId: string }>;
+  },
 ): StaffRowResult[] {
   const seenEmail = new Map<string, number>();
   const seenDni = new Map<string, number>();
@@ -128,15 +133,19 @@ export function validateStaffRows(
       else warnings.push(`La disciplina "${sportText}" no está cargada en el club: se deja vacía.`);
     }
 
-    const divisions: Array<{ id: string; name: string }> = [];
+    const divisions: CleanStaff['divisions'] = [];
     const categoryText = text(r.category, 300);
     if (categoryText) {
+      const sportOf = (divisionId: string) => (ctx.divisions ?? []).find((d) => d.id === divisionId)?.sport ?? null;
+      const sameSport = (s0: string | null) => !sport || !s0 || fold(s0) === fold(sport);
       for (const name of categoryText.split(/[,;\n]/).map((n) => n.trim()).filter(Boolean)) {
-        const hits = (ctx.divisions ?? []).filter(
-          (d) => fold(d.name) === fold(name) && (!sport || !d.sport || fold(d.sport) === fold(sport)),
-        );
-        if (hits.length === 1) divisions.push({ id: hits[0].id, name: hits[0].name });
-        else if (hits.length > 1) warnings.push(`La categoría "${name}" existe en más de una disciplina: indicá la disciplina.`);
+        // Primero la categoría (plantel) dentro de una rama; si no, una rama con ese nombre.
+        const teams = (ctx.teams ?? []).filter((t) => fold(t.name) === fold(name) && sameSport(sportOf(t.divisionId)));
+        const ramas = (ctx.divisions ?? []).filter((d) => fold(d.name) === fold(name) && sameSport(d.sport));
+        if (teams.length === 1) divisions.push({ id: teams[0].id, name: teams[0].name, kind: 'team', divisionId: teams[0].divisionId });
+        else if (teams.length > 1) warnings.push(`La categoría "${name}" existe en más de una rama: indicá la disciplina.`);
+        else if (ramas.length === 1) divisions.push({ id: ramas[0].id, name: ramas[0].name, kind: 'division', divisionId: ramas[0].id });
+        else if (ramas.length > 1) warnings.push(`La rama "${name}" existe en más de una disciplina: indicá la disciplina.`);
         else warnings.push(`La categoría "${name}" no existe en el club: no se asigna.`);
       }
     }
