@@ -14,6 +14,7 @@ import {
   type Division,
   type RowResult,
 } from './player-import.rules';
+import { planMissing, withPlanned } from './player-import.plan';
 
 /**
  * Implantación automática de jugadores de un club desde la plantilla Excel:
@@ -46,9 +47,21 @@ export class PlayerImportService {
     clubId: string,
     rows: ImportRowDto[],
     dryRun: boolean,
+    autoCreate = true,
   ) {
     const club = await this.requireClub(clubId);
-    const { disciplines, divisions } = await this.clubLists(clubId);
+    let { disciplines, divisions } = await this.clubLists(clubId);
+    // Disciplinas y categorías que la planilla usa y el club todavía no tiene.
+    const plan = autoCreate
+      ? planMissing(rows, disciplines, divisions)
+      : { disciplines: [], divisions: [] };
+    const hasPlan = plan.disciplines.length > 0 || plan.divisions.length > 0;
+    if (hasPlan && dryRun) {
+      ({ disciplines, divisions } = withPlanned(disciplines, divisions, plan));
+    } else if (hasPlan) {
+      await this.createStructure(club, plan, actor);
+      ({ disciplines, divisions } = await this.clubLists(clubId));
+    }
     const today = todayIn(club.timezone);
     const results = validateRows(rows, { disciplines, divisions, today });
     await this.markExisting(club, results);
@@ -80,6 +93,8 @@ export class PlayerImportService {
       club: { id: club.id, name: club.name },
       dryRun,
       created,
+      // En la revisión: lo que se va a crear. Al implantar: lo que se creó.
+      structure: plan,
       summary: {
         total: results.length,
         ok: results.filter((result) => result.status === 'ok').length,
@@ -202,6 +217,55 @@ export class PlayerImportService {
       }
     }
     return created;
+  }
+
+  /** Crea en el club las disciplinas y categorías que faltan (mismo formato que el alta manual). */
+  private async createStructure(
+    club: { id: string; name: string; companyId: string },
+    plan: ReturnType<typeof planMissing>,
+    actor: AuditActor,
+  ) {
+    for (const d of plan.disciplines) {
+      await this.prisma.clubDiscipline.upsert({
+        where: { clubId_sportId: { clubId: club.id, sportId: d.sportId } },
+        update: {},
+        create: {
+          id: `${club.id}_${d.sportId}`,
+          companyId: club.companyId,
+          clubId: club.id,
+          sportId: d.sportId,
+          name: d.name,
+          emoji: d.emoji,
+          status: 'active',
+          extra: { createdBy: 'player-import' },
+        },
+      });
+    }
+    for (const d of plan.divisions) {
+      await this.prisma.division.create({
+        data: {
+          companyId: club.companyId,
+          clubId: club.id,
+          sport: d.sport,
+          name: d.name,
+          branch: d.branch,
+          status: 'active',
+          extra: { createdBy: 'player-import' },
+        },
+      });
+    }
+    if (plan.disciplines.length) await this.migration.syncClubSports(club.id);
+    await this.audit.record(
+      actor,
+      'players.import.structure',
+      { type: 'Club', id: club.id },
+      {
+        after: {
+          disciplines: plan.disciplines.map((d) => d.name),
+          divisions: plan.divisions.map((d) => `${d.sportName}: ${d.name}`),
+        },
+      },
+    );
   }
 
   private async clubLists(clubId: string) {

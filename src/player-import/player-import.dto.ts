@@ -48,4 +48,9 @@ export class PlayerImportDto {
   @IsOptional()
   @IsBoolean()
   dryRun?: boolean;
+
+  /** true (por defecto) = crea las disciplinas y categorías de la planilla que el club no tiene. */
+  @IsOptional()
+  @IsBoolean()
+  autoCreate?: boolean;
 }
