@@ -108,6 +108,19 @@ export class BuffetService {
     return this.prisma.buffetProduct.update({ where: { id }, data: dto });
   }
 
+  async deleteProducts(companyId: string, clubId: string, ids: string[]) {
+    await this.assertClub(companyId, clubId);
+    const products = await this.prisma.buffetProduct.findMany({
+      where: { companyId, clubId, id: { in: ids } },
+      select: { id: true, _count: { select: { saleItems: true } } },
+    });
+    const withSales = products.filter((p) => p._count.saleItems > 0).map((p) => p.id);
+    const clean = products.filter((p) => p._count.saleItems === 0).map((p) => p.id);
+    if (clean.length) await this.prisma.buffetProduct.deleteMany({ where: { id: { in: clean } } });
+    if (withSales.length) await this.prisma.buffetProduct.updateMany({ where: { id: { in: withSales } }, data: { active: false } });
+    return { deleted: clean.length, archived: withSales.length };
+  }
+
   async adjustStock(companyId: string, clubId: string, id: string, actor: Actor, dto: AdjustStockDto) {
     const product = await this.ensureProduct(companyId, clubId, id);
     if (dto.delta === 0) throw new BadRequestException('El ajuste no puede ser 0');

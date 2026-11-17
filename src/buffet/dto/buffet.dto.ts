@@ -1,21 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  IsArray,
-  IsBoolean,
-  IsIn,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Matches,
-  Max,
-  MaxLength,
-  Min,
-  ValidateIf,
-  ValidateNested,
-} from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateIf, ValidateNested } from 'class-validator';
 
 import { BUFFET_MODES, PAYMENT_METHODS } from '../buffet.logic';
 
@@ -93,4 +77,8 @@ export class RegisterCanonDto {
   /** Período YYYY-MM al que corresponde el canon (evita duplicados). */
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/) period!: string;
   @IsOptional() @IsNumber() @Min(0) amount?: number;
+}
+
+export class DeleteProductsDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @IsString({ each: true }) ids!: string[];
 }
