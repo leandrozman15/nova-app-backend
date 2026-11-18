@@ -209,7 +209,17 @@ export class FeePaymentsService {
   /** Novedades del club para las familias (el padre no lee los documentos del club). */
   async newsForGuardian(auth: { email?: string; emailVerified?: boolean }) {
     const children = await this.listChildren(auth);
-    return loadGuardianNews(this.prisma, children);
+    return loadGuardianNews(
+      this.prisma,
+      children.map((c) => ({
+        companyId: c.companyId,
+        clubId: c.clubId,
+        clubName: c.clubName,
+        sport: c.sport ?? null,
+        divisionId: c.divisionId ?? null,
+        teamId: typeof c.teamId === 'string' ? c.teamId : null,
+      })),
+    );
   }
 
   /** Carta del buffet de los clubes de mis hijos (solo lectura: sin costos ni stock). */
