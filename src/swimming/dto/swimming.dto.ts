@@ -68,3 +68,26 @@ export class UpdateTimeDto {
   @IsOptional() @IsIn(TIME_STATUSES as unknown as string[]) status?: string;
   @IsOptional() @IsString() @MaxLength(300) note?: string;
 }
+
+export class WorkoutRepDto {
+  @IsString() playerId!: string;
+  @IsInt() @Min(1) @Max(60) rep!: number;
+  @IsInt() @Min(0) @Max(36_000_000) timeMs!: number;
+  @IsOptional() @IsIn(TIME_STATUSES as unknown as string[]) status?: string;
+}
+
+export class CreateWorkoutDto {
+  @IsString() clubId!: string;
+  @IsOptional() @IsString() teamId?: string;
+  @IsOptional() @IsString() divisionId?: string;
+  @IsOptional() @IsString() @MaxLength(120) name?: string;
+  @IsIn(STROKES as unknown as string[]) stroke!: string;
+  @IsInt() @Min(25) @Max(1500) distance!: number;
+  @IsInt() @Min(1) @Max(60) reps!: number;
+  @IsOptional() @IsInt() @Min(10) @Max(1800) intervalSec?: number;
+  @IsOptional() @IsIn([25, 50]) poolLength?: number;
+  @IsOptional() @IsString() @MaxLength(1000) notes?: string;
+  @IsOptional() @IsDateString() recordedAt?: string;
+  @IsArray() @ArrayMaxSize(480) @ValidateNested({ each: true }) @Type(() => WorkoutRepDto)
+  entries!: WorkoutRepDto[];
+}

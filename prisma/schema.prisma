@@ -91,6 +91,7 @@ model Company {
   municipalStaff        MunicipalStaff[]
   swimCompetitions      SwimCompetition[]
   swimTimes             SwimTime[]
+  swimWorkouts          SwimWorkout[]
   clubDocuments         ClubDocument[]
   clubRequests          ClubRequest[]
   users                 User[]
@@ -328,6 +329,7 @@ model Club {
   facilityRentals       FacilityRental[]
   swimCompetitions      SwimCompetition[]
   swimTimes             SwimTime[]
+  swimWorkouts          SwimWorkout[]
   clubDocuments         ClubDocument[]
   clubRequests          ClubRequest[]
   trainingSessions      TrainingSession[]
@@ -2060,6 +2062,9 @@ model SwimTime {
   lane       Int?
   heat       Int?
   note       String?
+  /// Entrenamiento cronometrado al que pertenece y número de repetición (1, 2, 3…).
+  workoutId  String?
+  rep        Int?
   recordedAt DateTime @default(now())
   createdAt  DateTime @default(now())
 
@@ -2067,8 +2072,10 @@ model SwimTime {
   club    Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
   player  Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
   event   SwimEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  workout SwimWorkout? @relation(fields: [workoutId], references: [id], onDelete: Cascade)
 
   @@index([companyId, clubId, recordedAt])
+  @@index([workoutId])
   @@index([playerId, stroke, distance])
   @@index([eventId])
 }
@@ -2427,4 +2434,32 @@ model PushDevice {
 
   @@index([firebaseUid])
   @@index([email])
+}
+
+/// Entrenamiento cronometrado: una serie de repeticiones (ej. 8 × 50 m libre con salida cada 1:00).
+model SwimWorkout {
+  id          String   @id @default(cuid())
+  companyId   String
+  clubId      String
+  /// Plantel (documento de la consola) y rama, si se tomó desde un plantel.
+  teamId      String?
+  divisionId  String?
+  name        String
+  stroke      String
+  distance    Int
+  reps        Int
+  /// Salida cada N segundos (null: el entrenador larga cada repetición a mano).
+  intervalSec Int?
+  poolLength  Int      @default(25)
+  notes       String?
+  createdBy   String?
+  recordedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  company Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club    Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  times   SwimTime[]
+
+  @@index([companyId, clubId, recordedAt])
+  @@index([teamId])
 }

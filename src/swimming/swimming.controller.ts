@@ -5,6 +5,7 @@ import { requireCompanyId } from '../common/http/request-context';
 import {
   CreateCompetitionDto,
   CreateEventDto,
+  CreateWorkoutDto,
   SaveTimesDto,
   UpdateCompetitionDto,
   UpdateTimeDto,
@@ -100,5 +101,41 @@ export class SwimmingController {
   @Get('records')
   records(@Req() req: unknown, @Query('clubId') clubId: string) {
     return this.service.records(requireCompanyId(req), clubId);
+  }
+
+  @Roles(...ROLES)
+  @Post('workouts')
+  createWorkout(@Req() req: unknown, @Body() dto: CreateWorkoutDto) {
+    const auth = (req as { auth?: { email?: string; uid?: string } }).auth;
+    return this.service.createWorkout(requireCompanyId(req), dto, auth?.email ?? auth?.uid);
+  }
+
+  @Roles(...ROLES)
+  @Get('workouts')
+  listWorkouts(
+    @Req() req: unknown,
+    @Query('clubId') clubId: string,
+    @Query('teamId') teamId?: string,
+    @Query('playerId') playerId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.listWorkouts(requireCompanyId(req), {
+      clubId,
+      teamId,
+      playerId,
+      limit: Math.min(Math.max(Number(limit) || 30, 1), 100),
+    });
+  }
+
+  @Roles(...ROLES)
+  @Get('workouts/:id')
+  getWorkout(@Req() req: unknown, @Param('id') id: string) {
+    return this.service.getWorkout(requireCompanyId(req), id);
+  }
+
+  @Roles(...ROLES)
+  @Delete('workouts/:id')
+  removeWorkout(@Req() req: unknown, @Param('id') id: string) {
+    return this.service.removeWorkout(requireCompanyId(req), id);
   }
 }
