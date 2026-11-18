@@ -17,6 +17,9 @@ export type MpTokenResponse = {
   live_mode?: boolean;
 };
 
+/** Datos de la cuenta conectada (GET /users/me con el token del club). */
+export type MpUser = { id: number; nickname?: string; email?: string; first_name?: string; last_name?: string };
+
 export type MpPreferenceInput = {
   title: string;
   amount: number;
@@ -160,6 +163,10 @@ export class MercadoPagoClient {
       },
       input.idempotencyKey ?? `pref-${input.externalReference}`,
     );
+  }
+
+  getMe(accessToken: string) {
+    return this.request<MpUser>('GET', '/users/me', accessToken);
   }
 
   getPayment(accessToken: string, paymentId: string) {
