@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireCompanyId } from '../common/http/request-context';
@@ -137,5 +137,20 @@ export class SwimmingController {
   @Delete('workouts/:id')
   removeWorkout(@Req() req: unknown, @Param('id') id: string) {
     return this.service.removeWorkout(requireCompanyId(req), id);
+  }
+
+  /** Ficha del nadador: 3 mejores tiempos en entrenamiento y competencia, y evolución por prueba. */
+  @Roles(...ROLES)
+  @Get('players/:playerId/progress')
+  playerProgress(@Req() req: unknown, @Param('playerId') playerId: string) {
+    return this.service.progress(requireCompanyId(req), playerId);
+  }
+
+  @Roles('player', 'member')
+  @Get('me/progress')
+  myProgress(@Req() req: unknown) {
+    const uid = (req as { auth?: { uid?: string } }).auth?.uid;
+    if (!uid) throw new UnauthorizedException('Missing auth context');
+    return this.service.myProgress(requireCompanyId(req), uid);
   }
 }

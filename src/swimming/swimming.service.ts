@@ -11,6 +11,7 @@ import {
   UpdateTimeDto,
 } from './dto/swimming.dto';
 import { isValidEvent, personalBests, rankResults, validSplits } from './swim-rules';
+import { playerProgress } from './progress-rules';
 import { isValidWorkoutDistance, summarizeWorkout, workoutEntriesProblem } from './workout-rules';
 
 @Injectable()
@@ -306,5 +307,28 @@ export class SwimmingService {
     if (!w) throw new NotFoundException('Workout not found');
     await this.prisma.swimWorkout.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // ─── Ficha del nadador: evolución por prueba ───────────────────────────────
+
+  async progress(companyId: string, playerId: string) {
+    const player = await this.prisma.player.findFirst({
+      where: { id: playerId, companyId },
+      select: { id: true, firstName: true, lastName: true, clubId: true },
+    });
+    if (!player) throw new NotFoundException('Player not found');
+    const rows = await this.prisma.swimTime.findMany({
+      where: { companyId, playerId, status: 'ok' },
+      select: { stroke: true, distance: true, poolLength: true, timeMs: true, status: true, source: true, workoutId: true, recordedAt: true },
+      orderBy: { recordedAt: 'asc' },
+    });
+    return { player: { id: player.id, name: `${player.firstName} ${player.lastName}`.trim(), clubId: player.clubId }, events: playerProgress(rows) };
+  }
+
+  /** La propia evolución del atleta, por su cuenta de la app. */
+  async myProgress(companyId: string, authUid: string) {
+    const player = await this.prisma.player.findFirst({ where: { companyId, authUid }, select: { id: true } });
+    if (!player) throw new NotFoundException('Player not found');
+    return this.progress(companyId, player.id);
   }
 }
