@@ -128,6 +128,12 @@ export class GuardianChildrenController {
     return this.fees.competitionsForGuardian((req as RequestWithAuth).auth!);
   }
 
+  /** Novedades de los clubes de mis hijos dirigidas a familias o atletas. */
+  @Get('news')
+  news(@Req() req: unknown) {
+    return this.fees.newsForGuardian((req as RequestWithAuth).auth!);
+  }
+
   /** Carta (lista de precios) del buffet de los clubes de mis hijos. */
   @Get('buffet')
   buffetMenu(@Req() req: unknown) {

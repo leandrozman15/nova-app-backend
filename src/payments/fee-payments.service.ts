@@ -15,6 +15,7 @@ import { loadChildTeams } from './child-teams';
 import { loadChildCallups } from './guardian-callups';
 import { respondToCallup } from './callup-response';
 import { loadClubCompetitions } from './guardian-competitions';
+import { loadGuardianNews } from './guardian-news';
 import { roundMoney } from '../bookings/booking-time';
 import { buildClubFeed } from '../matches/club-feed';
 import { toPublicMenu } from '../buffet/buffet.logic';
@@ -203,6 +204,12 @@ export class FeePaymentsService {
         tournaments: await loadClubCompetitions(this.prisma, companyId, clubId),
       })),
     );
+  }
+
+  /** Novedades del club para las familias (el padre no lee los documentos del club). */
+  async newsForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+    const children = await this.listChildren(auth);
+    return loadGuardianNews(this.prisma, children);
   }
 
   /** Carta del buffet de los clubes de mis hijos (solo lectura: sin costos ni stock). */
