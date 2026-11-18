@@ -35,6 +35,41 @@ export class CreatePlanDto {
   @Min(0)
   @Max(100_000_000)
   monthlyPrice!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  includedAthletes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10_000)
+  extraBlockSize?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  extraBlockPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  buffetPackPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  integrationsPackPrice?: number;
 }
 
 export class UpdatePlanDto {
@@ -61,6 +96,41 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  includedAthletes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10_000)
+  extraBlockSize?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  extraBlockPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  buffetPackPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  integrationsPackPrice?: number;
 }
 
 /** Alta o cambio de la suscripción de un club. */
@@ -76,6 +146,22 @@ export class UpsertSubscriptionDto {
   @Min(0)
   @Max(100_000_000)
   customPrice?: number | null;
+
+  /** Bloques de atletas extra contratados. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1000)
+  extraBlocks?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  buffetPack?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  integrationsPack?: boolean;
 
   @IsOptional()
   @IsInt()

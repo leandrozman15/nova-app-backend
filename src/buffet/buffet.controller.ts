@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { RequiresPack } from '../subscriptions/plan-entitlements';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireClubScope, requireCompanyId } from '../common/http/request-context';
@@ -29,6 +30,7 @@ function ctx(req: unknown, clubId: string) {
   return { companyId: requireCompanyId(req), actor };
 }
 
+@RequiresPack('buffet')
 @Controller('buffet/:clubId')
 export class BuffetController {
   constructor(private readonly buffet: BuffetService) {}

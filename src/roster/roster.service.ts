@@ -1,4 +1,5 @@
 import {
+import { assertAthleteSeats } from '../subscriptions/plan-entitlements';
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -356,6 +357,7 @@ export class RosterService {
     if (!data.firstName || !data.lastName)
       throw new BadRequestException('Falta el nombre y apellido');
     await this.checkDivision(clubId, data);
+    if (data.active !== false) await assertAthleteSeats(this.prisma, clubId, 1);
     // Un id propuesto por la consola (por ejemplo, el uid de la cuenta) se respeta.
     const id = str(fields.id, 128) ?? undefined;
     const created = await this.write(() =>
@@ -397,6 +399,8 @@ export class RosterService {
       `clubs/${clubId}/players/${current.id}`,
     );
     await this.checkDivision(clubId, data);
+    // Reactivar a alguien ocupa un lugar del cupo del plan.
+    if (data.active === true && current.active === false) await assertAthleteSeats(this.prisma, clubId, 1);
     const updated = await this.write(() =>
       this.prisma.player.update({
         where: { id: current.id },

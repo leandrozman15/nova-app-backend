@@ -1347,6 +1347,13 @@ model SubscriptionPlan {
   name         String
   description  String?
   monthlyPrice Decimal  @db.Decimal(12, 2)
+  /// Atletas activos incluidos en el precio base.
+  includedAthletes      Int     @default(250)
+  /// Cupo extra: bloques de N atletas a un precio por bloque.
+  extraBlockSize        Int     @default(100)
+  extraBlockPrice       Decimal @default(10000) @db.Decimal(12, 2)
+  buffetPackPrice       Decimal @default(15000) @db.Decimal(12, 2)
+  integrationsPackPrice Decimal @default(15000) @db.Decimal(12, 2)
   currency     String   @default("ARS")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -1368,8 +1375,12 @@ model ClubSubscription {
   companyId       String
   clubId          String             @unique
   planId          String
-  /// Precio pactado con el club (si está vacío se usa el del plan).
+  /// Precio pactado con el club (si está vacío se usa el del plan, con bloques y packs).
   customPrice     Decimal?           @db.Decimal(12, 2)
+  /// Bloques de atletas extra contratados sobre los incluidos en el plan.
+  extraBlocks      Int               @default(0)
+  buffetPack       Boolean           @default(false)
+  integrationsPack Boolean           @default(false)
   status          SubscriptionStatus @default(ACTIVE)
   /// Día del mes en que vence cada mensualidad (1-28).
   billingDay      Int                @default(10)

@@ -1,4 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { activeAthletes, clubEntitlements } from '../subscriptions/plan-entitlements';
+import { seatsProblem } from '../subscriptions/plan-rules';
 import { Prisma } from '@prisma/client';
 
 import { dniHash } from '../common/pii-crypto';
@@ -94,6 +96,14 @@ export class PlayerImportService {
         result.player &&
         (result.status === 'ok' || result.status === 'warning'),
     );
+    // Cupo de atletas del plan: en la revisión se informa, al implantar se corta.
+    const ent = await clubEntitlements(this.prisma, club.id);
+    const active = ent.limited ? await activeAthletes(this.prisma, club.id) : null;
+    const seats = ent.limited ? { limit: ent.athleteLimit, active: active!, adding: importable.length } : null;
+    if (!dryRun && seats) {
+      const problem = seatsProblem(seats.limit, seats.active, seats.adding);
+      if (problem) throw new ForbiddenException(problem);
+    }
     let created = 0;
     if (!dryRun && importable.length > 0) {
       created = await this.create(club, importable, actor);
@@ -118,6 +128,7 @@ export class PlayerImportService {
       created,
       // En la revisión: lo que se va a crear. Al implantar: lo que se creó.
       structure: plan,
+      seats,
       summary: {
         total: results.length,
         ok: results.filter((result) => result.status === 'ok').length,
