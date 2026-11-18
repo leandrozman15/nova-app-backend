@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { RequiresPack } from '../subscriptions/plan-entitlements';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import { requireClubScope, requireCompanyId } from '../common/http/request-context';
@@ -7,6 +8,7 @@ import { InvoicingService } from './invoicing.service';
 
 /** Facturación electrónica ARCA del club (consola). */
 @Roles('admin', 'club_admin', 'manager')
+@RequiresPack('integrations')
 @Controller('clubs/:clubId/invoicing')
 export class ClubInvoicingController {
   constructor(private readonly service: InvoicingService) {}

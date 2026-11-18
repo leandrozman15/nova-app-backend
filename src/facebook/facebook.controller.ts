@@ -1,4 +1,5 @@
 import {
+import { RequiresPack } from '../subscriptions/plan-entitlements';
   Body,
   Controller,
   Delete,
@@ -30,6 +31,7 @@ const appUrl = () =>
 
 /** Conexión y publicación en el Facebook del club (consola). */
 @Roles('admin', 'club_admin', 'manager')
+@RequiresPack('integrations')
 @Controller('clubs/:clubId/facebook')
 export class ClubFacebookController {
   constructor(private readonly service: FacebookService) {}

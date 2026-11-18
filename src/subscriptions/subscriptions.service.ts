@@ -7,6 +7,7 @@ import {
 import { Prisma, type SubscriptionStatus } from '@prisma/client';
 
 import { AuditService, type AuditActor } from '../platform/audit.service';
+import { athleteLimit, priceBreakdown } from './plan-rules';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreatePlanDto,
@@ -21,6 +22,9 @@ const SUBSCRIPTION_SELECT = {
   clubId: true,
   planId: true,
   customPrice: true,
+  extraBlocks: true,
+  buffetPack: true,
+  integrationsPack: true,
   status: true,
   billingDay: true,
   startedAt: true,
@@ -29,7 +33,18 @@ const SUBSCRIPTION_SELECT = {
   suspendedReason: true,
   cancelledAt: true,
   notes: true,
-  plan: { select: { id: true, name: true, monthlyPrice: true } },
+  plan: {
+    select: {
+      id: true,
+      name: true,
+      monthlyPrice: true,
+      includedAthletes: true,
+      extraBlockSize: true,
+      extraBlockPrice: true,
+      buffetPackPrice: true,
+      integrationsPackPrice: true,
+    },
+  },
 } satisfies Prisma.ClubSubscriptionSelect;
 
 type SubscriptionRow = Prisma.ClubSubscriptionGetPayload<{
@@ -39,12 +54,46 @@ type SubscriptionRow = Prisma.ClubSubscriptionGetPayload<{
 const money = (value: Prisma.Decimal | null | undefined) =>
   value === null || value === undefined ? null : Number(value);
 
-/** Precio que paga el club: el pactado o, si no hay, el del plan. */
-export function effectivePrice(subscription: {
+type PricedSubscription = {
   customPrice: Prisma.Decimal | null;
-  plan: { monthlyPrice: Prisma.Decimal };
-}) {
-  return Number(subscription.customPrice ?? subscription.plan.monthlyPrice);
+  extraBlocks?: number;
+  buffetPack?: boolean;
+  integrationsPack?: boolean;
+  plan: {
+    monthlyPrice: Prisma.Decimal;
+    includedAthletes?: number;
+    extraBlockSize?: number;
+    extraBlockPrice?: Prisma.Decimal;
+    buffetPackPrice?: Prisma.Decimal;
+    integrationsPackPrice?: Prisma.Decimal;
+  };
+};
+
+/** Términos numéricos del plan y del club (con los valores por defecto si faltan). */
+export function termsOf(subscription: PricedSubscription) {
+  const p = subscription.plan;
+  return {
+    plan: {
+      monthlyPrice: Number(p.monthlyPrice),
+      includedAthletes: p.includedAthletes ?? 250,
+      extraBlockSize: p.extraBlockSize ?? 100,
+      extraBlockPrice: Number(p.extraBlockPrice ?? 0),
+      buffetPackPrice: Number(p.buffetPackPrice ?? 0),
+      integrationsPackPrice: Number(p.integrationsPackPrice ?? 0),
+    },
+    club: {
+      extraBlocks: subscription.extraBlocks ?? 0,
+      buffetPack: subscription.buffetPack ?? false,
+      integrationsPack: subscription.integrationsPack ?? false,
+      customPrice: money(subscription.customPrice),
+    },
+  };
+}
+
+/** Precio que paga el club: el pactado o, si no hay, base + bloques extra + packs. */
+export function effectivePrice(subscription: PricedSubscription) {
+  const t = termsOf(subscription);
+  return priceBreakdown(t.plan, t.club).total;
 }
 
 /** Vencimiento de la mensualidad de un mes: el día de cobro de ese mes (UTC, 12 h). */
@@ -60,14 +109,32 @@ function endOfPeriod(period: string) {
 }
 
 function serialize(subscription: SubscriptionRow) {
+  const t = termsOf(subscription);
   return {
     ...subscription,
     customPrice: money(subscription.customPrice),
     price: effectivePrice(subscription),
-    plan: {
-      ...subscription.plan,
-      monthlyPrice: Number(subscription.plan.monthlyPrice),
-    },
+    breakdown: priceBreakdown(t.plan, t.club),
+    athleteLimit: athleteLimit(t.plan, t.club),
+    plan: { ...subscription.plan, ...t.plan },
+  };
+}
+
+/** Un plan con sus importes como números. */
+function planOut<
+  T extends {
+    monthlyPrice: Prisma.Decimal;
+    extraBlockPrice: Prisma.Decimal;
+    buffetPackPrice: Prisma.Decimal;
+    integrationsPackPrice: Prisma.Decimal;
+  },
+>(plan: T) {
+  return {
+    ...plan,
+    monthlyPrice: Number(plan.monthlyPrice),
+    extraBlockPrice: Number(plan.extraBlockPrice),
+    buffetPackPrice: Number(plan.buffetPackPrice),
+    integrationsPackPrice: Number(plan.integrationsPackPrice),
   };
 }
 
@@ -90,8 +157,7 @@ export class SubscriptionsService {
       include: { _count: { select: { subscriptions: true } } },
     });
     return plans.map((plan) => ({
-      ...plan,
-      monthlyPrice: Number(plan.monthlyPrice),
+      ...planOut(plan),
       clubs: plan._count.subscriptions,
     }));
   }
@@ -104,7 +170,7 @@ export class SubscriptionsService {
       { type: 'SubscriptionPlan', id: plan.id },
       { after: plan },
     );
-    return { ...plan, monthlyPrice: Number(plan.monthlyPrice) };
+    return planOut(plan);
   }
 
   async updatePlan(actor: AuditActor, id: string, dto: UpdatePlanDto) {
@@ -122,7 +188,7 @@ export class SubscriptionsService {
       { type: 'SubscriptionPlan', id },
       { before, after },
     );
-    return { ...after, monthlyPrice: Number(after.monthlyPrice) };
+    return planOut(after);
   }
 
   // ----- Suscripciones -----
@@ -130,7 +196,7 @@ export class SubscriptionsService {
   /** Todos los clubes, con su suscripción (si tiene) y el estado de sus mensualidades. */
   async listClubs() {
     const now = new Date();
-    const [clubs, pending] = await Promise.all([
+    const [clubs, pending, athletes] = await Promise.all([
       this.prisma.club.findMany({
         select: {
           id: true,
@@ -145,7 +211,13 @@ export class SubscriptionsService {
         where: { status: 'PENDING' },
         select: { clubId: true, amount: true, dueDate: true },
       }),
+      this.prisma.player.groupBy({
+        by: ['clubId'],
+        where: { active: true },
+        _count: { _all: true },
+      }),
     ]);
+    const activeOf = new Map(athletes.map((a) => [a.clubId, a._count._all]));
     return clubs.map((club) => {
       const mine = pending.filter((invoice) => invoice.clubId === club.id);
       const overdue = mine.filter((invoice) => invoice.dueDate < now);
@@ -155,6 +227,7 @@ export class SubscriptionsService {
         city: club.city,
         company: club.company.name,
         subscription: club.subscription ? serialize(club.subscription) : null,
+        activeAthletes: activeOf.get(club.id) ?? 0,
         pendingInvoices: mine.length,
         pendingAmount: mine.reduce(
           (sum, invoice) => sum + Number(invoice.amount),
@@ -195,6 +268,9 @@ export class SubscriptionsService {
     const data = {
       planId: dto.planId,
       customPrice: dto.customPrice,
+      extraBlocks: dto.extraBlocks,
+      buffetPack: dto.buffetPack,
+      integrationsPack: dto.integrationsPack,
       billingDay: dto.billingDay,
       status: dto.status,
       trialEndsAt:
@@ -386,11 +462,22 @@ export class SubscriptionsService {
       }),
     ]);
     if (!subscription) return { subscription: null, pending: [] };
+    const t = termsOf(subscription);
+    const active = await this.prisma.player.count({
+      where: { clubId, active: true },
+    });
     return {
       subscription: {
         status: subscription.status,
         planName: subscription.plan.name,
         price: effectivePrice(subscription),
+        athleteLimit: athleteLimit(t.plan, t.club),
+        activeAthletes: active,
+        extraBlocks: t.club.extraBlocks,
+        extraBlockSize: t.plan.extraBlockSize,
+        extraBlockPrice: t.plan.extraBlockPrice,
+        buffetPack: t.club.buffetPack,
+        integrationsPack: t.club.integrationsPack,
         billingDay: subscription.billingDay,
         trialEndsAt: subscription.trialEndsAt,
         suspendedReason: subscription.suspendedReason,

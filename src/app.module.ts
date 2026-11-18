@@ -23,6 +23,7 @@ import { RosterModule } from './roster/roster.module';
 import { DocStoreModule } from './docstore/docstore.module';
 import { PlayerDocumentsModule } from './player-documents/player-documents.module';
 import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
+import { PlanPackGuard } from './subscriptions/plan-pack.guard';
 import { ClubsModule } from './clubs/clubs.module';
 import { LeaguesModule } from './leagues/leagues.module';
 import { MatchesModule } from './matches/matches.module';
@@ -121,6 +122,11 @@ import { ClubAccessModule } from './club-access/club-access.module';
       // Club suspendido: consola en solo lectura (va después de autenticar).
       provide: APP_GUARD,
       useExisting: SuspendedClubGuard,
+    },
+    {
+      // Buffet e integraciones: solo con el pack contratado (si el club tiene suscripción).
+      provide: APP_GUARD,
+      useExisting: PlanPackGuard,
     },
   ],
 })

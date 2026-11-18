@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { assertAthleteSeats } from '../subscriptions/plan-entitlements';
 import { Prisma } from '@prisma/client';
 
 import { EmailNotificationsService } from '../email/email-notifications.service';
@@ -52,6 +53,7 @@ export class PlayersService {
   }
 
   async create(companyId: string, dto: CreatePlayerDto, actor: ProvisionProfileActor) {
+    if (dto.active !== false) await assertAthleteSeats(this.prisma, dto.clubId, 1);
     const player = await this.prisma.player.create({
       data: {
         companyId,

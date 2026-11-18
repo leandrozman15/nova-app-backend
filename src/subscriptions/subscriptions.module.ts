@@ -7,11 +7,12 @@ import {
 } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
 import { SuspendedClubGuard } from './suspended-club.guard';
+import { PlanPackGuard } from './plan-pack.guard';
 
 @Module({
   imports: [PlatformModule],
   controllers: [PlatformSubscriptionsController, ClubSubscriptionController],
-  providers: [SubscriptionsService, SuspendedClubGuard],
-  exports: [SuspendedClubGuard],
+  providers: [SubscriptionsService, SuspendedClubGuard, PlanPackGuard],
+  exports: [SuspendedClubGuard, PlanPackGuard],
 })
 export class SubscriptionsModule {}
