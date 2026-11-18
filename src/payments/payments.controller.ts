@@ -44,13 +44,15 @@ export class ClubPaymentsController {
     return this.accounts.status(requireCompanyId(req), clubId);
   }
 
+  /** `{ shared: true }`: enlace de 48 h para mandarle al titular de la cuenta del club. */
   @Post('connect')
-  connect(@Req() req: unknown, @Param('clubId') clubId: string) {
+  connect(@Req() req: unknown, @Param('clubId') clubId: string, @Body() body: { shared?: boolean } = {}) {
     requireClubScope(req, clubId);
     return this.accounts.connectUrl(
       requireCompanyId(req),
       clubId,
       (req as RequestWithAuth).auth!.uid,
+      body?.shared === true,
     );
   }
 
@@ -210,7 +212,12 @@ export class MercadoPagoCallbacksController {
   ) {
     const appUrl = mpConfig().publicAppUrl;
     try {
-      const { clubId } = await this.accounts.handleCallback(code, state);
+      const { clubId, shared, clubName, account } = await this.accounts.handleCallback(code, state);
+      if (shared) {
+        // El titular no tiene por qué tener usuario en Fluxion: página pública de confirmación.
+        const q = new URLSearchParams({ club: clubName ?? '', cuenta: account ?? '' });
+        return res.redirect(`${appUrl}/mercadopago-conectado?${q.toString()}`);
+      }
       return res.redirect(
         `${appUrl}/dashboard/clubs/${encodeURIComponent(clubId)}/settings/integraciones?open=mercadopago&mercadopago=conectado`,
       );

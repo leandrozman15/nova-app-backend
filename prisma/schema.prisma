@@ -1102,6 +1102,9 @@ model ClubPaymentAccount {
   clubId                String    @unique
   provider              String    @default("mercadopago")
   providerUserId        String
+  /// Apodo y email de la cuenta conectada (para que el club vea cuál es).
+  providerNickname      String?
+  providerEmail         String?
   accessTokenEncrypted  String
   refreshTokenEncrypted String?
   publicKey             String?
@@ -1114,6 +1117,7 @@ model ClubPaymentAccount {
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+  @@index([providerUserId])
 }
 
 /// Actividad que el club ofrece (escuela, clases, entrenamiento) y muestra en la app.

@@ -26,9 +26,13 @@ type OAuthState = {
   uid: string;
   exp: number;
   nonce: string;
+  /** Enlace enviado al titular de la cuenta del club (vuelve a una página pública). */
+  shared?: boolean;
 };
 
 const STATE_TTL_MS = 15 * 60 * 1000;
+/** El enlace para el titular dura 48 h: lo abre otra persona, en su teléfono. */
+const SHARED_STATE_TTL_MS = 48 * 60 * 60 * 1000;
 // Renovar el token si vence dentro de esta ventana (duran ~180 días).
 const REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -55,31 +59,50 @@ export class PaymentAccountsService {
       where: { clubId },
       select: {
         providerUserId: true,
+        providerNickname: true,
+        providerEmail: true,
         liveMode: true,
         createdAt: true,
         updatedAt: true,
       },
     });
+    // La misma cuenta de Mercado Pago conectada en otros clubes: casi siempre es un error
+    // (se conectó la cuenta que estaba abierta en el navegador, no la del club).
+    const sharedWith = account
+      ? await this.prisma.clubPaymentAccount.count({
+          where: { providerUserId: account.providerUserId, clubId: { not: clubId } },
+        })
+      : 0;
     return {
       available: isMercadoPagoConfigured(),
       connected: Boolean(account),
       liveMode: account?.liveMode ?? null,
       providerUserId: account?.providerUserId ?? null,
+      providerNickname: account?.providerNickname ?? null,
+      providerEmail: account?.providerEmail ?? null,
+      sharedWithOtherClubs: sharedWith,
       connectedAt: account?.createdAt ?? null,
     };
   }
 
-  async connectUrl(companyId: string, clubId: string, uid: string) {
+  /**
+   * Enlace de autorización. Mercado Pago conecta la cuenta que tenga la sesión abierta en
+   * ese navegador: con `shared`, el enlace es para mandarle al titular de la cuenta del club.
+   */
+  async connectUrl(companyId: string, clubId: string, uid: string, shared = false) {
     this.assertConfigured();
     await this.requireClub(companyId, clubId);
+    const exp = Date.now() + (shared ? SHARED_STATE_TTL_MS : STATE_TTL_MS);
     const state = signState({
       clubId,
       companyId,
       uid,
-      exp: Date.now() + STATE_TTL_MS,
+      exp,
       nonce: randomBytes(12).toString('base64url'),
+      ...(shared && { shared: true }),
     } satisfies OAuthState);
-    return { url: this.mp.authorizationUrl(state) };
+    if (shared) this.logger.log(`Enlace de Mercado Pago para el titular: club=${clubId} por=${uid}`);
+    return { url: this.mp.authorizationUrl(state), expiresAt: new Date(exp).toISOString() };
   }
 
   /** Vuelta del OAuth: canjea el código y guarda los tokens cifrados. Devuelve el club. */
@@ -95,6 +118,8 @@ export class PaymentAccountsService {
     await this.requireClub(state.companyId, state.clubId);
 
     const token = await this.mp.exchangeCode(code);
+    // Quién es la cuenta conectada, para mostrarlo en la consola (si falla, se conecta igual).
+    const me = await this.mp.getMe(token.access_token).catch(() => null);
     const user = await this.prisma.user.findUnique({
       where: { firebaseUid: state.uid },
       select: { id: true },
@@ -102,6 +127,8 @@ export class PaymentAccountsService {
     const data = {
       companyId: state.companyId,
       providerUserId: String(token.user_id),
+      providerNickname: me?.nickname ?? null,
+      providerEmail: me?.email ?? null,
       accessTokenEncrypted: encryptSecret(token.access_token),
       refreshTokenEncrypted: token.refresh_token
         ? encryptSecret(token.refresh_token)
@@ -127,7 +154,8 @@ export class PaymentAccountsService {
       `Mercado Pago conectado: club=${state.clubId} mpUser=${data.providerUserId}`,
     );
 
-    return { clubId: state.clubId };
+    const club = await this.prisma.club.findUnique({ where: { id: state.clubId }, select: { name: true } });
+    return { clubId: state.clubId, shared: Boolean(state.shared), clubName: club?.name ?? null, account: me?.nickname ?? me?.email ?? null };
   }
 
   async disconnect(companyId: string, clubId: string) {
