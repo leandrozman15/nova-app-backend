@@ -32,7 +32,10 @@ export function visibleToGuardian(
   const targets = (event.targets ?? null) as Doc | null;
   if (!targets || typeof targets !== 'object') return true;
   const segments = list(targets.segments);
-  const disciplines = list(targets.disciplineIds);
+  const clubId = typeof event.clubId === 'string' ? event.clubId : null;
+  const disciplines = list(targets.disciplineIds).map((d) =>
+    disciplineKey(d, clubId),
+  );
   const divisions = list(targets.divisionIds);
   if (!meets(segments, GUARDIAN_SEGMENTS)) return false;
   return children.some(
@@ -43,6 +46,13 @@ export function visibleToGuardian(
         [c.divisionId, c.teamId].filter((v): v is string => !!v),
       ),
   );
+}
+
+/** La consola guarda la disciplina como "<clubId>_football"; el hijo trae el deporte ("football"). */
+export function disciplineKey(value: string, clubId: string | null): string {
+  return clubId && value.startsWith(`${clubId}_`)
+    ? value.slice(clubId.length + 1)
+    : value;
 }
 
 const createdAtOf = (doc: Doc) =>
