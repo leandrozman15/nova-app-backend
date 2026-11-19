@@ -1,6 +1,7 @@
 import { MatchStatus } from '@prisma/client';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { liveTable, type LiveTable } from './live-standings';
 
 export type LiveIncident = {
   type: 'goal' | 'try' | 'yellow' | 'red';
@@ -17,6 +18,11 @@ export type LiveItem = {
   awayName: string;
   homeLogo: string | null;
   awayLogo: string | null;
+  /** Portadas de los dos clubes (fondo de la tarjeta del Live). */
+  homeCover?: string | null;
+  awayCover?: string | null;
+  /** Posiciones actuales en la competencia del partido (si es de un torneo del club). */
+  table?: LiveTable | null;
   homeScore: number;
   awayScore: number;
   phase: 'en_curso' | 'entretiempo' | 'finalizado';
@@ -89,8 +95,11 @@ export async function loadClubLive(
   const out: LiveItem[] = [];
 
   // Escudos: si el Live no los trajo (cliente viejo o sin logo cargado), se completan desde los clubes.
-  const ownClub = await prisma.club.findMany({ where: { id: clubId }, select: { id: true, logoUrl: true } });
+  const ownClub = await prisma.club.findMany({ where: { id: clubId }, select: { id: true, logoUrl: true, coverUrl: true } });
   const ownLogo = ownClub[0]?.logoUrl ?? null;
+  const ownCover = ownClub[0]?.coverUrl ?? null;
+  /** Competencia del fixture de cada tarjeta del Live (para la tabla de posiciones). */
+  const tournamentOf = new Map<string, string>();
 
   const index = await prisma.storeDocument.findMany({
     // Por club, no por empresa: quien publica y quien mira pueden tener activa una empresa distinta (clubes registrados
@@ -112,6 +121,8 @@ export async function loadClubLive(
     if (!Number.isNaN(updated) && now - updated > STALE_MS) continue; // un live olvidado no queda "en vivo" para siempre
     const linked = str(d.backendMatchId);
     if (linked) indexLinks.set(`ix:${row.docId}`, linked);
+    const tid = str(d.fixtureTournamentId);
+    if (tid) tournamentOf.set(`ix:${row.docId}`, tid);
     const rival = str(d.opponentName);
     if (rival) liveRivals.add(normName(rival));
     const phase = d.matchPhase === 'entretiempo' ? 'entretiempo' : d.matchPhase === 'finalizado' ? 'finalizado' : 'en_curso';
@@ -122,6 +133,8 @@ export async function loadClubLive(
       awayName: str(d.opponentName) ?? 'Visitante',
       homeLogo: str(d.clubLogo) ?? ownLogo,
       awayLogo: str(d.opponentLogo),
+      homeCover: str(d.clubCover) ?? ownCover,
+      awayCover: null,
       homeScore: num(d.homeScore) ?? 0,
       awayScore: num(d.awayScore) ?? 0,
       phase,
@@ -138,11 +151,44 @@ export async function loadClubLive(
     });
   }
 
-  const needOpp = out.filter((o) => o.source === 'club' && !o.awayLogo);
+  const clubItems = out.filter((o) => o.source === 'club');
+  const needOpp = clubItems.filter((o) => !o.awayLogo);
+  if (clubItems.length > 0) {
+    const norm = (v: string) => v.toLowerCase().replace(/\s+·\s+div\..*$/, '').replace(/\s+/g, ' ').trim();
+    const logos = new Map<string, string>();
+    const covers = new Map<string, string>();
+    // Rivales cargados en el club (los que se eligen al armar el fixture): escudo y portada.
+    const opponents = await prisma.storeDocument.findMany({
+      where: { companyId, parentPath: `clubs/${clubId}/opponents` },
+      select: { data: true },
+    });
+    for (const r of opponents) {
+      const d = (r.data ?? {}) as Doc;
+      const n = str(d.name);
+      const l = str(d.logoUrl);
+      const c = str(d.coverUrl);
+      if (n && l) logos.set(norm(n), l);
+      if (n && c) covers.set(norm(n), c);
+    }
+    for (const o of clubItems) o.awayCover = covers.get(norm(o.awayName)) ?? null;
+
+    // Posiciones actuales: la tabla de la competencia del fixture de cada partido.
+    for (const o of clubItems) {
+      const tid = tournamentOf.get(o.id);
+      if (!tid) continue;
+      const [standings, tournament] = await Promise.all([
+        prisma.storeDocument.findMany({ where: { companyId, parentPath: `clubs/${clubId}/tournaments/${tid}/standings` }, select: { data: true } }),
+        prisma.storeDocument.findFirst({ where: { companyId, path: `clubs/${clubId}/tournaments/${tid}` }, select: { data: true } }),
+      ]);
+      o.table = liveTable(
+        standings.map((r) => (r.data ?? {}) as Doc),
+        { clubId, awayName: o.awayName, name: str(((tournament?.data ?? {}) as Doc).name) },
+      );
+    }
+  }
   if (needOpp.length > 0) {
     const norm = (v: string) => v.toLowerCase().replace(/\s+·\s+div\..*$/, '').replace(/\s+/g, ' ').trim();
     const logos = new Map<string, string>();
-    // Rivales cargados en el club (los que se eligen al armar el fixture).
     const opponents = await prisma.storeDocument.findMany({
       where: { companyId, parentPath: `clubs/${clubId}/opponents` },
       select: { data: true },
@@ -203,8 +249,9 @@ export async function loadClubLive(
   });
   if (league.length > 0) {
     const clubIds = [...new Set(league.flatMap((m) => [m.homeTeam?.clubId, m.awayTeam?.clubId]).filter((x): x is string => !!x))];
-    const clubs = await prisma.club.findMany({ where: { id: { in: clubIds } }, select: { id: true, logoUrl: true } });
+    const clubs = await prisma.club.findMany({ where: { id: { in: clubIds } }, select: { id: true, logoUrl: true, coverUrl: true } });
     const logo = new Map(clubs.map((c) => [c.id, c.logoUrl ?? null]));
+    const cover = new Map(clubs.map((c) => [c.id, c.coverUrl ?? null]));
     const includedLeague = new Set<string>();
     for (const m of league) {
       const live = liveByMatch.get(m.id);
@@ -223,6 +270,8 @@ export async function loadClubLive(
         awayName: m.awayTeam?.name ?? 'Visitante',
         homeLogo: (m.homeTeam?.clubId && logo.get(m.homeTeam.clubId)) || null,
         awayLogo: (m.awayTeam?.clubId && logo.get(m.awayTeam.clubId)) || null,
+        homeCover: (m.homeTeam?.clubId && cover.get(m.homeTeam.clubId)) || null,
+        awayCover: (m.awayTeam?.clubId && cover.get(m.awayTeam.clubId)) || null,
         homeScore: live ? (mineHome ? num(live.homeScore) : num(live.awayScore)) ?? m.homeScore : m.homeScore,
         awayScore: live ? (mineHome ? num(live.awayScore) : num(live.homeScore)) ?? m.awayScore : m.awayScore,
         phase,
