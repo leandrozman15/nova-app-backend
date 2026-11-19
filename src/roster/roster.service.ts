@@ -1,11 +1,11 @@
 import {
-import { assertAthleteSeats } from '../subscriptions/plan-entitlements';
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { assertAthleteSeats } from '../subscriptions/plan-entitlements';
 import { loadChildTeams } from '../payments/child-teams';
 import { Prisma } from '@prisma/client';
 
