@@ -45,6 +45,22 @@ describe('visibleToGuardian', () => {
       false,
     );
   });
+  it('acepta la disciplina guardada con el id del club', () => {
+    const ev = {
+      clubId: 'c1',
+      targets: {
+        segments: ['members', 'athletes'],
+        disciplineIds: ['c1_football', 'c1_hockey'],
+      },
+    };
+    expect(visibleToGuardian(ev, [kid])).toBe(true);
+    expect(
+      visibleToGuardian({ ...ev, targets: { disciplineIds: ['c1_hockey'] } }, [
+        kid,
+      ]),
+    ).toBe(false);
+  });
+
   it('oculta las vencidas', () => {
     expect(
       visibleToGuardian({ expiresAt: '2020-01-01T00:00:00Z' }, [kid]),
