@@ -5,6 +5,7 @@ import { storySignature, validStorySignature } from './availability-story.servic
 jest.mock('../prisma/prisma.service', () => ({ PrismaService: class {} }));
 jest.mock('../instagram/instagram.service', () => ({ InstagramService: class {} }));
 jest.mock('../push/push.service', () => ({ PushService: class {} }));
+jest.mock('../activities/activities.service', () => ({ ActivitiesService: class {} }));
 jest.mock('../bookings/fixed-turns', () => ({ ensureOccurrences: jest.fn() }));
 jest.mock('../subscriptions/plan-entitlements', () => ({ clubEntitlements: jest.fn() }));
 

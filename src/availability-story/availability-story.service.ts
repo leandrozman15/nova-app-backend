@@ -1,15 +1,17 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { BookingStatus } from '@prisma/client';
 
+import { ActivitiesService } from '../activities/activities.service';
 import { computeTimes, nowMinuteIn, todayIn } from '../bookings/booking-time';
 import { ensureOccurrences } from '../bookings/fixed-turns';
 import { InstagramService } from '../instagram/instagram.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { clubEntitlements } from '../subscriptions/plan-entitlements';
-import { renderStoryJpeg } from './story-render';
+import { activityCaption, activityStoryGroups, priceLabel, type ActivitySource, type Slot } from './activity-story';
+import { renderActivityStoryJpeg, renderStoryJpeg } from './story-render';
 import { dayTitle, freeRanges, hasFreeTime, storyCaption, storyDates, trimStory, type StoryData, type StoryDay } from './story-rules';
 
 const ACTIVE: BookingStatus[] = ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'];
@@ -36,6 +38,15 @@ export function validStorySignature(clubId: string, date: string, sig: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+export type ActivityStoryInput = {
+  activityId: string;
+  groups?: string[];
+  title?: string;
+  highlight?: string | null;
+  showPrice?: boolean;
+  contact?: string | null;
+};
+
 export type StorySettingsInput = { whatsapp?: boolean; instagram?: boolean; facilityIds?: string[]; contact?: string | null };
 
 @Injectable()
@@ -46,7 +57,11 @@ export class AvailabilityStoryService {
     private readonly prisma: PrismaService,
     private readonly instagram: InstagramService,
     private readonly push: PushService,
+    private readonly activities: ActivitiesService,
   ) {}
+
+  /** Imágenes armadas a pedido para que Instagram las descargue (duran 30 minutos). */
+  private readonly temp = new Map<string, { buf: Buffer; expires: number }>();
 
   private async club(clubId: string, companyId?: string) {
     const club = await this.prisma.club.findFirst({
@@ -291,5 +306,84 @@ export class AvailabilityStoryService {
       },
     );
     return res.sent;
+  }
+
+  // ─── Historias de actividades e inscripciones ─────────────────────────────
+
+  /** Disciplinas (con sus categorías) y actividades sueltas del club, listas para elegir. */
+  async activitySources(companyId: string, clubId: string): Promise<(ActivitySource & { kind: 'discipline' | 'activity'; audience: string | null; showPrice: boolean })[]> {
+    const { disciplines, activities } = await this.activities.list(companyId, clubId);
+    return [
+      ...disciplines.map((d) => ({
+        id: d.id,
+        kind: 'discipline' as const,
+        name: d.name,
+        emoji: d.emoji,
+        audience: d.audience,
+        coaches: d.coaches,
+        groups: d.groups,
+        price: d.settings.price,
+        priceUnit: d.settings.priceUnit,
+        showPrice: d.settings.showPrice,
+      })),
+      ...activities.map((a) => ({
+        id: a.id,
+        kind: 'activity' as const,
+        name: a.name,
+        audience: a.audience,
+        coaches: a.coaches,
+        schedule: (Array.isArray(a.schedule) ? a.schedule : []) as Slot[],
+        price: a.price,
+        priceUnit: a.priceUnit,
+        showPrice: a.showPrice,
+      })),
+    ];
+  }
+
+  private async activityStory(companyId: string, clubId: string, input: ActivityStoryInput) {
+    const club = await this.club(clubId, companyId);
+    const source = (await this.activitySources(companyId, clubId)).find((s) => s.id === input.activityId);
+    if (!source) throw new NotFoundException('Actividad no encontrada');
+    const groups = activityStoryGroups(source, input.groups);
+    const contact = input.contact?.trim() || club.availabilityStory?.contact || (club.phone ? `Tel. ${club.phone}` : null);
+    const [logo, cover] = await Promise.all([this.embed(club.logoUrl), this.embed(club.coverUrl)]);
+    const data = {
+      clubName: club.name,
+      logo,
+      cover,
+      contact,
+      title: input.title?.trim().slice(0, 60) || source.name,
+      audience: source.audience,
+      highlight: input.highlight === undefined ? 'Inscripciones abiertas' : input.highlight?.trim().slice(0, 40) || null,
+      price: input.showPrice ? priceLabel(source.price, source.priceUnit) : null,
+      groups,
+    };
+    return { data, jpeg: renderActivityStoryJpeg(data) };
+  }
+
+  async activityImage(companyId: string, clubId: string, input: ActivityStoryInput) {
+    const { data, jpeg } = await this.activityStory(companyId, clubId, input);
+    return { caption: activityCaption(data), dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}` };
+  }
+
+  async publishActivityInstagram(companyId: string, clubId: string, input: ActivityStoryInput) {
+    const { jpeg } = await this.activityStory(companyId, clubId, input);
+    const id = this.keep(jpeg);
+    const url = `${publicApiUrl()}/public/availability-story/tmp/${id}.jpg`;
+    return this.instagram.publishStory(companyId, clubId, url);
+  }
+
+  private keep(buf: Buffer) {
+    const now = Date.now();
+    for (const [k, v] of this.temp) if (v.expires < now) this.temp.delete(k);
+    const id = randomBytes(18).toString('base64url');
+    this.temp.set(id, { buf, expires: now + 30 * 60_000 });
+    return id;
+  }
+
+  tempImage(id: string) {
+    const hit = this.temp.get(id);
+    if (!hit || hit.expires < Date.now()) throw new NotFoundException();
+    return hit.buf;
   }
 }
