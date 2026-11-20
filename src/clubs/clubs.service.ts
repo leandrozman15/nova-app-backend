@@ -104,6 +104,17 @@ export class ClubsService {
     return club;
   }
 
+  /** Usuarios con acceso de dirección (club_admin / manager) activos en el club. */
+  async admins(companyId: string, clubId: string) {
+    await this.getById(companyId, clubId);
+    const rows = await this.prisma.clubMembership.findMany({
+      where: { companyId, clubId, status: 'ACTIVA', role: { in: ['club_admin', 'manager'] } },
+      orderBy: { createdAt: 'asc' },
+      select: { role: true, createdAt: true, user: { select: { email: true, name: true } } },
+    });
+    return rows.map((r) => ({ email: r.user.email, name: r.user.name, role: r.role, since: r.createdAt }));
+  }
+
   create(companyId: string, dto: CreateClubDto) {
     return this.prisma.club.create({
       data: {
