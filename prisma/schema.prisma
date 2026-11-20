@@ -340,6 +340,7 @@ model Club {
   recurringBookings     RecurringBooking[]
   paymentAccount        ClubPaymentAccount?
   instagramAccount      ClubInstagramAccount?
+  availabilityStory     ClubAvailabilityStory?
   facebookPage          ClubFacebookPage?
   tiktokAccount         ClubTiktokAccount?
   invoicingAccount      ClubInvoicingAccount?
@@ -2281,6 +2282,31 @@ model ClubInstagramAccount {
   lastPublishedAt      DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+/// Estado de turnos libres: imagen diaria con las canchas libres de hoy y mañana.
+model ClubAvailabilityStory {
+  id              String    @id @default(cuid())
+  companyId       String
+  clubId          String    @unique
+  /// Avisar cada mañana para compartirla como estado de WhatsApp (se comparte desde el celular).
+  whatsapp        Boolean   @default(false)
+  /// Publicarla sola como historia en el Instagram conectado del club.
+  instagram       Boolean   @default(false)
+  /// Canchas que se muestran (vacío = las que se alquilan).
+  facilityIds     String[]  @default([])
+  /// Cómo reservar: teléfono, WhatsApp o link (pie de la imagen).
+  contact         String?
+  /// Último día (zona del club) en que corrió el envío automático.
+  lastRunDate     String?
+  lastInstagramAt DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 

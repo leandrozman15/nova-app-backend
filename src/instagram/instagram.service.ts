@@ -177,4 +177,14 @@ export class InstagramService {
     });
     return { mediaId };
   }
+
+  /** Publica una historia con una imagen generada por la app (URL propia del servidor). */
+  async publishStory(companyId: string, clubId: string, url: string) {
+    this.assertConfigured();
+    await this.requireClub(companyId, clubId);
+    const { token, igUserId, id } = await this.token(clubId, companyId);
+    const { mediaId } = await this.ig.publish(igUserId, token, { kind: 'story', url, caption: '' });
+    await this.prisma.clubInstagramAccount.update({ where: { id }, data: { lastPublishedAt: new Date() } });
+    return { mediaId };
+  }
 }

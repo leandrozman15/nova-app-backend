@@ -141,10 +141,15 @@ export class InstagramClient {
   async publish(
     igUserId: string,
     token: string,
-    media: { kind: 'image' | 'video'; url: string; caption: string },
+    media: { kind: 'image' | 'video' | 'story'; url: string; caption: string },
   ): Promise<{ mediaId: string }> {
-    const params: Record<string, string> = { caption: media.caption };
-    if (media.kind === 'image') params.image_url = media.url;
+    const params: Record<string, string> =
+      media.kind === 'story' ? {} : { caption: media.caption };
+    if (media.kind === 'story') {
+      // Historia con imagen (las historias no llevan texto: el texto va dibujado).
+      params.media_type = 'STORIES';
+      params.image_url = media.url;
+    } else if (media.kind === 'image') params.image_url = media.url;
     else {
       params.media_type = 'REELS';
       params.video_url = media.url;
