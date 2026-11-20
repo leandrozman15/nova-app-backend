@@ -286,7 +286,7 @@ export class AvailabilityStoryService {
       {
         title: 'Turnos libres de hoy',
         body: 'Tu estado de WhatsApp está listo: tocá para compartirlo.',
-        url: `/dashboard/clubs/${clubId}/facilities?estado=1`,
+        url: `/dashboard/clubs/${clubId}/facilities/rentals?estado=1`,
         tag: `estado-${clubId}`,
       },
     );
