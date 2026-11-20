@@ -6,6 +6,7 @@ import type { BookingStatus } from '@prisma/client';
 import { ActivitiesService } from '../activities/activities.service';
 import { computeTimes, nowMinuteIn, todayIn } from '../bookings/booking-time';
 import { ensureOccurrences } from '../bookings/fixed-turns';
+import { displayWhatsapp } from '../clubs/whatsapp';
 import { InstagramService } from '../instagram/instagram.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
@@ -36,6 +37,13 @@ export function validStorySignature(clubId: string, date: string, sig: string) {
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Pie de las imágenes: el WhatsApp del club; si no hay, el teléfono. */
+export function defaultContact(club: { whatsapp?: string | null; phone?: string | null }) {
+  const wa = displayWhatsapp(club.whatsapp);
+  if (wa) return `WhatsApp ${wa}`;
+  return club.phone ? `Tel. ${club.phone}` : null;
 }
 
 export type ActivityStoryInput = {
@@ -73,6 +81,7 @@ export class AvailabilityStoryService {
         logoUrl: true,
         coverUrl: true,
         phone: true,
+        whatsapp: true,
         timezone: true,
         openMinute: true,
         closeMinute: true,
@@ -154,7 +163,7 @@ export class AvailabilityStoryService {
       clubName: club.name,
       logo,
       cover: coverData,
-      contact: club.availabilityStory?.contact || (club.phone ? `Tel. ${club.phone}` : null),
+      contact: club.availabilityStory?.contact || defaultContact(club),
       days,
     };
   }
@@ -170,7 +179,7 @@ export class AvailabilityStoryService {
       instagram: s?.instagram ?? false,
       facilityIds: s?.facilityIds ?? [],
       contact: s?.contact ?? '',
-      defaultContact: club.phone ? `Tel. ${club.phone}` : '',
+      defaultContact: defaultContact(club) ?? '',
       lastRunDate: s?.lastRunDate ?? null,
       lastInstagramAt: s?.lastInstagramAt ?? null,
       lastError: s?.lastError ?? null,
@@ -178,7 +187,7 @@ export class AvailabilityStoryService {
       instagramUsername: club.instagramAccount?.username ?? null,
       facilities: club.facilities.map((f) => ({ id: f.id, name: f.name, bookable: f.bookable })),
       days,
-      caption: storyCaption({ clubName: club.name, days, contact: s?.contact || (club.phone ? `Tel. ${club.phone}` : null) }),
+      caption: storyCaption({ clubName: club.name, days, contact: s?.contact || defaultContact(club) }),
     };
   }
 
@@ -345,7 +354,7 @@ export class AvailabilityStoryService {
     const source = (await this.activitySources(companyId, clubId)).find((s) => s.id === input.activityId);
     if (!source) throw new NotFoundException('Actividad no encontrada');
     const groups = activityStoryGroups(source, input.groups);
-    const contact = input.contact?.trim() || club.availabilityStory?.contact || (club.phone ? `Tel. ${club.phone}` : null);
+    const contact = input.contact?.trim() || club.availabilityStory?.contact || defaultContact(club);
     const [logo, cover] = await Promise.all([this.embed(club.logoUrl), this.embed(club.coverUrl)]);
     const data = {
       clubName: club.name,
