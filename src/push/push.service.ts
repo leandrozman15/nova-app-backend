@@ -86,4 +86,30 @@ export class PushService {
     this.logger.log(`Push club=${clubId} devices=${tokens.length} sent=${sent} failed=${failed} removed=${dead.length}`);
     return { devices: tokens.length, sent, failed };
   }
+
+  /** Aviso a usuarios puntuales (por ejemplo, la dirección del club). */
+  async notifyUsers(uids: string[], msg: { title: string; body: string; url: string; tag: string }) {
+    const unique = [...new Set(uids.filter(Boolean))];
+    if (unique.length === 0) return { devices: 0, sent: 0, failed: 0 };
+    const devices = await this.prisma.pushDevice.findMany({ where: { firebaseUid: { in: unique } }, select: { token: true } });
+    const tokens: string[] = [...new Set(devices.map((d) => String(d.token)))];
+    if (tokens.length === 0) return { devices: 0, sent: 0, failed: 0 };
+    let sent = 0;
+    let failed = 0;
+    const dead: string[] = [];
+    for (const batch of chunk(tokens)) {
+      const res = await getMessaging().sendEachForMulticast({
+        tokens: batch,
+        data: { title: msg.title.slice(0, 80), body: msg.body.slice(0, 300), url: msg.url, tag: msg.tag },
+        webpush: { headers: { Urgency: 'high', TTL: String(60 * 60 * 12) } },
+      });
+      sent += res.successCount;
+      failed += res.failureCount;
+      res.responses.forEach((r, i) => {
+        if (!r.success && r.error && DEAD_TOKEN_CODES.has(r.error.code)) dead.push(batch[i]);
+      });
+    }
+    if (dead.length) await this.prisma.pushDevice.deleteMany({ where: { token: { in: dead } } });
+    return { devices: tokens.length, sent, failed };
+  }
 }
