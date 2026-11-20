@@ -98,16 +98,40 @@ export function describeAudience(discipline: Doc) {
   return [gender, ages].filter(Boolean).join(' · ') || null;
 }
 
-/** Horario semanal de un plantel (trainingDays + trainingStart/EndTime). */
+/**
+ * Horario semanal de un plantel. Usa `trainingSchedule` (un horario por día)
+ * y, si no está, el formato anterior (trainingDays + trainingStart/EndTime).
+ */
 export function teamSchedule(team: Doc) {
+  const valid = (start: string | null, end: string | null) =>
+    Boolean(start && end && TIME.test(start) && TIME.test(end) && end > start);
+  if (Array.isArray(team.trainingSchedule) && team.trainingSchedule.length) {
+    const seen = new Set<string>();
+    return team.trainingSchedule
+      .map((slot: unknown) => {
+        const s = (slot ?? {}) as Record<string, unknown>;
+        const day = dayIndex(s.day);
+        const start = text(s.start, 5);
+        const end = text(s.end, 5);
+        if (day === null || !valid(start, end)) return null;
+        return { day, start: start as string, end: end as string };
+      })
+      .filter((slot): slot is { day: number; start: string; end: string } => {
+        if (!slot) return false;
+        const key = `${slot.day}|${slot.start}|${slot.end}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
+  }
   const start = text(team.trainingStartTime, 5);
   const end = text(team.trainingEndTime, 5);
-  if (!start || !end || !TIME.test(start) || !TIME.test(end) || end <= start)
-    return [];
+  if (!valid(start, end)) return [];
   const days = Array.isArray(team.trainingDays) ? team.trainingDays : [];
   return [...new Set(days.map(dayIndex).filter((day) => day !== null))]
     .sort((a, b) => a - b)
-    .map((day) => ({ day, start, end }));
+    .map((day) => ({ day, start: start as string, end: end as string }));
 }
 
 /** Arma la actividad pública de una disciplina con los planteles de su deporte. */

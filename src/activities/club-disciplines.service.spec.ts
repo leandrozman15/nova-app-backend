@@ -40,6 +40,24 @@ describe('club disciplines (Firestore → app)', () => {
     ).toEqual([]);
   });
 
+  it('uses a different time for each day when the squad has one', () => {
+    expect(
+      teamSchedule({
+        trainingDays: ['Lun', 'Mié'],
+        trainingStartTime: '17:00',
+        trainingEndTime: '18:00',
+        trainingSchedule: [
+          { day: 'Mié', start: '20:00', end: '21:00' },
+          { day: 'Lun', start: '17:00', end: '18:00' },
+          { day: 'Vie', start: '19:00', end: '18:00' },
+        ],
+      }),
+    ).toEqual([
+      { day: 0, start: '17:00', end: '18:00' },
+      { day: 2, start: '20:00', end: '21:00' },
+    ]);
+  });
+
   it('maps a discipline with its squads, hiding coaches unless allowed', () => {
     const discipline = {
       customName: 'Hockey',
