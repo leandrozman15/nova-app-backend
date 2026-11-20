@@ -13,6 +13,15 @@ import { requireClubScope, requireCompanyId } from '../common/http/request-conte
 import { RequiresPack } from '../subscriptions/plan-entitlements';
 import { AvailabilityStoryService } from './availability-story.service';
 
+export class ActivityStoryDto {
+  @IsString() @MaxLength(80) activityId!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) groups?: string[];
+  @IsOptional() @IsString() @MaxLength(60) title?: string;
+  @IsOptional() @IsString() @MaxLength(40) highlight?: string | null;
+  @IsOptional() @IsBoolean() showPrice?: boolean;
+  @IsOptional() @IsString() @MaxLength(60) contact?: string | null;
+}
+
 export class StorySettingsDto {
   @IsOptional() @IsBoolean() whatsapp?: boolean;
   @IsOptional() @IsBoolean() instagram?: boolean;
@@ -48,6 +57,27 @@ export class AvailabilityStoryController {
     return this.service.image(this.scope(req, clubId), clubId);
   }
 
+  /** Actividades y disciplinas para armar historias de inscripciones. */
+  @Get('activities')
+  activities(@Req() req: unknown, @Param('clubId') clubId: string) {
+    return this.service.activitySources(this.scope(req, clubId), clubId);
+  }
+
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Post('activity/image')
+  activityImage(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ActivityStoryDto) {
+    return this.service.activityImage(this.scope(req, clubId), clubId, dto);
+  }
+
+  @RequiresPack('integrations')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('activity/instagram')
+  activityInstagram(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ActivityStoryDto) {
+    return this.service.publishActivityInstagram(this.scope(req, clubId), clubId, dto);
+  }
+
   @RequiresPack('integrations')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -65,6 +95,15 @@ export class AvailabilityStoryController {
 @Controller('public/availability-story')
 export class AvailabilityStoryImageController {
   constructor(private readonly service: AvailabilityStoryService) {}
+
+  @Get('tmp/:file')
+  temp(@Param('file') file: string, @Res() res: Response) {
+    const jpeg = this.service.tempImage(file.replace(/\.jpe?g$/i, ''));
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=600');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.send(jpeg);
+  }
 
   @Get(':clubId/:file')
   async image(@Param('clubId') clubId: string, @Param('file') file: string, @Query('sig') sig: string | undefined, @Res() res: Response) {

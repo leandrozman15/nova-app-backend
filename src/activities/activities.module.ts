@@ -20,5 +20,6 @@ import { DocStoreModule } from '../docstore/docstore.module';
     MyInquiriesController,
   ],
   providers: [ActivitiesService, ClubDisciplinesService],
+  exports: [ActivitiesService],
 })
 export class ActivitiesModule {}
