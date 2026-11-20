@@ -6,6 +6,7 @@ import { InvoicingService } from '../invoicing/invoicing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
+import { feeReference, feeTreasuryEntry, type FeeForTreasury } from './fee-treasury';
 
 /** El vencimiento se guarda al mediodía UTC para que no cambie de día según la zona horaria. */
 export function toDueDate(value?: string): Date | undefined {
@@ -124,6 +125,7 @@ export class PlayerPaymentsService {
         player: true,
       },
     });
+    await this.syncTreasury(created);
     if (created.status === PaymentStatus.paid) {
       void this.emails?.notifyReceipt(created.id);
       void this.invoicing?.issueForPayment(created.id);
@@ -156,11 +158,46 @@ export class PlayerPaymentsService {
         player: true,
       },
     });
+    await this.syncTreasury(updated);
     if (nextStatus === PaymentStatus.paid && current.status !== PaymentStatus.paid) {
       void this.emails?.notifyReceipt(updated.id);
       void this.invoicing?.issueForPayment(updated.id);
     }
     return updated;
+  }
+
+  /**
+   * Deja la caja igual que la cuota: cobrada → un ingreso fee:<id> (con el monto
+   * y la fecha actuales); pendiente o anulada → sin ingreso.
+   */
+  private async syncTreasury(fee: FeeForTreasury) {
+    const reference = feeReference(fee.id);
+    const entry = feeTreasuryEntry(fee);
+    if (!entry) {
+      await this.prisma.financialTransaction.deleteMany({
+        where: { companyId: fee.companyId, reference },
+      });
+      return;
+    }
+    const existing = await this.prisma.financialTransaction.findFirst({
+      where: { companyId: fee.companyId, reference },
+      select: { id: true },
+    });
+    if (existing) {
+      await this.prisma.financialTransaction.update({
+        where: { id: existing.id },
+        data: {
+          amount: entry.amount,
+          occurredAt: entry.occurredAt,
+          description: entry.description,
+        },
+      });
+      return;
+    }
+    await this.prisma.financialTransaction.createMany({
+      data: [entry],
+      skipDuplicates: true,
+    });
   }
 
   private async ensurePlayer(
