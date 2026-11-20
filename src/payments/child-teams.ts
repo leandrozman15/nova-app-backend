@@ -61,6 +61,16 @@ export async function loadChildTeams(
         : [],
       trainingStartTime: str(d.trainingStartTime) || null,
       trainingEndTime: str(d.trainingEndTime) || null,
+      trainingSchedule: Array.isArray(d.trainingSchedule)
+        ? d.trainingSchedule
+            .map((x) => (x ?? {}) as Record<string, unknown>)
+            .filter((x) => str(x.day) && str(x.start))
+            .map((x) => ({
+              day: str(x.day),
+              start: str(x.start),
+              end: str(x.end) || null,
+            }))
+        : [],
       mainVenue: str(d.mainVenue) || null,
     };
   };
