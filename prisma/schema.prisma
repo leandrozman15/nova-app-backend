@@ -270,6 +270,10 @@ model Club {
   email            String?
   billingEmail     String?
   website          String?
+  /// WhatsApp del club como lo usa wa.me (dígitos con país: 5491130464848).
+  whatsapp         String?
+  /// Mostrar el botón de WhatsApp en la app pública (ficha, reservas, actividades).
+  whatsappPublic   Boolean  @default(true)
   instagram        String?
   facebook         String?
   logoUrl          String?

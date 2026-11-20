@@ -98,6 +98,15 @@ export class UpdateClubDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  whatsapp?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  whatsappPublic?: boolean;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   instagram?: string;
 

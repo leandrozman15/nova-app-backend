@@ -50,6 +50,8 @@ const CLUB_DETAIL_SELECT = {
   website: true,
   instagram: true,
   facebook: true,
+  whatsapp: true,
+  whatsappPublic: true,
   depositPercent: true,
   bookingMode: true,
   requireDeposit: true,
@@ -244,8 +246,15 @@ export class PublicService {
           select: { services: true },
         })
       : [];
-    const { paymentAccount, amenities, requireDeposit, depositAlias, ...rest } =
-      club;
+    const {
+      paymentAccount,
+      amenities,
+      requireDeposit,
+      depositAlias,
+      whatsapp,
+      whatsappPublic,
+      ...rest
+    } = club;
     const mode = club.publicFacilities
       ? effectiveBookingMode({ bookingMode: club.bookingMode, paymentAccount })
       : 'off';
@@ -257,6 +266,8 @@ export class PublicService {
     return {
       ...toCard(rest),
       facilitiesCount: facilities.length,
+      // El club decide si su WhatsApp se ve en la app pública.
+      whatsapp: whatsappPublic ? whatsapp : null,
       // Servicios del club + los cargados en sus canchas (sin duplicados, orden del catálogo).
       amenities: mergeAmenities(
         amenities,

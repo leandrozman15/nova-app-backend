@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,18 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClubDto } from './dto/create-club.dto';
 import { UpdateClubDto } from './dto/update-club.dto';
+import { normalizeWhatsapp } from './whatsapp';
+
+/** Vacío borra el número; si no se puede armar un WhatsApp válido, se avisa. */
+function whatsappOrThrow(value: string) {
+  if (!value.trim()) return null;
+  const number = normalizeWhatsapp(value);
+  if (!number)
+    throw new BadRequestException(
+      'El WhatsApp no parece válido. Escribilo con código de área, por ejemplo 11 3046-4848.',
+    );
+  return number;
+}
 
 @Injectable()
 export class ClubsService {
@@ -169,6 +182,8 @@ export class ClubsService {
         billingEmail: dto.billingEmail,
         website: dto.website,
         instagram: dto.instagram,
+        ...(dto.whatsapp === undefined ? {} : { whatsapp: whatsappOrThrow(dto.whatsapp) }),
+        whatsappPublic: dto.whatsappPublic,
         facebook: dto.facebook,
         logoUrl,
         description: dto.description,
