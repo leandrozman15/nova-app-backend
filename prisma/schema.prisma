@@ -1075,6 +1075,10 @@ model Booking {
   holdExpiresAt DateTime
   contactName   String?
   contactPhone  String?
+  /// Recordatorio push enviado al que reservó desde la app (unas 3 horas antes).
+  reminderPushAt     DateTime?
+  /// Recordatorio por WhatsApp enviado desde la consola (lo marca quien lo manda).
+  whatsappRemindedAt DateTime?
   // Mercado Pago
   mpPreferenceId  String?
   mpPaymentId     String?
@@ -1097,6 +1101,7 @@ model Booking {
   @@index([userId, createdAt])
   @@index([status, holdExpiresAt])
   @@index([mpPaymentId])
+  @@index([startsAt])
 }
 
 /// Cuenta de Mercado Pago del club conectada por OAuth. Los tokens se guardan
