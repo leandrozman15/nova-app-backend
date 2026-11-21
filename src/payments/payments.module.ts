@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AgendaController } from '../bookings/agenda.controller';
 import { AgendaService } from '../bookings/agenda.service';
+import { PushModule } from '../push/push.module';
 import { BookingsService } from '../bookings/bookings.service';
 import {
   ClubBookingsController,
@@ -21,6 +22,7 @@ import {
 
 /** Cobros online por Mercado Pago (señas de reservas y cuotas de socio) en la cuenta propia de cada club. */
 @Module({
+  imports: [PushModule],
   controllers: [
     PublicSlotsController,
     MyBookingsController,

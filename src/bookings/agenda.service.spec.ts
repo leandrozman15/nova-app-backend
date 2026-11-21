@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 
 import { AgendaService, previousMonth } from './agenda.service';
+
+jest.mock('../push/push.service', () => ({ PushService: class {} }));
 import { occurrenceDates } from './fixed-turns';
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -103,6 +105,11 @@ function setup() {
       deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
     },
     financialTransaction: { create: jest.fn() },
+    coachLesson: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+    },
     $executeRaw: jest.fn().mockResolvedValue(0),
   };
   const bookings: any = {
@@ -259,6 +266,106 @@ describe('AgendaService', () => {
     });
     expect(result.total.noShows).toBe(1);
     expect(result.previous.month).toBe('2026-08');
+  });
+
+  it('shows the coach and the students on a class turn of the grid', async () => {
+    const { prisma, service } = setup();
+    prisma.booking.findMany.mockResolvedValue([
+      row({
+        id: 'b9',
+        kind: 'CLASE',
+        source: 'COACH',
+        contactName: 'Clase · Profe Demo',
+      }),
+      row({ id: 'b2', startMinute: 1140 }),
+    ]);
+    prisma.coachLesson = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'l1',
+          bookingId: 'b9',
+          format: 'GROUP',
+          capacity: 4,
+          openToJoin: true,
+          status: 'CONFIRMED',
+          classType: { name: 'Grupal iniciación' },
+          coach: {
+            displayName: 'Profe Demo',
+            slug: 'profe-demo',
+            whatsapp: null,
+          },
+          participants: [
+            {
+              status: 'CONFIRMED',
+              partnerName: null,
+              student: { name: 'Alumna Demo', level: '6ta' },
+            },
+            {
+              status: 'REQUESTED',
+              partnerName: null,
+              student: { name: 'Alumno Demo', level: null },
+            },
+          ],
+        },
+      ]),
+    };
+    const result = await service.agenda(
+      'co1',
+      'c1',
+      '2026-10-20',
+      '2026-10-20',
+    );
+    expect(prisma.coachLesson.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { bookingId: { in: ['b9'] } } }),
+    );
+    const turn = result.bookings.find((b) => b.id === 'b9')!;
+    expect(turn.coachClass).toMatchObject({
+      coachName: 'Profe Demo',
+      className: 'Grupal iniciación',
+      spotsLeft: 3,
+      students: [
+        { name: 'Alumna Demo', pending: false },
+        { name: 'Alumno Demo', pending: true },
+      ],
+    });
+    expect(result.bookings.find((b) => b.id === 'b2')!.coachClass).toBeNull();
+  });
+
+  it('releasing a class turn leaves the lesson without court and tells the coach', async () => {
+    const { prisma, bookings } = setup();
+    const push = { notifyUsers: jest.fn().mockResolvedValue({}) };
+    const service = new AgendaService(prisma, bookings, push as any);
+    prisma.booking.findFirst.mockResolvedValue({
+      id: 'b9',
+      depositPaidAt: null,
+      recurringId: null,
+    });
+    prisma.coachLesson = {
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'l1',
+        date: '2026-11-25',
+        startMinute: 1140,
+        clubId: 'c1',
+        coach: { userId: 'u1' },
+      }),
+      update: jest.fn(),
+    };
+    prisma.user = {
+      findUnique: jest.fn().mockResolvedValue({ firebaseUid: 'fb1' }),
+    };
+    prisma.club.findUnique.mockResolvedValue({ name: 'Club Demo' });
+    await service.release('co1', 'c1', 'b9', 'Mantenimiento');
+    expect(prisma.coachLesson.update).toHaveBeenCalledWith({
+      where: { id: 'l1' },
+      data: { bookingId: null, facilityId: null },
+    });
+    expect(push.notifyUsers).toHaveBeenCalledWith(
+      ['fb1'],
+      expect.objectContaining({
+        title: 'Club Demo liberó la cancha de tu clase',
+        url: '/explorar/profe',
+      }),
+    );
   });
 
   it('lists the dates of a fixed turn inside its validity', () => {
