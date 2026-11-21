@@ -240,7 +240,14 @@ export class CoachCoreService {
     const rows = await this.prisma.facility.findMany({
       where: { clubId: { in: clubIds } },
       orderBy: { name: 'asc' },
-      select: { id: true, clubId: true, sport: true, bookable: true },
+      select: {
+        id: true,
+        clubId: true,
+        sport: true,
+        type: true,
+        typeLabel: true,
+        name: true,
+      },
     });
     for (const clubId of clubIds)
       out.set(clubId, padelCourts(rows.filter((f) => f.clubId === clubId)));

@@ -26,6 +26,7 @@ import {
   capacityFor,
   cleanSkills,
   CLUB_STAFF_ROLES,
+  padelCourts,
   packToUse,
   slotStillFree,
   slugify,
@@ -287,7 +288,14 @@ export class CoachPortalService {
             openMinute: true,
             closeMinute: true,
             facilities: {
-              select: { id: true, name: true, sport: true, bookable: true },
+              select: {
+                id: true,
+                name: true,
+                sport: true,
+                type: true,
+                typeLabel: true,
+                bookable: true,
+              },
               orderBy: { name: 'asc' },
             },
           },
@@ -305,7 +313,12 @@ export class CoachPortalService {
       openMinute: l.club.openMinute ?? 480,
       closeMinute: l.club.closeMinute ?? 1380,
       // Las canchas solo se muestran con el vínculo aprobado.
-      facilities: l.status === 'ACTIVE' ? l.club.facilities : [],
+      facilities:
+        l.status === 'ACTIVE'
+          ? l.club.facilities.filter((f) =>
+              padelCourts(l.club.facilities).includes(f.id),
+            )
+          : [],
     }));
   }
 
@@ -906,9 +919,15 @@ export class CoachPortalService {
     await ensureOccurrences(this.prisma, clubId, date, date);
     const [facilities, bookings, lessons, windows] = await Promise.all([
       this.prisma.facility.findMany({
-        where: { clubId, bookable: true },
+        where: { clubId },
         orderBy: { name: 'asc' },
-        select: { id: true, name: true, sport: true, typeLabel: true },
+        select: {
+          id: true,
+          name: true,
+          sport: true,
+          type: true,
+          typeLabel: true,
+        },
       }),
       this.prisma.booking.findMany({
         where: {
@@ -946,6 +965,16 @@ export class CoachPortalService {
     const mine = new Set(
       lessons.map((l) => l.bookingId).filter((x): x is string => Boolean(x)),
     );
+    // Solo las canchas de pádel del club (no las de fútbol, tenis, etc.).
+    const courtIds = new Set(padelCourts(facilities));
+    const courts = facilities
+      .filter((f) => courtIds.has(f.id))
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        sport: f.sport,
+        typeLabel: f.typeLabel,
+      }));
     return {
       date,
       today: todayIn(club.timezone),
@@ -955,10 +984,10 @@ export class CoachPortalService {
         openMinute: club.openMinute ?? 480,
         closeMinute: club.closeMinute ?? 1380,
       },
-      facilities,
+      facilities: courts,
       // Ocupado por otros: solo el horario y el tipo, nunca el nombre del cliente.
       busy: bookings
-        .filter((b) => !mine.has(b.id))
+        .filter((b) => !mine.has(b.id) && courtIds.has(b.facilityId))
         .map((b) => ({
           facilityId: b.facilityId,
           startMinute: b.startMinute,
