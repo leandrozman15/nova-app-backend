@@ -289,16 +289,14 @@ describe('profes: portal de pádel del entrenador del club', () => {
         baseLesson({ status: 'CONFIRMED', bookingId: 'b1' }),
       ]);
     prisma.coachAvailability = {
-      findMany: jest
-        .fn()
-        .mockResolvedValue([
-          {
-            startMinute: 960,
-            endMinute: 1320,
-            clubId: 'club1',
-            facilityId: 'f1',
-          },
-        ]),
+      findMany: jest.fn().mockResolvedValue([
+        {
+          startMinute: 960,
+          endMinute: 1320,
+          clubId: 'club1',
+          facilityId: 'f1',
+        },
+      ]),
     };
     const day = await portal.courts('fb-coach', 'club1', '2026-12-01');
     expect(day.busy).toEqual([
