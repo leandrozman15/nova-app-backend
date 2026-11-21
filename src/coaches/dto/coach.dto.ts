@@ -223,3 +223,12 @@ export class StaffPadelDto {
 export class StaffPublicDto {
   @IsBoolean() isPublic!: boolean;
 }
+
+export class StudentAthleteDto {
+  @IsString() @MaxLength(60) clubId!: string;
+  @IsString() @MaxLength(120) email!: string;
+  @IsOptional() @IsString() @MaxLength(60) firstName?: string | null;
+  @IsOptional() @IsString() @MaxLength(60) lastName?: string | null;
+  @IsOptional() @IsString() @MaxLength(20) dni?: string | null;
+  @IsOptional() @Matches(DATE) birthDate?: string | null;
+}

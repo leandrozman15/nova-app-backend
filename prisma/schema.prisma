@@ -2651,6 +2651,8 @@ model CoachStudent {
   /// Evaluación técnica por golpe, 1 a 5: { "drive": 3, "bandeja": 2, ... }.
   skills    Json?
   skillsUpdatedAt DateTime?
+  /// Ficha del padrón del club (atleta de pádel con usuario: carnet, buffet, cuotas y su progreso).
+  playerId  String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2664,6 +2666,7 @@ model CoachStudent {
 
   @@unique([coachId, userId])
   @@index([coachId, active])
+  @@index([playerId])
 }
 
 /// Clase agendada (solicitada por un alumno o armada por el profe).

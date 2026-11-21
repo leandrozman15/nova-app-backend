@@ -21,6 +21,7 @@ import {
   requireCompanyId,
 } from '../common/http/request-context';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
+import { CoachAthleteService } from './coach-athlete.service';
 import { CoachClubService } from './coach-club.service';
 import { CoachPortalService } from './coach-portal.service';
 import { CoachPublicService } from './coach-public.service';
@@ -34,6 +35,7 @@ import {
   CreateLessonDto,
   JoinLessonDto,
   StaffPadelDto,
+  StudentAthleteDto,
   StaffPublicDto,
   LessonRequestDto,
   NoteDto,
@@ -57,7 +59,10 @@ function uid(req: unknown) {
 @Throttle({ default: { limit: 120, ttl: 60_000 } })
 @Controller('coach-portal')
 export class CoachPortalController {
-  constructor(private readonly portal: CoachPortalService) {}
+  constructor(
+    private readonly portal: CoachPortalService,
+    private readonly athletes: CoachAthleteService,
+  ) {}
 
   @Get('me')
   me(@Req() req: unknown) {
@@ -233,6 +238,15 @@ export class CoachPortalController {
     return this.portal.student(uid(req), id);
   }
 
+  @Post('students/:id/athlete')
+  createAthlete(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: StudentAthleteDto,
+  ) {
+    return this.athletes.createAthlete(uid(req), id, dto);
+  }
+
   @Put('students/:id')
   updateStudent(
     @Req() req: unknown,
@@ -268,11 +282,20 @@ export class CoachPortalController {
 @Throttle({ default: { limit: 30, ttl: 60_000 } })
 @Controller('users/me/coach-lessons')
 export class MyCoachLessonsController {
-  constructor(private readonly service: CoachPublicService) {}
+  constructor(
+    private readonly service: CoachPublicService,
+    private readonly athletes: CoachAthleteService,
+  ) {}
 
   @Get()
   list(@Req() req: unknown) {
     return this.service.myLessons(uid(req));
+  }
+
+  /** Mi progreso con mis profes (nivel, evaluación, notas, clases y packs). */
+  @Get('progress')
+  progress(@Req() req: unknown) {
+    return this.athletes.myProgress(uid(req));
   }
 
   @Post('request')
