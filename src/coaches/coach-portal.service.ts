@@ -288,7 +288,14 @@ export class CoachPortalService {
             openMinute: true,
             closeMinute: true,
             facilities: {
-              select: { id: true, name: true, sport: true, bookable: true },
+              select: {
+                id: true,
+                name: true,
+                sport: true,
+                type: true,
+                typeLabel: true,
+                bookable: true,
+              },
               orderBy: { name: 'asc' },
             },
           },
@@ -918,8 +925,8 @@ export class CoachPortalService {
           id: true,
           name: true,
           sport: true,
+          type: true,
           typeLabel: true,
-          bookable: true,
         },
       }),
       this.prisma.booking.findMany({
@@ -962,7 +969,12 @@ export class CoachPortalService {
     const courtIds = new Set(padelCourts(facilities));
     const courts = facilities
       .filter((f) => courtIds.has(f.id))
-      .map(({ bookable: _bookable, ...f }) => f);
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        sport: f.sport,
+        typeLabel: f.typeLabel,
+      }));
     return {
       date,
       today: todayIn(club.timezone),

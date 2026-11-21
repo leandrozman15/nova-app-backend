@@ -284,11 +284,27 @@ export const CLUB_STAFF_ROLES = [
   'admin',
 ];
 
-/** Canchas del club para clases de pádel: las de pádel reservables (o todas las reservables si no hay de pádel). */
+/**
+ * Canchas de pádel del club: las marcadas como pádel por deporte, tipo, etiqueta o nombre
+ * (estén o no habilitadas para reservas online). Nunca las de otros deportes.
+ */
 export function padelCourts(
-  facilities: { id: string; sport: string | null; bookable: boolean }[],
+  facilities: {
+    id: string;
+    sport?: string | null;
+    type?: string | null;
+    typeLabel?: string | null;
+    name?: string | null;
+  }[],
 ) {
-  const bookable = facilities.filter((f) => f.bookable);
-  const padel = bookable.filter((f) => /p[aá]del/i.test(f.sport ?? ''));
-  return (padel.length ? padel : bookable).map((f) => f.id);
+  const isPadel = (v?: string | null) => /p[aá]del/i.test(v ?? '');
+  return facilities
+    .filter(
+      (f) =>
+        isPadel(f.sport) ||
+        isPadel(f.type) ||
+        isPadel(f.typeLabel) ||
+        (!f.sport && isPadel(f.name)),
+    )
+    .map((f) => f.id);
 }

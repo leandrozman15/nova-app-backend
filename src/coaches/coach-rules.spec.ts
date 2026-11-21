@@ -187,16 +187,17 @@ describe('franjas en cualquier cancha libre del club', () => {
     ]);
   });
 
-  it('usa las canchas de pádel reservables (o todas si no hay de pádel)', () => {
+  it('usa solo las canchas de pádel (por deporte, tipo, etiqueta o nombre)', () => {
     expect(
       padelCourts([
-        { id: 'a', sport: 'padel', bookable: true },
-        { id: 'b', sport: 'football', bookable: true },
-        { id: 'c', sport: 'padel', bookable: false },
+        { id: 'a', sport: 'padel' },
+        { id: 'b', sport: 'football', name: 'Fútbol 5' },
+        { id: 'c', sport: null, type: 'cancha_padel' },
+        { id: 'd', sport: null, typeLabel: 'Pádel techada' },
+        { id: 'e', sport: null, name: 'Pádel 4' },
+        { id: 'f', sport: 'tennis', name: 'Tenis' },
       ]),
-    ).toEqual(['a']);
-    expect(padelCourts([{ id: 'b', sport: 'tennis', bookable: true }])).toEqual(
-      ['b'],
-    );
+    ).toEqual(['a', 'c', 'd', 'e']);
+    expect(padelCourts([{ id: 'b', sport: 'tennis' }])).toEqual([]);
   });
 });
