@@ -26,6 +26,30 @@ export class PlayersService {
     });
   }
 
+  /** Datos mínimos del plantel (sin DNI, contactos ni datos médicos). */
+  async rosterBasic(companyId: string, clubId: string) {
+    const rows = await this.prisma.player.findMany({
+      where: { companyId, clubId },
+      select: { id: true, clubId: true, firstName: true, lastName: true, teamId: true, active: true, sport: true, divisionId: true, extra: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    });
+    return rows.map((p) => {
+      const extra = (p.extra ?? {}) as Record<string, unknown>;
+      return {
+        id: p.id,
+        clubId: p.clubId,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        teamId: p.teamId,
+        active: p.active,
+        sport: p.sport,
+        divisionId: p.divisionId,
+        // El plantel de la consola vive en extra.teamId.
+        extra: { teamId: typeof extra.teamId === 'string' ? extra.teamId : null },
+      };
+    });
+  }
+
   async getById(companyId: string, id: string) {
     const player = await this.prisma.player.findFirst({
       where: { id, companyId },

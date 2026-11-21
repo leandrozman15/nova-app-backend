@@ -12,7 +12,7 @@ import {
 } from './dto/swimming.dto';
 import { SwimmingService } from './swimming.service';
 
-const ROLES = ['admin', 'manager', 'coordinator', 'coach'] as const;
+const ROLES = ['admin', 'manager', 'club_admin', 'coordinator', 'coach'] as const;
 
 @Controller('swimming')
 export class SwimmingController {
