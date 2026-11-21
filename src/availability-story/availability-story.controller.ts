@@ -1,21 +1,48 @@
 import { timingSafeEqual } from 'node:crypto';
 
-import { Body, Controller, ForbiddenException, Get, Headers, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import type { Response } from 'express';
 
 import { NoTenant } from '../common/decorators/no-tenant.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { requireClubScope, requireCompanyId } from '../common/http/request-context';
+import {
+  requireClubScope,
+  requireCompanyId,
+} from '../common/http/request-context';
 import { RequiresPack } from '../subscriptions/plan-entitlements';
 import { AvailabilityStoryService } from './availability-story.service';
 
 export class ActivityStoryDto {
   @IsString() @MaxLength(80) activityId!: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) groups?: string[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  groups?: string[];
   @IsOptional() @IsString() @MaxLength(60) title?: string;
   @IsOptional() @IsString() @MaxLength(40) highlight?: string | null;
   @IsOptional() @IsBoolean() showPrice?: boolean;
@@ -25,7 +52,12 @@ export class ActivityStoryDto {
 export class StorySettingsDto {
   @IsOptional() @IsBoolean() whatsapp?: boolean;
   @IsOptional() @IsBoolean() instagram?: boolean;
-  @IsOptional() @IsArray() @ArrayMaxSize(40) @IsString({ each: true }) @Type(() => String) facilityIds?: string[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(40)
+  @IsString({ each: true })
+  @Type(() => String)
+  facilityIds?: string[];
   @IsOptional() @IsString() @MaxLength(60) contact?: string | null;
 }
 
@@ -46,7 +78,11 @@ export class AvailabilityStoryController {
   }
 
   @Put()
-  update(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: StorySettingsDto) {
+  update(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Body() dto: StorySettingsDto,
+  ) {
     return this.service.updateSettings(this.scope(req, clubId), clubId, dto);
   }
 
@@ -66,7 +102,11 @@ export class AvailabilityStoryController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post('activity/image')
-  activityImage(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ActivityStoryDto) {
+  activityImage(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Body() dto: ActivityStoryDto,
+  ) {
     return this.service.activityImage(this.scope(req, clubId), clubId, dto);
   }
 
@@ -74,8 +114,16 @@ export class AvailabilityStoryController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('activity/instagram')
-  activityInstagram(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ActivityStoryDto) {
-    return this.service.publishActivityInstagram(this.scope(req, clubId), clubId, dto);
+  activityInstagram(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Body() dto: ActivityStoryDto,
+  ) {
+    return this.service.publishActivityInstagram(
+      this.scope(req, clubId),
+      clubId,
+      dto,
+    );
   }
 
   @RequiresPack('integrations')
@@ -106,7 +154,12 @@ export class AvailabilityStoryImageController {
   }
 
   @Get(':clubId/:file')
-  async image(@Param('clubId') clubId: string, @Param('file') file: string, @Query('sig') sig: string | undefined, @Res() res: Response) {
+  async image(
+    @Param('clubId') clubId: string,
+    @Param('file') file: string,
+    @Query('sig') sig: string | undefined,
+    @Res() res: Response,
+  ) {
     const date = file.replace(/\.jpe?g$/i, '');
     const jpeg = await this.service.publicImage(clubId, date, sig ?? '');
     res.setHeader('Content-Type', 'image/jpeg');
@@ -129,7 +182,8 @@ export class AvailabilityStoryCronController {
     const expected = process.env.CRON_SECRET?.trim();
     const a = Buffer.from(secret ?? '');
     const b = Buffer.from(expected ?? '');
-    if (!expected || a.length !== b.length || !timingSafeEqual(a, b)) throw new ForbiddenException();
+    if (!expected || a.length !== b.length || !timingSafeEqual(a, b))
+      throw new ForbiddenException();
     return this.service.runDaily();
   }
 }

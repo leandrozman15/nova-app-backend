@@ -4,7 +4,11 @@
  */
 import { addDays, minuteLabel, todayIn } from '../bookings/booking-time';
 
-export type Cell = { start: number; end: number; status: 'free' | 'taken' | 'past' };
+export type Cell = {
+  start: number;
+  end: number;
+  status: 'free' | 'taken' | 'past';
+};
 export type Range = { start: number; end: number };
 
 /** Turno mínimo que vale la pena mostrar (minutos). */
@@ -13,7 +17,10 @@ export const MAX_FACILITIES = 6;
 export const MAX_RANGES = 6;
 
 /** Une las franjas libres consecutivas en rangos ("18:00 a 21:00") y descarta los cortos. */
-export function freeRanges(cells: Cell[], minMinutes = MIN_FREE_MINUTES): Range[] {
+export function freeRanges(
+  cells: Cell[],
+  minMinutes = MIN_FREE_MINUTES,
+): Range[] {
   const ranges: Range[] = [];
   for (const c of [...cells].sort((a, b) => a.start - b.start)) {
     if (c.status !== 'free') continue;
@@ -24,9 +31,18 @@ export function freeRanges(cells: Cell[], minMinutes = MIN_FREE_MINUTES): Range[
   return ranges.filter((r) => r.end - r.start >= minMinutes);
 }
 
-export const rangeLabel = (r: Range) => `${minuteLabel(r.start)} a ${minuteLabel(r.end)}`;
+export const rangeLabel = (r: Range) =>
+  `${minuteLabel(r.start)} a ${minuteLabel(r.end)}`;
 
-const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const WEEKDAYS = [
+  'domingo',
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+];
 
 /** "Hoy · viernes 20/11", "Mañana · sábado 21/11". */
 export function dayTitle(date: string, index: number) {
@@ -43,7 +59,11 @@ export function storyDates(timeZone: string, now = new Date()) {
 }
 
 export type StoryFacility = { name: string; ranges: Range[] };
-export type StoryDay = { date: string; title: string; facilities: StoryFacility[] };
+export type StoryDay = {
+  date: string;
+  title: string;
+  facilities: StoryFacility[];
+};
 
 export type StoryData = {
   clubName: string;
@@ -57,20 +77,26 @@ export type StoryData = {
 export function trimStory(days: StoryDay[]): StoryDay[] {
   return days.map((d) => ({
     ...d,
-    facilities: d.facilities.slice(0, MAX_FACILITIES).map((f) => ({ ...f, ranges: f.ranges.slice(0, MAX_RANGES) })),
+    facilities: d.facilities
+      .slice(0, MAX_FACILITIES)
+      .map((f) => ({ ...f, ranges: f.ranges.slice(0, MAX_RANGES) })),
   }));
 }
 
-export const hasFreeTime = (days: StoryDay[]) => days.some((d) => d.facilities.some((f) => f.ranges.length > 0));
+export const hasFreeTime = (days: StoryDay[]) =>
+  days.some((d) => d.facilities.some((f) => f.ranges.length > 0));
 
 /** Texto que acompaña la historia o el aviso. */
-export function storyCaption(data: Pick<StoryData, 'clubName' | 'days' | 'contact'>) {
+export function storyCaption(
+  data: Pick<StoryData, 'clubName' | 'days' | 'contact'>,
+) {
   const lines = [`Turnos libres en ${data.clubName}`];
   for (const d of data.days) {
     const free = d.facilities.filter((f) => f.ranges.length);
     if (!free.length) continue;
     lines.push('', d.title);
-    for (const f of free) lines.push(`${f.name}: ${f.ranges.map(rangeLabel).join(', ')}`);
+    for (const f of free)
+      lines.push(`${f.name}: ${f.ranges.map(rangeLabel).join(', ')}`);
   }
   if (data.contact) lines.push('', `Reservas: ${data.contact}`);
   return lines.join('\n');

@@ -1,6 +1,13 @@
+import sharp from 'sharp';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { BookingStatus } from '@prisma/client';
 
 import { ActivitiesService } from '../activities/activities.service';
@@ -11,9 +18,26 @@ import { InstagramService } from '../instagram/instagram.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { clubEntitlements } from '../subscriptions/plan-entitlements';
-import { activityCaption, activityStoryGroups, priceLabel, type ActivitySource, type Slot } from './activity-story';
+import {
+  activityCaption,
+  activityStoryGroups,
+  coachSource,
+  priceLabel,
+  tournamentSource,
+  type ActivitySource,
+  type Slot,
+} from './activity-story';
 import { renderActivityStoryJpeg, renderStoryJpeg } from './story-render';
-import { dayTitle, freeRanges, hasFreeTime, storyCaption, storyDates, trimStory, type StoryData, type StoryDay } from './story-rules';
+import {
+  dayTitle,
+  freeRanges,
+  hasFreeTime,
+  storyCaption,
+  storyDates,
+  trimStory,
+  type StoryData,
+  type StoryDay,
+} from './story-rules';
 
 const ACTIVE: BookingStatus[] = ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'];
 const ADMIN_ROLES = ['admin', 'club_admin', 'manager'];
@@ -22,13 +46,17 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 /** Clubes por corrida del cron (cada uno arma una imagen y puede publicar). */
 const MAX_PER_RUN = 60;
 
-const publicApiUrl = () => (process.env.PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL).replace(/\/$/, '');
+const publicApiUrl = () =>
+  (process.env.PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL).replace(/\/$/, '');
 
 /** Firma del link público de la imagen (Instagram la descarga desde ahí). */
 export function storySignature(clubId: string, date: string) {
   const key = process.env.PAYMENT_TOKENS_KEY || process.env.CRON_SECRET || '';
   if (!key) return '';
-  return createHmac('sha256', key).update(`story:${clubId}:${date}`).digest('hex').slice(0, 32);
+  return createHmac('sha256', key)
+    .update(`story:${clubId}:${date}`)
+    .digest('hex')
+    .slice(0, 32);
 }
 
 export function validStorySignature(clubId: string, date: string, sig: string) {
@@ -40,7 +68,10 @@ export function validStorySignature(clubId: string, date: string, sig: string) {
 }
 
 /** Pie de las imágenes: el WhatsApp del club; si no hay, el teléfono. */
-export function defaultContact(club: { whatsapp?: string | null; phone?: string | null }) {
+export function defaultContact(club: {
+  whatsapp?: string | null;
+  phone?: string | null;
+}) {
   const wa = displayWhatsapp(club.whatsapp);
   if (wa) return `WhatsApp ${wa}`;
   return club.phone ? `Tel. ${club.phone}` : null;
@@ -55,7 +86,12 @@ export type ActivityStoryInput = {
   contact?: string | null;
 };
 
-export type StorySettingsInput = { whatsapp?: boolean; instagram?: boolean; facilityIds?: string[]; contact?: string | null };
+export type StorySettingsInput = {
+  whatsapp?: boolean;
+  instagram?: boolean;
+  facilityIds?: string[];
+  contact?: string | null;
+};
 
 @Injectable()
 export class AvailabilityStoryService {
@@ -87,7 +123,10 @@ export class AvailabilityStoryService {
         closeMinute: true,
         availabilityStory: true,
         instagramAccount: { select: { username: true } },
-        facilities: { select: { id: true, name: true, bookable: true, photoUrl: true }, orderBy: { name: 'asc' } },
+        facilities: {
+          select: { id: true, name: true, bookable: true, photoUrl: true },
+          orderBy: { name: 'asc' },
+        },
       },
     });
     if (!club) throw new NotFoundException('Club no encontrado');
@@ -95,9 +134,12 @@ export class AvailabilityStoryService {
   }
 
   /** Canchas que entran en el estado: las elegidas, o las que se alquilan, o todas. */
-  private pickFacilities(club: Awaited<ReturnType<AvailabilityStoryService['club']>>) {
+  private pickFacilities(
+    club: Awaited<ReturnType<AvailabilityStoryService['club']>>,
+  ) {
     const chosen = club.availabilityStory?.facilityIds ?? [];
-    if (chosen.length) return club.facilities.filter((f) => chosen.includes(f.id));
+    if (chosen.length)
+      return club.facilities.filter((f) => chosen.includes(f.id));
     const bookable = club.facilities.filter((f) => f.bookable);
     return bookable.length ? bookable : club.facilities;
   }
@@ -107,11 +149,26 @@ export class AvailabilityStoryService {
     const club = await this.club(clubId);
     const facilities = this.pickFacilities(club);
     const dates = storyDates(club.timezone, now);
-    await ensureOccurrences(this.prisma, clubId, dates[0], dates[dates.length - 1]);
+    await ensureOccurrences(
+      this.prisma,
+      clubId,
+      dates[0],
+      dates[dates.length - 1],
+    );
     const bookings = facilities.length
       ? await this.prisma.booking.findMany({
-          where: { clubId, facilityId: { in: facilities.map((f) => f.id) }, date: { in: dates }, status: { in: ACTIVE } },
-          select: { facilityId: true, date: true, startMinute: true, durationMinutes: true },
+          where: {
+            clubId,
+            facilityId: { in: facilities.map((f) => f.id) },
+            date: { in: dates },
+            status: { in: ACTIVE },
+          },
+          select: {
+            facilityId: true,
+            date: true,
+            startMinute: true,
+            durationMinutes: true,
+          },
         })
       : [];
     const today = todayIn(club.timezone, now);
@@ -122,7 +179,13 @@ export class AvailabilityStoryService {
         facilities: facilities.map((f) => {
           const taken = bookings
             .filter((b) => b.facilityId === f.id && b.date === date)
-            .map((b) => [b.startMinute, b.startMinute + b.durationMinutes] as [number, number]);
+            .map(
+              (b) =>
+                [b.startMinute, b.startMinute + b.durationMinutes] as [
+                  number,
+                  number,
+                ],
+            );
           const cells = computeTimes({
             open: club.openMinute,
             close: club.closeMinute,
@@ -136,28 +199,67 @@ export class AvailabilityStoryService {
     );
   }
 
-  /** Imagen como data URI (logo y portada se incrustan; si no se pueden bajar, se omiten). */
-  private async embed(url?: string | null) {
-    if (!url || !/^https:\/\//i.test(url)) return null;
+  /**
+   * Imagen como data URI (logo y portada se incrustan; si no se pueden bajar, se omiten).
+   * Las fotos de la app se guardan en WebP, que el dibujo no lee: se pasan a PNG o JPEG.
+   */
+  private async embed(url?: string | null, maxSide = 1080) {
+    if (!url) return null;
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) return null;
-      const type = (res.headers.get('content-type') || '').split(';')[0].trim();
-      // resvg dibuja PNG, JPEG y GIF; otros formatos (webp) se dejan afuera.
-      if (!/^image\/(png|jpe?g|gif)$/.test(type)) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > MAX_IMAGE_BYTES) return null;
-      return `data:${type};base64,${buf.toString('base64')}`;
+      let buf: Buffer;
+      let type: string;
+      const inline = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(url);
+      if (inline) {
+        type = inline[1].toLowerCase();
+        buf = Buffer.from(inline[2], 'base64');
+      } else if (/^https:\/\//i.test(url)) {
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) return null;
+        type = (res.headers.get('content-type') || '')
+          .split(';')[0]
+          .trim()
+          .toLowerCase();
+        buf = Buffer.from(await res.arrayBuffer());
+      } else return null;
+      if (buf.length > MAX_IMAGE_BYTES * 4) return null;
+      if (
+        /^image\/(png|jpe?g|gif)$/.test(type) &&
+        buf.length <= MAX_IMAGE_BYTES
+      )
+        return `data:${type};base64,${buf.toString('base64')}`;
+      // WebP u otro formato (o muy pesada): se convierte. Con transparencia queda PNG (logos).
+      const image = sharp(buf, { failOn: 'none' })
+        .rotate()
+        .resize({
+          width: maxSide,
+          height: maxSide,
+          fit: 'inside',
+          withoutEnlargement: true,
+        });
+      const meta = await sharp(buf, { failOn: 'none' }).metadata();
+      const out = meta.hasAlpha
+        ? await image.png().toBuffer()
+        : await image.jpeg({ quality: 85 }).toBuffer();
+      if (out.length > MAX_IMAGE_BYTES) return null;
+      return `data:image/${meta.hasAlpha ? 'png' : 'jpeg'};base64,${out.toString('base64')}`;
     } catch {
       return null;
     }
   }
 
-  async storyData(clubId: string, now = new Date()): Promise<StoryData & { date: string }> {
+  async storyData(
+    clubId: string,
+    now = new Date(),
+  ): Promise<StoryData & { date: string }> {
     const club = await this.club(clubId);
     const days = await this.days(clubId, now);
-    const cover = club.coverUrl || this.pickFacilities(club).find((f) => f.photoUrl)?.photoUrl;
-    const [logo, coverData] = await Promise.all([this.embed(club.logoUrl), this.embed(cover)]);
+    const cover =
+      club.coverUrl ||
+      this.pickFacilities(club).find((f) => f.photoUrl)?.photoUrl;
+    const [logo, coverData] = await Promise.all([
+      this.embed(club.logoUrl, 256),
+      this.embed(cover),
+    ]);
     return {
       date: days[0]?.date ?? todayIn(club.timezone, now),
       clubName: club.name,
@@ -185,22 +287,44 @@ export class AvailabilityStoryService {
       lastError: s?.lastError ?? null,
       instagramConnected: Boolean(club.instagramAccount),
       instagramUsername: club.instagramAccount?.username ?? null,
-      facilities: club.facilities.map((f) => ({ id: f.id, name: f.name, bookable: f.bookable })),
+      facilities: club.facilities.map((f) => ({
+        id: f.id,
+        name: f.name,
+        bookable: f.bookable,
+      })),
       days,
-      caption: storyCaption({ clubName: club.name, days, contact: s?.contact || defaultContact(club) }),
+      caption: storyCaption({
+        clubName: club.name,
+        days,
+        contact: s?.contact || defaultContact(club),
+      }),
     };
   }
 
-  async updateSettings(companyId: string, clubId: string, input: StorySettingsInput) {
+  async updateSettings(
+    companyId: string,
+    clubId: string,
+    input: StorySettingsInput,
+  ) {
     const club = await this.club(clubId, companyId);
     if (input.instagram && !club.instagramAccount)
-      throw new ConflictException('Primero conectá el Instagram del club en Integraciones.');
+      throw new ConflictException(
+        'Primero conectá el Instagram del club en Integraciones.',
+      );
     if (input.instagram) {
       const ent = await clubEntitlements(this.prisma, clubId);
-      if (!ent.integrations) throw new ConflictException('La historia automática de Instagram es parte del pack de Integraciones.');
+      if (!ent.integrations)
+        throw new ConflictException(
+          'La historia automática de Instagram es parte del pack de Integraciones.',
+        );
     }
-    const facilityIds = input.facilityIds?.filter((id) => club.facilities.some((f) => f.id === id));
-    const contact = input.contact === undefined ? undefined : input.contact?.trim().slice(0, 60) || null;
+    const facilityIds = input.facilityIds?.filter((id) =>
+      club.facilities.some((f) => f.id === id),
+    );
+    const contact =
+      input.contact === undefined
+        ? undefined
+        : input.contact?.trim().slice(0, 60) || null;
     const data = {
       ...(input.whatsapp === undefined ? {} : { whatsapp: input.whatsapp }),
       ...(input.instagram === undefined ? {} : { instagram: input.instagram }),
@@ -230,7 +354,11 @@ export class AvailabilityStoryService {
 
   /** Imagen pública firmada (la descarga Instagram para publicar la historia). */
   async publicImage(clubId: string, date: string, sig: string) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !validStorySignature(clubId, date, sig)) throw new NotFoundException();
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !validStorySignature(clubId, date, sig)
+    )
+      throw new NotFoundException();
     const data = await this.storyData(clubId);
     if (data.date !== date) throw new NotFoundException();
     return renderStoryJpeg(data);
@@ -238,15 +366,30 @@ export class AvailabilityStoryService {
 
   async publishInstagram(companyId: string, clubId: string) {
     const club = await this.club(clubId, companyId);
-    if (!club.instagramAccount) throw new ConflictException('Primero conectá el Instagram del club en Integraciones.');
+    if (!club.instagramAccount)
+      throw new ConflictException(
+        'Primero conectá el Instagram del club en Integraciones.',
+      );
     const date = todayIn(club.timezone);
     const sig = storySignature(clubId, date);
-    if (!sig) throw new BadRequestException('Falta configurar la clave del servidor para publicar.');
+    if (!sig)
+      throw new BadRequestException(
+        'Falta configurar la clave del servidor para publicar.',
+      );
     const url = `${publicApiUrl()}/public/availability-story/${encodeURIComponent(clubId)}/${date}.jpg?sig=${sig}`;
-    const { mediaId } = await this.instagram.publishStory(companyId, clubId, url);
+    const { mediaId } = await this.instagram.publishStory(
+      companyId,
+      clubId,
+      url,
+    );
     await this.prisma.clubAvailabilityStory.upsert({
       where: { clubId },
-      create: { companyId, clubId, lastInstagramAt: new Date(), lastError: null },
+      create: {
+        companyId,
+        clubId,
+        lastInstagramAt: new Date(),
+        lastError: null,
+      },
       update: { lastInstagramAt: new Date(), lastError: null },
     });
     return { mediaId };
@@ -295,7 +438,8 @@ export class AvailabilityStoryService {
         where: { id: row.id },
         data: { lastRunDate: today, lastError: error },
       });
-      if (error) this.logger.warn(`Estado turnos libres club=${row.clubId}: ${error}`);
+      if (error)
+        this.logger.warn(`Estado turnos libres club=${row.clubId}: ${error}`);
     }
     return { clubs: done, instagram, notified, skipped };
   }
@@ -319,9 +463,26 @@ export class AvailabilityStoryService {
 
   // ─── Historias de actividades e inscripciones ─────────────────────────────
 
-  /** Disciplinas (con sus categorías) y actividades sueltas del club, listas para elegir. */
-  async activitySources(companyId: string, clubId: string): Promise<(ActivitySource & { kind: 'discipline' | 'activity'; audience: string | null; showPrice: boolean })[]> {
-    const { disciplines, activities } = await this.activities.list(companyId, clubId);
+  /**
+   * Fuentes para armar historias: disciplinas (con sus categorías), actividades sueltas,
+   * campeonatos con inscripción abierta y profes de pádel del club.
+   */
+  async activitySources(
+    companyId: string,
+    clubId: string,
+  ): Promise<
+    (ActivitySource & {
+      kind: 'discipline' | 'activity' | 'tournament' | 'coach';
+      audience: string | null;
+      showPrice: boolean;
+    })[]
+  > {
+    const [{ disciplines, activities }, tournaments, coaches] =
+      await Promise.all([
+        this.activities.list(companyId, clubId),
+        this.openTournaments(companyId, clubId),
+        this.clubCoaches(clubId),
+      ]);
     return [
       ...disciplines.map((d) => ({
         id: d.id,
@@ -346,16 +507,160 @@ export class AvailabilityStoryService {
         priceUnit: a.priceUnit,
         showPrice: a.showPrice,
       })),
+      ...tournaments.map((t) => ({
+        ...tournamentSource(t),
+        kind: 'tournament' as const,
+        audience: tournamentSource(t).audience ?? null,
+        showPrice: false,
+      })),
+      ...coaches.map((c) => ({
+        ...coachSource(c),
+        kind: 'coach' as const,
+        audience: coachSource(c).audience ?? null,
+        showPrice: false,
+      })),
     ];
   }
 
-  private async activityStory(companyId: string, clubId: string, input: ActivityStoryInput) {
+  /** Campeonatos publicados del club con la inscripción abierta (fecha límite y cupo). */
+  private async openTournaments(companyId: string, clubId: string) {
+    const club = await this.prisma.club.findFirst({
+      where: { id: clubId, companyId },
+      select: { timezone: true },
+    });
+    const today = todayIn(club?.timezone ?? 'America/Argentina/Buenos_Aires');
+    const rows = await this.prisma.clubTournament.findMany({
+      where: {
+        clubId,
+        companyId,
+        status: 'PUBLISHED',
+        OR: [
+          { registrationDeadline: null },
+          { registrationDeadline: { gte: today } },
+        ],
+        AND: [{ OR: [{ endDate: null }, { endDate: { gte: today } }] }],
+      },
+      orderBy: [{ startDate: 'asc' }, { name: 'asc' }],
+      take: 20,
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        entryType: true,
+        days: true,
+        venues: true,
+        registrationFee: true,
+        feeUnit: true,
+        registrationDeadline: true,
+        prizes: true,
+        maxEntries: true,
+        _count: { select: { entries: { where: { status: 'ACCEPTED' } } } },
+      },
+    });
+    return rows
+      .map((t) => ({
+        ...t,
+        registrationFee:
+          t.registrationFee === null ? null : Number(t.registrationFee),
+        spotsLeft: t.maxEntries
+          ? Math.max(0, t.maxEntries - t._count.entries)
+          : null,
+      }))
+      .filter((t) => t.spotsLeft === null || t.spotsLeft > 0);
+  }
+
+  /** Profes de pádel vinculados al club con clases cargadas (horario en el club y grupales con lugar). */
+  private async clubCoaches(clubId: string) {
+    const club = await this.prisma.club.findUnique({
+      where: { id: clubId },
+      select: { timezone: true },
+    });
+    const today = todayIn(club?.timezone ?? 'America/Argentina/Buenos_Aires');
+    const coaches = await this.prisma.coachProfile.findMany({
+      where: {
+        status: 'ACTIVE',
+        classTypes: { some: { active: true } },
+        clubLinks: { some: { clubId, status: 'ACTIVE' } },
+      },
+      orderBy: { displayName: 'asc' },
+      take: 20,
+      select: {
+        id: true,
+        displayName: true,
+        levels: true,
+        classTypes: {
+          where: { active: true },
+          orderBy: { price: 'asc' },
+          select: {
+            name: true,
+            format: true,
+            price: true,
+            durationMinutes: true,
+          },
+        },
+        availability: {
+          where: { clubId },
+          orderBy: [{ weekday: 'asc' }, { startMinute: 'asc' }],
+          select: { weekday: true, startMinute: true, endMinute: true },
+        },
+        lessons: {
+          where: {
+            clubId,
+            openToJoin: true,
+            status: 'CONFIRMED',
+            date: { gte: today },
+          },
+          orderBy: [{ date: 'asc' }, { startMinute: 'asc' }],
+          take: 6,
+          select: {
+            date: true,
+            startMinute: true,
+            capacity: true,
+            classType: { select: { name: true } },
+            participants: {
+              where: { status: { in: ['CONFIRMED', 'REQUESTED'] } },
+              select: { id: true },
+            },
+          },
+        },
+      },
+    });
+    return coaches.map((c) => ({
+      id: c.id,
+      displayName: c.displayName,
+      levels: c.levels,
+      classTypes: c.classTypes.map((t) => ({ ...t, price: Number(t.price) })),
+      weekly: c.availability,
+      groups: c.lessons
+        .map((l) => ({
+          date: l.date,
+          startMinute: l.startMinute,
+          name: l.classType?.name ?? 'Grupal',
+          spotsLeft: Math.max(0, l.capacity - l.participants.length),
+        }))
+        .filter((g) => g.spotsLeft > 0),
+    }));
+  }
+
+  private async activityStory(
+    companyId: string,
+    clubId: string,
+    input: ActivityStoryInput,
+  ) {
     const club = await this.club(clubId, companyId);
-    const source = (await this.activitySources(companyId, clubId)).find((s) => s.id === input.activityId);
+    const source = (await this.activitySources(companyId, clubId)).find(
+      (s) => s.id === input.activityId,
+    );
     if (!source) throw new NotFoundException('Actividad no encontrada');
     const groups = activityStoryGroups(source, input.groups);
-    const contact = input.contact?.trim() || club.availabilityStory?.contact || defaultContact(club);
-    const [logo, cover] = await Promise.all([this.embed(club.logoUrl), this.embed(club.coverUrl)]);
+    const contact =
+      input.contact?.trim() ||
+      club.availabilityStory?.contact ||
+      defaultContact(club);
+    const [logo, cover] = await Promise.all([
+      this.embed(club.logoUrl, 256),
+      this.embed(club.coverUrl),
+    ]);
     const data = {
       clubName: club.name,
       logo,
@@ -363,19 +668,38 @@ export class AvailabilityStoryService {
       contact,
       title: input.title?.trim().slice(0, 60) || source.name,
       audience: source.audience,
-      highlight: input.highlight === undefined ? 'Inscripciones abiertas' : input.highlight?.trim().slice(0, 40) || null,
-      price: input.showPrice ? priceLabel(source.price, source.priceUnit) : null,
+      footTitle: source.kind === 'coach' ? 'Pedí tu clase' : 'Inscribite',
+      highlight:
+        input.highlight === undefined
+          ? source.kind === 'coach'
+            ? 'Reservá tu clase'
+            : 'Inscripciones abiertas'
+          : input.highlight?.trim().slice(0, 40) || null,
+      price: input.showPrice
+        ? priceLabel(source.price, source.priceUnit)
+        : null,
       groups,
     };
     return { data, jpeg: renderActivityStoryJpeg(data) };
   }
 
-  async activityImage(companyId: string, clubId: string, input: ActivityStoryInput) {
+  async activityImage(
+    companyId: string,
+    clubId: string,
+    input: ActivityStoryInput,
+  ) {
     const { data, jpeg } = await this.activityStory(companyId, clubId, input);
-    return { caption: activityCaption(data), dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}` };
+    return {
+      caption: activityCaption(data),
+      dataUrl: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
+    };
   }
 
-  async publishActivityInstagram(companyId: string, clubId: string, input: ActivityStoryInput) {
+  async publishActivityInstagram(
+    companyId: string,
+    clubId: string,
+    input: ActivityStoryInput,
+  ) {
     const { jpeg } = await this.activityStory(companyId, clubId, input);
     const id = this.keep(jpeg);
     const url = `${publicApiUrl()}/public/availability-story/tmp/${id}.jpg`;
