@@ -8,5 +8,6 @@ import { ClubAccessService } from './club-access.service';
   imports: [UsersModule],
   controllers: [ClubAccessController],
   providers: [ClubAccessService],
+  exports: [ClubAccessService],
 })
 export class ClubAccessModule {}

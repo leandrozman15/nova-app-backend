@@ -284,6 +284,8 @@ export class CoachPortalService {
             name: true,
             logoUrl: true,
             city: true,
+            openMinute: true,
+            closeMinute: true,
             facilities: {
               select: { id: true, name: true, sport: true, bookable: true },
               orderBy: { name: 'asc' },
@@ -300,6 +302,8 @@ export class CoachPortalService {
       clubName: l.club.name,
       logoUrl: l.club.logoUrl,
       city: l.club.city,
+      openMinute: l.club.openMinute ?? 480,
+      closeMinute: l.club.closeMinute ?? 1380,
       // Las canchas solo se muestran con el vínculo aprobado.
       facilities: l.status === 'ACTIVE' ? l.club.facilities : [],
     }));

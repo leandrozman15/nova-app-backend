@@ -7,6 +7,8 @@ import {
   slugify,
   studentBalance,
   cleanSkills,
+  freeSlotsForDay as freeSlots,
+  padelCourts,
 } from './coach-rules';
 
 const h = (v: string) => Number(v.slice(0, 2)) * 60 + Number(v.slice(3));
@@ -153,5 +155,48 @@ describe('ficha del alumno', () => {
     ).toEqual({ drive: 4, remate: 3 });
     expect(cleanSkills({})).toBeNull();
     expect(cleanSkills('x')).toBeNull();
+  });
+});
+
+describe('franjas en cualquier cancha libre del club', () => {
+  it('ofrece el horario si al menos una cancha está libre y la elige', () => {
+    const slots = freeSlots({
+      weekday: 1,
+      windows: [
+        {
+          id: 'w',
+          weekday: 1,
+          startMinute: 1080,
+          endMinute: 1260,
+          clubId: 'c',
+          anyOf: ['p1', 'p2'],
+        },
+      ],
+      duration: 60,
+      busy: [],
+      courtBusy: {
+        p1: [{ start: 1080, end: 1200 }],
+        p2: [{ start: 1140, end: 1260 }],
+      },
+      nowMinute: null,
+    });
+    // 18:00 → p2 libre; 18:30 → ninguna (p1 hasta 20, p2 desde 19); 20:00 → p1.
+    expect(slots.map((s) => [s.startMinute, s.facilityId])).toEqual([
+      [1080, 'p2'],
+      [1200, 'p1'],
+    ]);
+  });
+
+  it('usa las canchas de pádel reservables (o todas si no hay de pádel)', () => {
+    expect(
+      padelCourts([
+        { id: 'a', sport: 'padel', bookable: true },
+        { id: 'b', sport: 'football', bookable: true },
+        { id: 'c', sport: 'padel', bookable: false },
+      ]),
+    ).toEqual(['a']);
+    expect(padelCourts([{ id: 'b', sport: 'tennis', bookable: true }])).toEqual(
+      ['b'],
+    );
   });
 });

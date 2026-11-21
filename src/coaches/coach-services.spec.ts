@@ -367,3 +367,55 @@ describe('profes del staff del club', () => {
     ).rejects.toThrow('no tiene usuario');
   });
 });
+
+describe('reserva en cualquier cancha libre', () => {
+  it('sin cancha elegida reserva la primera de pádel libre y la guarda en la clase', async () => {
+    const { prisma, core } = setup();
+    prisma.facility.findMany.mockResolvedValue([
+      { id: 'p1', clubId: 'club1', sport: 'padel', bookable: true },
+      { id: 'p2', clubId: 'club1', sport: 'padel', bookable: true },
+    ]);
+    prisma.recurringBooking = { findMany: jest.fn().mockResolvedValue([]) };
+    prisma.$executeRaw = jest.fn();
+    prisma.booking.findMany = jest
+      .fn()
+      .mockResolvedValue([
+        { facilityId: 'p1', startMinute: 1080, durationMinutes: 90 },
+      ]);
+    prisma.facility.findFirst.mockResolvedValue({
+      id: 'p2',
+      hourlyPrice: '20000',
+      name: 'Pádel 2',
+    });
+    const id = await core.reserveCourt(
+      baseLesson({ facilityId: null }) as never,
+      coach,
+      'fb',
+    );
+    expect(id).toBe('b1');
+    expect(prisma.facility.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'p2', clubId: 'club1' } }),
+    );
+    expect(prisma.coachLesson.update).toHaveBeenCalledWith({
+      where: { id: 'l1' },
+      data: { facilityId: 'p2' },
+    });
+  });
+
+  it('si están todas ocupadas avisa', async () => {
+    const { prisma, core } = setup();
+    prisma.facility.findMany.mockResolvedValue([
+      { id: 'p1', clubId: 'club1', sport: 'padel', bookable: true },
+    ]);
+    prisma.recurringBooking = { findMany: jest.fn().mockResolvedValue([]) };
+    prisma.$executeRaw = jest.fn();
+    prisma.booking.findMany = jest
+      .fn()
+      .mockResolvedValue([
+        { facilityId: 'p1', startMinute: 1050, durationMinutes: 60 },
+      ]);
+    await expect(
+      core.reserveCourt(baseLesson({ facilityId: null }) as never, coach, 'fb'),
+    ).rejects.toThrow('No hay canchas libres');
+  });
+});

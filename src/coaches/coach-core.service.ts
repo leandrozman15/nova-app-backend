@@ -25,6 +25,7 @@ import {
   type AvailabilityWindow,
   type FreeSlot,
   type Interval,
+  padelCourts,
 } from './coach-rules';
 
 const COURT_ACTIVE: BookingStatus[] = [
@@ -140,7 +141,9 @@ export class CoachCoreService {
   ) {
     const facilityIds = [
       ...new Set(
-        windows.map((w) => w.facilityId).filter((x): x is string => Boolean(x)),
+        windows
+          .flatMap((w) => [w.facilityId, ...(w.anyOf ?? [])])
+          .filter((x): x is string => Boolean(x)),
       ),
     ];
     if (!facilityIds.length) return {};
@@ -179,11 +182,69 @@ export class CoachCoreService {
       }),
     ]);
     const active = new Set(links.map((l) => l.clubId));
-    return rows.map((r) =>
-      r.clubId && !active.has(r.clubId)
-        ? { ...r, clubId: null, facilityId: null }
-        : r,
+    const anyClubs = [
+      ...new Set(
+        rows
+          .filter((r) => r.clubId && !r.facilityId && active.has(r.clubId))
+          .map((r) => r.clubId as string),
+      ),
+    ];
+    const courts = await this.courtsByClub(anyClubs);
+    return rows.map((r) => {
+      if (r.clubId && !active.has(r.clubId))
+        return { ...r, clubId: null, facilityId: null };
+      if (r.clubId && !r.facilityId)
+        return { ...r, anyOf: courts.get(r.clubId) ?? [] };
+      return r;
+    });
+  }
+
+  /** Primera cancha de pádel del club libre en ese horario (o error si están todas ocupadas). */
+  async freeCourt(
+    clubId: string,
+    lesson: { date: string; startMinute: number; durationMinutes: number },
+  ) {
+    const courts = (await this.courtsByClub([clubId])).get(clubId) ?? [];
+    if (!courts.length)
+      throw new ConflictException('El club no tiene canchas para reservar.');
+    await ensureOccurrences(this.prisma, clubId, lesson.date, lesson.date);
+    const rows = await this.prisma.booking.findMany({
+      where: {
+        facilityId: { in: courts },
+        date: lesson.date,
+        status: { in: COURT_ACTIVE },
+      },
+      select: { facilityId: true, startMinute: true, durationMinutes: true },
+    });
+    const end = lesson.startMinute + lesson.durationMinutes;
+    const free = courts.find(
+      (id) =>
+        !rows.some(
+          (r) =>
+            r.facilityId === id &&
+            r.startMinute < end &&
+            lesson.startMinute < r.startMinute + r.durationMinutes,
+        ),
     );
+    if (!free)
+      throw new ConflictException(
+        `No hay canchas libres el ${lesson.date.split('-').reverse().slice(0, 2).join('/')} a las ${minuteLabel(lesson.startMinute)}. Elegí otro horario.`,
+      );
+    return free;
+  }
+
+  /** Canchas de pádel reservables de cada club. */
+  async courtsByClub(clubIds: string[]) {
+    const out = new Map<string, string[]>();
+    if (!clubIds.length) return out;
+    const rows = await this.prisma.facility.findMany({
+      where: { clubId: { in: clubIds } },
+      orderBy: { name: 'asc' },
+      select: { id: true, clubId: true, sport: true, bookable: true },
+    });
+    for (const clubId of clubIds)
+      out.set(clubId, padelCourts(rows.filter((f) => f.clubId === clubId)));
+    return out;
   }
 
   /** Horarios libres de los próximos días para una duración. */
@@ -241,7 +302,7 @@ export class CoachCoreService {
     coach: Pick<CoachRow, 'id' | 'displayName' | 'whatsapp'>,
     uid: string,
   ) {
-    if (!lesson.clubId || !lesson.facilityId) return null;
+    if (!lesson.clubId) return null;
     const link = await this.prisma.coachClubLink.findFirst({
       where: { clubId: lesson.clubId, coachId: coach.id, status: 'ACTIVE' },
       select: { id: true },
@@ -250,11 +311,15 @@ export class CoachCoreService {
       where: { id: lesson.clubId },
       select: { id: true, companyId: true, timezone: true },
     });
+    if (!link || !club) return null;
+    // Sin cancha elegida: la primera cancha de pádel libre en ese horario.
+    const facilityId =
+      lesson.facilityId ?? (await this.freeCourt(lesson.clubId, lesson));
     const facility = await this.prisma.facility.findFirst({
-      where: { id: lesson.facilityId, clubId: lesson.clubId },
+      where: { id: facilityId, clubId: lesson.clubId },
       select: { id: true, hourlyPrice: true, name: true },
     });
-    if (!link || !club || !facility) return null;
+    if (!facility) return null;
     const startsAt = zonedMinuteToUtc(
       lesson.date,
       lesson.startMinute,
@@ -294,6 +359,11 @@ export class CoachCoreService {
         },
         select: { id: true },
       });
+      if (!lesson.facilityId)
+        await this.prisma.coachLesson.update({
+          where: { id: lesson.id },
+          data: { facilityId: facility.id },
+        });
       return booking.id;
     } catch (error) {
       if (isOverlapError(error))
