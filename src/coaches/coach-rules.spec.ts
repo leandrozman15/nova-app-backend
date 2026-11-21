@@ -6,6 +6,7 @@ import {
   requestProblem,
   slugify,
   studentBalance,
+  cleanSkills,
 } from './coach-rules';
 
 const h = (v: string) => Number(v.slice(0, 2)) * 60 + Number(v.slice(3));
@@ -136,5 +137,21 @@ describe('reglas de profes', () => {
         duration: 60,
       }),
     ).toBeNull();
+  });
+});
+
+describe('ficha del alumno', () => {
+  it('deja solo golpes conocidos con nota de 1 a 5', () => {
+    expect(
+      cleanSkills({
+        drive: 4,
+        bandeja: 6,
+        vibora: 2.5,
+        inventado: 3,
+        remate: '3',
+      }),
+    ).toEqual({ drive: 4, remate: 3 });
+    expect(cleanSkills({})).toBeNull();
+    expect(cleanSkills('x')).toBeNull();
   });
 });

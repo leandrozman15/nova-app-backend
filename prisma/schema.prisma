@@ -2643,6 +2643,14 @@ model CoachStudent {
   /// Nivel (pádel: iniciacion, 8va … 1ra).
   level     String?
   notes     String?
+  /// Ficha del alumno (pádel): AAAA-MM-DD, mano (diestro/zurdo), lado (drive/reves/ambos), objetivos.
+  birthDate String?
+  hand      String?
+  side      String?
+  goals     String?
+  /// Evaluación técnica por golpe, 1 a 5: { "drive": 3, "bandeja": 2, ... }.
+  skills    Json?
+  skillsUpdatedAt DateTime?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -207,6 +207,15 @@ export class CoachPortalController {
     return this.portal.reviewParticipant(uid(req), id, participantId, false);
   }
 
+  @Get('clubs/:clubId/courts')
+  courts(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Query('date') date: string,
+  ) {
+    return this.portal.courts(uid(req), clubId, date);
+  }
+
   @Get('students')
   students(@Req() req: unknown) {
     return this.portal.students(uid(req));
