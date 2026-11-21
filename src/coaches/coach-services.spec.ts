@@ -266,7 +266,20 @@ describe('profes: portal de pádel del entrenador del club', () => {
     prisma.recurringBooking = { findMany: jest.fn().mockResolvedValue([]) };
     prisma.$executeRaw = jest.fn();
     prisma.facility.findMany.mockResolvedValue([
-      { id: 'f1', name: 'Pádel 1', sport: 'padel', typeLabel: null },
+      {
+        id: 'f1',
+        name: 'Pádel 1',
+        sport: 'padel',
+        typeLabel: null,
+        bookable: true,
+      },
+      {
+        id: 'fx',
+        name: 'Fútbol 5',
+        sport: 'football',
+        typeLabel: null,
+        bookable: true,
+      },
     ]);
     prisma.booking.findMany = jest.fn().mockResolvedValue([
       {
@@ -309,6 +322,8 @@ describe('profes: portal de pádel del entrenador del club', () => {
       },
     ]);
     expect(day.lessons).toHaveLength(1);
+    // Solo canchas de pádel.
+    expect(day.facilities.map((f) => f.id)).toEqual(['f1']);
     expect(JSON.stringify(day.busy)).not.toContain('contact');
   });
 });
