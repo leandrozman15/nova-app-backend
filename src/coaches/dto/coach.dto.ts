@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
@@ -152,6 +153,11 @@ export class StudentDto {
   @IsOptional() @IsString() @MaxLength(120) email?: string | null;
   @IsOptional() @IsString() @MaxLength(20) level?: string | null;
   @IsOptional() @IsString() @MaxLength(1000) notes?: string | null;
+  @IsOptional() @Matches(DATE) birthDate?: string | null;
+  @IsOptional() @IsIn(['diestro', 'zurdo', 'ambidiestro']) hand?: string | null;
+  @IsOptional() @IsIn(['drive', 'reves', 'ambos']) side?: string | null;
+  @IsOptional() @IsString() @MaxLength(600) goals?: string | null;
+  @IsOptional() @IsObject() skills?: Record<string, number> | null;
 }
 
 export class UpdateStudentDto {
@@ -161,6 +167,11 @@ export class UpdateStudentDto {
   @IsOptional() @IsString() @MaxLength(20) level?: string | null;
   @IsOptional() @IsString() @MaxLength(1000) notes?: string | null;
   @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @Matches(DATE) birthDate?: string | null;
+  @IsOptional() @IsIn(['diestro', 'zurdo', 'ambidiestro']) hand?: string | null;
+  @IsOptional() @IsIn(['drive', 'reves', 'ambos']) side?: string | null;
+  @IsOptional() @IsString() @MaxLength(600) goals?: string | null;
+  @IsOptional() @IsObject() skills?: Record<string, number> | null;
 }
 
 export class NoteDto {

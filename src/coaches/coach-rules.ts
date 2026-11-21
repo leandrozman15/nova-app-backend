@@ -235,3 +235,40 @@ export function requestProblem(o: {
     return 'Horario inválido.';
   return null;
 }
+
+/** Golpes que se evalúan en la ficha del alumno de pádel (1 a 5). */
+export const PADEL_SKILLS = [
+  'drive',
+  'reves',
+  'volea_drive',
+  'volea_reves',
+  'bandeja',
+  'vibora',
+  'remate',
+  'globo',
+  'saque',
+  'salida_pared',
+  'posicionamiento',
+] as const;
+
+/** Deja solo golpes conocidos con nota entera de 1 a 5 (o null si no queda ninguno). */
+export function cleanSkills(input: unknown): Record<string, number> | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const out: Record<string, number> = {};
+  for (const key of PADEL_SKILLS) {
+    const value = Number((input as Record<string, unknown>)[key]);
+    if (Number.isInteger(value) && value >= 1 && value <= 5) out[key] = value;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Roles de la consola que se vinculan a su propio club sin esperar aprobación. */
+export const CLUB_STAFF_ROLES = [
+  'coach',
+  'coach_lvl1',
+  'coach_lvl2',
+  'coordinator',
+  'manager',
+  'club_admin',
+  'admin',
+];

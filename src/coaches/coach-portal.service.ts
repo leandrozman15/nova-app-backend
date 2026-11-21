@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -13,6 +14,7 @@ import {
   weekdayOf,
   zonedMinuteToUtc,
 } from '../bookings/booking-time';
+import { ensureOccurrences } from '../bookings/fixed-turns';
 import { normalizeWhatsapp } from '../clubs/whatsapp';
 import {
   CoachCoreService,
@@ -22,6 +24,8 @@ import {
 import {
   availabilityProblem,
   capacityFor,
+  cleanSkills,
+  CLUB_STAFF_ROLES,
   packToUse,
   slotStillFree,
   slugify,
@@ -308,6 +312,15 @@ export class CoachPortalService {
       select: { id: true, companyId: true, name: true },
     });
     if (!club) throw new NotFoundException('Club no encontrado');
+    // El entrenador (o directivo) del propio club queda vinculado sin esperar aprobación.
+    const user = await this.prisma.user.findUnique({
+      where: { firebaseUid },
+      select: { companyId: true, role: true },
+    });
+    const isStaff =
+      Boolean(user?.companyId) &&
+      user?.companyId === club.companyId &&
+      CLUB_STAFF_ROLES.includes(String(user?.role ?? '').toLowerCase());
     const existing = await this.prisma.coachClubLink.findUnique({
       where: { coachId_clubId: { coachId: coach.id, clubId: club.id } },
     });
@@ -317,22 +330,23 @@ export class CoachPortalService {
       throw new ConflictException(
         'Ya pediste sumarte: el club tiene que aprobarlo.',
       );
+    const status = isStaff ? 'ACTIVE' : 'PENDING';
+    const review = isStaff
+      ? { reviewedAt: new Date(), reviewedByUid: firebaseUid }
+      : { reviewedAt: null, reviewedByUid: null };
     const link = existing
       ? await this.prisma.coachClubLink.update({
           where: { id: existing.id },
-          data: {
-            status: 'PENDING',
-            message: clean(dto.message) ?? null,
-            reviewedAt: null,
-            reviewedByUid: null,
-          },
+          data: { status, message: clean(dto.message) ?? null, ...review },
         })
       : await this.prisma.coachClubLink.create({
           data: {
             coachId: coach.id,
             clubId: club.id,
             companyId: club.companyId,
+            status,
             message: clean(dto.message) ?? null,
+            ...review,
           },
         });
     return { id: link.id, status: link.status, clubName: club.name };
@@ -862,6 +876,96 @@ export class CoachPortalService {
     return (await this.present([await this.lessonOf(coach, id)]))[0];
   }
 
+  /**
+   * Canchas del club para un día, vistas por el profe: qué está ocupado (sin datos de quién),
+   * sus propias clases y sus franjas. Solo con el vínculo activo.
+   */
+  async courts(firebaseUid: string, clubId: string, date: string) {
+    const coach = await this.core.coachOf(firebaseUid);
+    if (!isIsoDate(date)) throw new BadRequestException('Fecha inválida.');
+    const link = await this.prisma.coachClubLink.count({
+      where: { coachId: coach.id, clubId, status: 'ACTIVE' },
+    });
+    if (!link)
+      throw new NotFoundException('Todavía no estás vinculado a este club.');
+    const club = await this.prisma.club.findUnique({
+      where: { id: clubId },
+      select: {
+        id: true,
+        name: true,
+        timezone: true,
+        openMinute: true,
+        closeMinute: true,
+      },
+    });
+    if (!club) throw new NotFoundException('Club no encontrado');
+    await ensureOccurrences(this.prisma, clubId, date, date);
+    const [facilities, bookings, lessons, windows] = await Promise.all([
+      this.prisma.facility.findMany({
+        where: { clubId, bookable: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, sport: true, typeLabel: true },
+      }),
+      this.prisma.booking.findMany({
+        where: {
+          clubId,
+          date,
+          status: { in: ['REQUESTED', 'PENDING_PAYMENT', 'CONFIRMED'] },
+        },
+        select: {
+          id: true,
+          facilityId: true,
+          startMinute: true,
+          durationMinutes: true,
+          kind: true,
+        },
+      }),
+      this.prisma.coachLesson.findMany({
+        where: {
+          coachId: coach.id,
+          date,
+          status: { in: ['REQUESTED', 'CONFIRMED', 'DONE'] },
+        },
+        orderBy: { startMinute: 'asc' },
+        select: LESSON_SELECT,
+      }),
+      this.prisma.coachAvailability.findMany({
+        where: { coachId: coach.id, weekday: weekdayOf(date) },
+        select: {
+          startMinute: true,
+          endMinute: true,
+          clubId: true,
+          facilityId: true,
+        },
+      }),
+    ]);
+    const mine = new Set(
+      lessons.map((l) => l.bookingId).filter((x): x is string => Boolean(x)),
+    );
+    return {
+      date,
+      today: todayIn(club.timezone),
+      club: {
+        id: club.id,
+        name: club.name,
+        openMinute: club.openMinute ?? 480,
+        closeMinute: club.closeMinute ?? 1380,
+      },
+      facilities,
+      // Ocupado por otros: solo el horario y el tipo, nunca el nombre del cliente.
+      busy: bookings
+        .filter((b) => !mine.has(b.id))
+        .map((b) => ({
+          facilityId: b.facilityId,
+          startMinute: b.startMinute,
+          endMinute: b.startMinute + b.durationMinutes,
+          kind: b.kind,
+        })),
+      lessons: await this.present(lessons),
+      windows: windows.filter((w) => !w.clubId || w.clubId === clubId),
+    };
+  }
+
   // ─── Alumnos ──────────────────────────────────────────────────────────────
 
   async students(firebaseUid: string) {
@@ -926,6 +1030,16 @@ export class CoachPortalService {
         email: clean(dto.email)?.toLowerCase() ?? null,
         level: clean(dto.level) ?? null,
         notes: clean(dto.notes) ?? null,
+        birthDate: clean(dto.birthDate) ?? null,
+        hand: clean(dto.hand) ?? null,
+        side: clean(dto.side) ?? null,
+        goals: clean(dto.goals) ?? null,
+        ...(dto.skills
+          ? {
+              skills: cleanSkills(dto.skills) ?? Prisma.DbNull,
+              skillsUpdatedAt: new Date(),
+            }
+          : {}),
       },
     });
   }
@@ -952,6 +1066,18 @@ export class CoachPortalService {
         ...(dto.level === undefined ? {} : { level: clean(dto.level) }),
         ...(dto.notes === undefined ? {} : { notes: clean(dto.notes) }),
         ...(dto.active === undefined ? {} : { active: dto.active }),
+        ...(dto.birthDate === undefined
+          ? {}
+          : { birthDate: clean(dto.birthDate) }),
+        ...(dto.hand === undefined ? {} : { hand: clean(dto.hand) }),
+        ...(dto.side === undefined ? {} : { side: clean(dto.side) }),
+        ...(dto.goals === undefined ? {} : { goals: clean(dto.goals) }),
+        ...(dto.skills === undefined
+          ? {}
+          : {
+              skills: cleanSkills(dto.skills) ?? Prisma.DbNull,
+              skillsUpdatedAt: new Date(),
+            }),
       },
     });
   }

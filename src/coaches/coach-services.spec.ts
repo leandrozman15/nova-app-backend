@@ -58,13 +58,11 @@ function setup() {
     coachProfile: { findFirst: jest.fn().mockResolvedValue(coach) },
     coachClubLink: { findFirst: jest.fn().mockResolvedValue({ id: 'link1' }) },
     club: {
-      findUnique: jest
-        .fn()
-        .mockResolvedValue({
-          id: 'club1',
-          companyId: 'co1',
-          timezone: 'America/Argentina/Buenos_Aires',
-        }),
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'club1',
+        companyId: 'co1',
+        timezone: 'America/Argentina/Buenos_Aires',
+      }),
       findMany: jest.fn().mockResolvedValue([]),
     },
     facility: {
@@ -224,5 +222,92 @@ describe('profes: cancha y cierre de clases', () => {
       where: { id: 'l1' },
       data: { status: 'DONE' },
     });
+  });
+});
+
+describe('profes: portal de pádel del entrenador del club', () => {
+  it('el entrenador del propio club queda vinculado sin esperar aprobación', async () => {
+    const { prisma, portal } = setup();
+    prisma.user.findUnique = jest
+      .fn()
+      .mockResolvedValue({ companyId: 'co1', role: 'coach' });
+    prisma.coachClubLink.findUnique = jest.fn().mockResolvedValue(null);
+    prisma.coachClubLink.create = jest
+      .fn()
+      .mockImplementation(({ data }) => ({ id: 'link9', ...data }));
+    const result = await portal.requestClub('fb-coach', { clubId: 'club1' });
+    expect(result.status).toBe('ACTIVE');
+  });
+
+  it('un profe de afuera queda pendiente de aprobación', async () => {
+    const { prisma, portal } = setup();
+    prisma.user.findUnique = jest
+      .fn()
+      .mockResolvedValue({ companyId: null, role: 'user' });
+    prisma.coachClubLink.findUnique = jest.fn().mockResolvedValue(null);
+    prisma.coachClubLink.create = jest
+      .fn()
+      .mockImplementation(({ data }) => ({ id: 'link9', ...data }));
+    const result = await portal.requestClub('fb-coach', { clubId: 'club1' });
+    expect(result.status).toBe('PENDING');
+  });
+
+  it('las canchas del día muestran lo ocupado sin datos del cliente', async () => {
+    const { prisma, portal } = setup();
+    prisma.coachClubLink.count = jest.fn().mockResolvedValue(1);
+    prisma.club.findUnique.mockResolvedValue({
+      id: 'club1',
+      name: 'Club Demo',
+      timezone: 'America/Argentina/Buenos_Aires',
+      openMinute: 480,
+      closeMinute: 1380,
+    });
+    prisma.recurringBooking = { findMany: jest.fn().mockResolvedValue([]) };
+    prisma.$executeRaw = jest.fn();
+    prisma.facility.findMany.mockResolvedValue([
+      { id: 'f1', name: 'Pádel 1', sport: 'padel', typeLabel: null },
+    ]);
+    prisma.booking.findMany = jest.fn().mockResolvedValue([
+      {
+        id: 'b1',
+        facilityId: 'f1',
+        startMinute: 1080,
+        durationMinutes: 60,
+        kind: 'CLASE',
+      },
+      {
+        id: 'b2',
+        facilityId: 'f1',
+        startMinute: 1140,
+        durationMinutes: 90,
+        kind: 'ALQUILER',
+      },
+    ]);
+    prisma.coachLesson.findMany = jest
+      .fn()
+      .mockResolvedValue([
+        baseLesson({ status: 'CONFIRMED', bookingId: 'b1' }),
+      ]);
+    prisma.coachAvailability = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          startMinute: 960,
+          endMinute: 1320,
+          clubId: 'club1',
+          facilityId: 'f1',
+        },
+      ]),
+    };
+    const day = await portal.courts('fb-coach', 'club1', '2026-12-01');
+    expect(day.busy).toEqual([
+      {
+        facilityId: 'f1',
+        startMinute: 1140,
+        endMinute: 1230,
+        kind: 'ALQUILER',
+      },
+    ]);
+    expect(day.lessons).toHaveLength(1);
+    expect(JSON.stringify(day.busy)).not.toContain('contact');
   });
 });
