@@ -51,6 +51,8 @@ export type AvailabilityWindow = {
   clubId?: string | null;
   facilityId?: string | null;
   locationText?: string | null;
+  /** Franja en el club sin cancha fija: cualquiera de estas canchas que esté libre. */
+  anyOf?: string[];
 };
 
 /** Franjas del mismo día que se pisan (no se permiten). */
@@ -132,12 +134,21 @@ export function freeSlotsForDay(o: {
         (o.courtBusy?.[w.facilityId] ?? []).some((b) => overlaps(b, slot))
       )
         continue;
+      // Sin cancha fija en el club: hace falta al menos una cancha libre.
+      let facilityId = w.facilityId ?? null;
+      if (!facilityId && w.anyOf) {
+        facilityId =
+          w.anyOf.find(
+            (id) => !(o.courtBusy?.[id] ?? []).some((b) => overlaps(b, slot)),
+          ) ?? null;
+        if (!facilityId) continue;
+      }
       if (out.some((s) => s.startMinute === start)) continue;
       out.push({
         startMinute: start,
         availabilityId: w.id,
         clubId: w.clubId ?? null,
-        facilityId: w.facilityId ?? null,
+        facilityId,
         locationText: w.locationText ?? null,
       });
     }
@@ -272,3 +283,12 @@ export const CLUB_STAFF_ROLES = [
   'club_admin',
   'admin',
 ];
+
+/** Canchas del club para clases de pádel: las de pádel reservables (o todas las reservables si no hay de pádel). */
+export function padelCourts(
+  facilities: { id: string; sport: string | null; bookable: boolean }[],
+) {
+  const bookable = facilities.filter((f) => f.bookable);
+  const padel = bookable.filter((f) => /p[aá]del/i.test(f.sport ?? ''));
+  return (padel.length ? padel : bookable).map((f) => f.id);
+}
