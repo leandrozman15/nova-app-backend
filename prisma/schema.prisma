@@ -246,6 +246,8 @@ model User {
   company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clubMemberships ClubMembership[]
   bookings        Booking[]
+  coachProfile    CoachProfile?
+  coachStudents   CoachStudent[]
   activityInquiries ActivityInquiry[]
   tournamentEntries TournamentEntry[]
   merchantMemberships MerchantMember[]
@@ -345,6 +347,7 @@ model Club {
   paymentAccount        ClubPaymentAccount?
   instagramAccount      ClubInstagramAccount?
   availabilityStory     ClubAvailabilityStory?
+  coachLinks            CoachClubLink[]
   facebookPage          ClubFacebookPage?
   tiktokAccount         ClubTiktokAccount?
   invoicingAccount      ClubInvoicingAccount?
@@ -2513,3 +2516,260 @@ model SwimWorkout {
   @@index([companyId, clubId, recordedAt])
   @@index([teamId])
 }
+
+// ─── Profes (clases particulares: pádel y otros deportes) ─────────────────────
+
+/// Perfil de profe: lo crea cualquier usuario con cuenta (independiente o del club).
+model CoachProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  /// Para el link público: /explorar/profes/<slug>.
+  slug        String   @unique
+  displayName String
+  photoUrl    String?
+  bio         String?
+  /// Deportes que enseña (catálogo de la app: padel, tennis…).
+  sports      String[] @default([])
+  /// Niveles que enseña (pádel: iniciacion, 8va … 1ra).
+  levels      String[] @default([])
+  /// Zonas o barrios donde da clases.
+  zones       String[] @default([])
+  /// WhatsApp como wa.me (5491130464848).
+  whatsapp    String?
+  instagram   String?
+  timezone    String   @default("America/Argentina/Buenos_Aires")
+  /// Aparece en la vidriera pública.
+  isPublic    Boolean  @default(true)
+  /// ACTIVE | SUSPENDED (lo suspende Fluxion).
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clubLinks    CoachClubLink[]
+  classTypes   CoachClassType[]
+  availability CoachAvailability[]
+  blocks       CoachBlock[]
+  lessons      CoachLesson[]
+  students     CoachStudent[]
+
+  @@index([isPublic, status])
+}
+
+/// Vínculo profe ↔ club: lo pide el profe y lo aprueba el club.
+model CoachClubLink {
+  id           String    @id @default(cuid())
+  coachId      String
+  clubId       String
+  companyId    String
+  /// PENDING | ACTIVE | REJECTED | ENDED
+  status       String    @default("PENDING")
+  message      String?
+  reviewedAt   DateTime?
+  reviewedByUid String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  club  Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, clubId])
+  @@index([clubId, status])
+}
+
+/// Tipo de clase que ofrece el profe.
+model CoachClassType {
+  id              String   @id @default(cuid())
+  coachId         String
+  name            String
+  /// INDIVIDUAL | DUO | GROUP
+  format          String
+  capacity        Int      @default(1)
+  durationMinutes Int      @default(60)
+  /// Precio por alumno y por clase.
+  price           Decimal  @db.Decimal(12, 2)
+  sport           String?
+  description     String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  coach   CoachProfile  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  lessons CoachLesson[]
+
+  @@index([coachId, active])
+}
+
+/// Franja semanal en la que el profe da clases (y dónde).
+model CoachAvailability {
+  id          String  @id @default(cuid())
+  coachId     String
+  /// 0 = domingo … 6 = sábado.
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+  /// Club vinculado y cancha (si el club está en Fluxion, se reserva la cancha al confirmar).
+  clubId      String?
+  facilityId  String?
+  /// Lugar escrito a mano (club que no está en Fluxion, plaza, etc.).
+  locationText String?
+
+  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([coachId, weekday])
+}
+
+/// Bloqueo puntual: vacaciones, día libre, torneo.
+model CoachBlock {
+  id       String   @id @default(cuid())
+  coachId  String
+  startsAt DateTime
+  endsAt   DateTime
+  reason   String?
+
+  coach CoachProfile @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([coachId, startsAt])
+}
+
+/// Alumno del profe (con cuenta en la app o cargado a mano).
+model CoachStudent {
+  id        String   @id @default(cuid())
+  coachId   String
+  userId    String?
+  name      String
+  phone     String?
+  email     String?
+  /// Nivel (pádel: iniciacion, 8va … 1ra).
+  level     String?
+  notes     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coach        CoachProfile             @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  user         User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  participants CoachLessonParticipant[]
+  progress     CoachStudentNote[]
+  packs        CoachPack[]
+  payments     CoachPayment[]
+
+  @@unique([coachId, userId])
+  @@index([coachId, active])
+}
+
+/// Clase agendada (solicitada por un alumno o armada por el profe).
+model CoachLesson {
+  id              String    @id @default(cuid())
+  coachId         String
+  classTypeId     String?
+  /// Fecha local (YYYY-MM-DD) e inicio en minutos.
+  date            String
+  startMinute     Int
+  durationMinutes Int
+  startsAt        DateTime
+  endsAt          DateTime
+  /// INDIVIDUAL | DUO | GROUP
+  format          String
+  capacity        Int       @default(1)
+  /// Precio por alumno.
+  price           Decimal   @db.Decimal(12, 2)
+  clubId          String?
+  facilityId      String?
+  locationText    String?
+  /// REQUESTED | CONFIRMED | DONE | CANCELLED | REJECTED
+  status          String    @default("REQUESTED")
+  /// Grupal abierta: los alumnos piden sumarse desde la app.
+  openToJoin      Boolean   @default(false)
+  /// Turno de la cancha reservado en el club (agenda de alquileres).
+  bookingId       String?   @unique
+  notes           String?
+  cancelReason    String?
+  createdByUid    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  coach        CoachProfile             @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  classType    CoachClassType?          @relation(fields: [classTypeId], references: [id], onDelete: SetNull)
+  participants CoachLessonParticipant[]
+
+  @@index([coachId, date])
+  @@index([coachId, status])
+}
+
+/// Alumno en una clase.
+model CoachLessonParticipant {
+  id         String   @id @default(cuid())
+  lessonId   String
+  studentId  String
+  /// REQUESTED | CONFIRMED | REJECTED | CANCELLED
+  status     String   @default("REQUESTED")
+  /// PRESENT | ABSENT (lo marca el profe al cerrar la clase).
+  attendance String?
+  /// Cómo se cobra: PACK (descuenta del pack) | UNPAID | PAID.
+  charge     String?
+  packId     String?
+  /// Compañero/a que trae el alumno (clases dúo).
+  partnerName String?
+  message    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  lesson  CoachLesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  student CoachStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  pack    CoachPack?   @relation(fields: [packId], references: [id], onDelete: SetNull)
+
+  @@unique([lessonId, studentId])
+  @@index([studentId])
+}
+
+/// Nota de progreso del alumno.
+model CoachStudentNote {
+  id        String   @id @default(cuid())
+  studentId String
+  lessonId  String?
+  text      String
+  createdAt DateTime @default(now())
+
+  student CoachStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+}
+
+/// Pack de clases (4, 8, N): cada clase dada descuenta una.
+model CoachPack {
+  id           String    @id @default(cuid())
+  studentId    String
+  name         String
+  totalClasses Int
+  usedClasses  Int       @default(0)
+  price        Decimal   @db.Decimal(12, 2)
+  paidAmount   Decimal   @default(0) @db.Decimal(12, 2)
+  expiresAt    String?
+  createdAt    DateTime  @default(now())
+
+  student      CoachStudent             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  participants CoachLessonParticipant[]
+  payments     CoachPayment[]
+
+  @@index([studentId])
+}
+
+/// Pago registrado a mano por el profe (efectivo o transferencia).
+model CoachPayment {
+  id        String   @id @default(cuid())
+  studentId String
+  amount    Decimal  @db.Decimal(12, 2)
+  /// cash | transfer | other
+  method    String
+  packId    String?
+  note      String?
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  student CoachStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  pack    CoachPack?   @relation(fields: [packId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, paidAt])
+}
+

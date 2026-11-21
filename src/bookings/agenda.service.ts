@@ -46,6 +46,8 @@ export const KIND_LABELS: Record<string, string> = {
   ENTRENAMIENTO: 'Entrenamiento',
   PARTIDO: 'Partido',
   MANTENIMIENTO: 'Mantenimiento',
+  /** Clase de un profe vinculado (se reserva sola al confirmar la clase). */
+  CLASE: 'Clase con profe',
 };
 
 const METHOD_LABELS: Record<string, string> = {

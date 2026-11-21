@@ -34,6 +34,7 @@ import { WeatherModule } from './weather/weather.module';
 import { InstagramModule } from './instagram/instagram.module';
 import { AvailabilityStoryModule } from './availability-story/availability-story.module';
 import { BookingRemindersModule } from './booking-reminders/booking-reminders.module';
+import { CoachesModule } from './coaches/coaches.module';
 import { EmailModule } from './email/email.module';
 import { FacebookModule } from './facebook/facebook.module';
 import { InvoicingModule } from './invoicing/invoicing.module';
@@ -76,6 +77,7 @@ import { ClubAccessModule } from './club-access/club-access.module';
     InstagramModule,
     AvailabilityStoryModule,
     BookingRemindersModule,
+    CoachesModule,
     EmailModule,
     FacebookModule,
     TiktokModule,
