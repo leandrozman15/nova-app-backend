@@ -6,10 +6,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, type BookingStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import {
   addDays,
   ALLOWED_DURATIONS,
@@ -102,6 +104,7 @@ export class AgendaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bookings: BookingsService,
+    @Optional() private readonly push?: PushService,
   ) {}
 
   /** Crea (si faltan) los turnos de los fijos en el rango (ver fixed-turns.ts). */
@@ -164,8 +167,117 @@ export class AgendaService {
         hourlyPrice:
           facility.hourlyPrice === null ? null : Number(facility.hourlyPrice),
       })),
-      bookings: rows.map(presentBooking),
+      bookings: await this.withCoachClasses(rows.map(presentBooking)),
     };
+  }
+
+  /**
+   * Si el club libera la cancha de una clase con profe, la clase queda sin cancha
+   * (sigue en la agenda del profe) y se le avisa al profe para que la reubique o la cancele.
+   */
+  private async releaseCoachClass(bookingId: string, reason?: string) {
+    const lesson = await this.prisma.coachLesson.findFirst({
+      where: { bookingId },
+      select: {
+        id: true,
+        date: true,
+        startMinute: true,
+        clubId: true,
+        coach: { select: { userId: true } },
+      },
+    });
+    if (!lesson) return;
+    await this.prisma.coachLesson.update({
+      where: { id: lesson.id },
+      data: { bookingId: null, facilityId: null },
+    });
+    if (!this.push) return;
+    const [user, club] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: lesson.coach.userId },
+        select: { firebaseUid: true },
+      }),
+      lesson.clubId
+        ? this.prisma.club.findUnique({
+            where: { id: lesson.clubId },
+            select: { name: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    if (!user?.firebaseUid) return;
+    await this.push
+      .notifyUsers([user.firebaseUid], {
+        title: `${club?.name ?? 'El club'} liberó la cancha de tu clase`,
+        body: `${lesson.date.split('-').reverse().slice(0, 2).join('/')} a las ${minuteLabel(lesson.startMinute)}${reason ? ` · ${reason}` : ''}. La clase sigue en tu agenda sin cancha.`,
+        url: '/explorar/profe',
+        tag: `clase-${lesson.id}`,
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Turnos de clase con profe (los reserva el portal del profe): les suma el profe,
+   * la clase y los alumnos anotados, para verlos en la grilla de alquileres.
+   */
+  private async withCoachClasses<T extends { id: string; kind: string }>(
+    bookings: T[],
+  ) {
+    const ids = bookings.filter((b) => b.kind === 'CLASE').map((b) => b.id);
+    if (ids.length === 0)
+      return bookings.map((b) => ({ ...b, coachClass: null }));
+    const lessons = await this.prisma.coachLesson.findMany({
+      where: { bookingId: { in: ids } },
+      select: {
+        id: true,
+        bookingId: true,
+        format: true,
+        capacity: true,
+        openToJoin: true,
+        status: true,
+        classType: { select: { name: true } },
+        coach: {
+          select: { displayName: true, slug: true, whatsapp: true },
+        },
+        participants: {
+          where: { status: { in: ['CONFIRMED', 'REQUESTED'] } },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            status: true,
+            partnerName: true,
+            student: { select: { name: true, level: true } },
+          },
+        },
+      },
+    });
+    const byBooking = new Map(lessons.map((l) => [l.bookingId, l]));
+    return bookings.map((b) => {
+      const lesson = byBooking.get(b.id);
+      if (!lesson) return { ...b, coachClass: null };
+      const students = lesson.participants.map((p) => ({
+        name: p.student.name,
+        level: p.student.level,
+        partnerName: p.partnerName,
+        pending: p.status === 'REQUESTED',
+      }));
+      return {
+        ...b,
+        coachClass: {
+          lessonId: lesson.id,
+          coachName: lesson.coach.displayName,
+          coachSlug: lesson.coach.slug,
+          coachWhatsapp: lesson.coach.whatsapp,
+          className: lesson.classType?.name ?? null,
+          format: lesson.format,
+          capacity: lesson.capacity,
+          openToJoin: lesson.openToJoin,
+          students,
+          spotsLeft: Math.max(
+            0,
+            lesson.capacity - students.filter((s) => !s.pending).length,
+          ),
+        },
+      };
+    });
   }
 
   // ─── Turnos manuales ──────────────────────────────────────────────────────
@@ -525,6 +637,7 @@ export class AgendaService {
       reason ||
         (booking.recurringId ? 'Liberado esa semana' : 'Cancelado por el club'),
     );
+    await this.releaseCoachClass(id, reason);
     return {
       ...result,
       manualDeposit:
