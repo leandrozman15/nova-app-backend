@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
@@ -16,6 +16,17 @@ export class PlayersController {
   @Get()
   list(@Req() req: unknown) {
     return this.playersService.list(requireCompanyId(req));
+  }
+
+  /**
+   * Plantel del club para el cuerpo técnico (cronómetro de natación, marcador):
+   * solo nombre, equipo, disciplina y si está activo. El listado completo es de la dirección.
+   */
+  @Roles('admin', 'manager', 'club_admin', 'coordinator', 'coach')
+  @Get('roster')
+  roster(@Req() req: unknown, @Query('clubId') clubId: string) {
+    if (!clubId) throw new BadRequestException('Falta el club');
+    return this.playersService.rosterBasic(requireCompanyId(req), clubId);
   }
 
   @Roles('admin', 'manager', 'coach', 'player', 'member')
