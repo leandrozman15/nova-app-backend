@@ -214,3 +214,12 @@ export class JoinLessonDto {
   @IsOptional() @IsString() @MaxLength(40) phone?: string | null;
   @IsOptional() @IsString() @MaxLength(20) level?: string | null;
 }
+
+export class StaffPadelDto {
+  @IsOptional() @IsString() @MaxLength(60) displayName?: string | null;
+  @IsOptional() @IsBoolean() isPublic?: boolean;
+}
+
+export class StaffPublicDto {
+  @IsBoolean() isPublic!: boolean;
+}

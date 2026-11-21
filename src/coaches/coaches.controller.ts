@@ -33,6 +33,8 @@ import {
   CompleteLessonDto,
   CreateLessonDto,
   JoinLessonDto,
+  StaffPadelDto,
+  StaffPublicDto,
   LessonRequestDto,
   NoteDto,
   PackDto,
@@ -313,6 +315,11 @@ export class PublicCoachesController {
     return this.service.list({ sport, zone, level, clubId, q });
   }
 
+  @Get('by-club/:clubId')
+  byClub(@Param('clubId') clubId: string) {
+    return this.service.clubClasses(clubId);
+  }
+
   @Get(':slug')
   detail(@Param('slug') slug: string) {
     return this.service.detail(slug);
@@ -343,6 +350,46 @@ export class ClubCoachesController {
   @Get()
   list(@Req() req: unknown, @Param('clubId') clubId: string) {
     return this.service.list(this.scope(req, clubId), clubId);
+  }
+
+  @Get('staff/:staffUid')
+  staff(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Param('staffUid') staffUid: string,
+  ) {
+    return this.service.staffDetail(this.scope(req, clubId), clubId, staffUid);
+  }
+
+  @Post('staff/:staffUid/padel')
+  enableStaff(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Param('staffUid') staffUid: string,
+    @Body() dto: StaffPadelDto,
+  ) {
+    return this.service.enableStaff(
+      this.scope(req, clubId),
+      clubId,
+      staffUid,
+      dto,
+      uid(req),
+    );
+  }
+
+  @Put('staff/:staffUid/public')
+  staffPublic(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Param('staffUid') staffUid: string,
+    @Body() dto: StaffPublicDto,
+  ) {
+    return this.service.setStaffPublic(
+      this.scope(req, clubId),
+      clubId,
+      staffUid,
+      dto.isPublic,
+    );
   }
 
   @Post(':linkId/approve')

@@ -133,6 +133,105 @@ export class CoachPublicService {
       }));
   }
 
+  /**
+   * Vidriera del club: las clases de pádel de sus profes (tipos de clase con precio,
+   * horario semanal en el club y grupales con lugar). Sin datos de alumnos.
+   */
+  async clubClasses(clubId: string) {
+    const club = await this.prisma.club.findUnique({
+      where: { id: clubId },
+      select: { id: true, timezone: true },
+    });
+    if (!club) throw new NotFoundException('Club no encontrado');
+    const today = todayIn(club.timezone);
+    const coaches = await this.prisma.coachProfile.findMany({
+      where: {
+        isPublic: true,
+        status: 'ACTIVE',
+        classTypes: { some: { active: true } },
+        clubLinks: { some: { clubId, status: 'ACTIVE' } },
+      },
+      orderBy: { displayName: 'asc' },
+      take: 40,
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        photoUrl: true,
+        bio: true,
+        levels: true,
+        whatsapp: true,
+        classTypes: {
+          where: { active: true },
+          orderBy: { price: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            format: true,
+            capacity: true,
+            durationMinutes: true,
+            price: true,
+          },
+        },
+        availability: {
+          where: { clubId },
+          orderBy: [{ weekday: 'asc' }, { startMinute: 'asc' }],
+          select: { weekday: true, startMinute: true, endMinute: true },
+        },
+      },
+    });
+    if (coaches.length === 0) return [];
+    const groups = await this.prisma.coachLesson.findMany({
+      where: {
+        coachId: { in: coaches.map((c) => c.id) },
+        clubId,
+        openToJoin: true,
+        status: 'CONFIRMED',
+        date: { gte: today, lte: addDays(today, 21) },
+      },
+      orderBy: [{ date: 'asc' }, { startMinute: 'asc' }],
+      take: 60,
+      select: {
+        id: true,
+        coachId: true,
+        date: true,
+        startMinute: true,
+        durationMinutes: true,
+        capacity: true,
+        price: true,
+        classType: { select: { name: true } },
+        participants: {
+          where: { status: { in: ['CONFIRMED', 'REQUESTED'] } },
+          select: { id: true },
+        },
+      },
+    });
+    return coaches.map((c) => ({
+      slug: c.slug,
+      displayName: c.displayName,
+      photoUrl: c.photoUrl,
+      bio: c.bio ? c.bio.slice(0, 200) : null,
+      levels: c.levels,
+      whatsapp: c.whatsapp,
+      classTypes: c.classTypes.map((t) => ({ ...t, price: num(t.price) })),
+      weekly: c.availability,
+      groups: groups
+        .filter((g) => g.coachId === c.id)
+        .map((g) => ({
+          id: g.id,
+          date: g.date,
+          startMinute: g.startMinute,
+          durationMinutes: g.durationMinutes,
+          name: g.classType?.name ?? 'Clase grupal',
+          price: num(g.price),
+          capacity: g.capacity,
+          spotsLeft: Math.max(0, g.capacity - g.participants.length),
+        }))
+        .filter((g) => g.spotsLeft > 0)
+        .slice(0, 6),
+    }));
+  }
+
   private async bySlug(slug: string) {
     const coach = await this.prisma.coachProfile.findFirst({
       where: { slug, isPublic: true, status: 'ACTIVE' },

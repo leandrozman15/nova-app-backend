@@ -1,6 +1,7 @@
 jest.mock('../push/push.service', () => ({ PushService: class {} }));
 import { ConflictException } from '@nestjs/common';
 
+import { CoachClubService } from './coach-club.service';
 import { CoachCoreService } from './coach-core.service';
 import { CoachPortalService } from './coach-portal.service';
 
@@ -309,5 +310,60 @@ describe('profes: portal de pádel del entrenador del club', () => {
     ]);
     expect(day.lessons).toHaveLength(1);
     expect(JSON.stringify(day.busy)).not.toContain('contact');
+  });
+});
+
+describe('profes del staff del club', () => {
+  it('activar el portal de pádel crea el perfil y lo vincula al club', async () => {
+    const { prisma, core } = setup();
+    const service = new CoachClubService(core);
+    prisma.club.findFirst = jest.fn().mockResolvedValue({
+      id: 'club1',
+      timezone: 'America/Argentina/Buenos_Aires',
+      name: 'Club Demo',
+    });
+    prisma.user.findUnique = jest.fn().mockResolvedValue({
+      id: 'u9',
+      companyId: 'co1',
+      name: 'Profe Staff Demo',
+      phone: '11 0000-0009',
+    });
+    prisma.coachProfile.findUnique = jest
+      .fn()
+      .mockResolvedValueOnce(null) // no tiene perfil
+      .mockResolvedValueOnce(null) // slug libre
+      .mockResolvedValue(null); // ficha: sin perfil (corta el detalle)
+    prisma.coachProfile.create = jest.fn().mockResolvedValue({ id: 'cp9' });
+    prisma.coachClubLink.upsert = jest.fn();
+    await service.enableStaff('co1', 'club1', 'fb-staff', {}, 'fb-admin');
+    expect(prisma.coachProfile.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'u9',
+          slug: 'profe-staff-demo',
+          displayName: 'Profe Staff Demo',
+          sports: ['padel'],
+          whatsapp: '5491100000009',
+        }),
+      }),
+    );
+    expect(prisma.coachClubLink.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ status: 'ACTIVE', clubId: 'club1' }),
+        update: expect.objectContaining({ status: 'ACTIVE' }),
+      }),
+    );
+  });
+
+  it('un usuario de otra empresa no se puede activar', async () => {
+    const { prisma, core } = setup();
+    const service = new CoachClubService(core);
+    prisma.club.findFirst = jest.fn().mockResolvedValue({ id: 'club1' });
+    prisma.user.findUnique = jest
+      .fn()
+      .mockResolvedValue({ id: 'u9', companyId: 'otra' });
+    await expect(
+      service.enableStaff('co1', 'club1', 'fb-x', {}, 'fb-admin'),
+    ).rejects.toThrow('no tiene usuario');
   });
 });
