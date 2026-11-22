@@ -6,6 +6,7 @@ import {
 
 import { todayIn } from '../bookings/booking-time';
 import { normalizeWhatsapp } from '../clubs/whatsapp';
+import { studentPhotos } from '../common/profile-photos';
 import { CoachCoreService } from './coach-core.service';
 import { slugify, studentBalance } from './coach-rules';
 
@@ -349,6 +350,8 @@ export class CoachClubService {
           level: true,
           active: true,
           skills: true,
+          userId: true,
+          playerId: true,
           participants: {
             where: { attendance: 'PRESENT' },
             select: { lesson: { select: { date: true } } },
@@ -397,6 +400,7 @@ export class CoachClubService {
       present: l.participants.filter((p) => p.attendance === 'PRESENT').length,
     });
 
+    const photos = await studentPhotos(this.prisma, students);
     const roster = students.map((s) => {
       const values = Object.values(
         (s.skills as Record<string, number>) ?? {},
@@ -405,6 +409,7 @@ export class CoachClubService {
       return {
         id: s.id,
         name: s.name,
+        photoUrl: photos.get(s.id) ?? null,
         level: s.level,
         active: s.active,
         lessonsTaken: dates.length,
