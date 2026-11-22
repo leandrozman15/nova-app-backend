@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, type TournamentStatus } from '@prisma/client';
@@ -11,6 +12,7 @@ import { addDays, todayIn } from '../bookings/booking-time';
 import { facilitySportFamily } from '../facilities/facility-sports';
 import { PlatformService } from '../platform/platform.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TournamentBracketService } from './tournament-bracket.service';
 import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import {
   CreateEntryDto,
@@ -112,6 +114,7 @@ export class TournamentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly platform: PlatformService,
+    @Optional() private readonly bracket?: TournamentBracketService,
   ) {}
 
   // ----- Consola del club -----
@@ -333,8 +336,11 @@ export class TournamentsService {
       },
     });
     if (!row) throw new NotFoundException('Torneo no encontrado');
-    const counts = await this.entryCounts([row.id]);
-    return this.toPublic(row, counts.get(row.id));
+    const [counts, bracket] = await Promise.all([
+      this.entryCounts([row.id]),
+      this.bracket?.publicBracket(row.id).catch(() => null) ?? null,
+    ]);
+    return { ...this.toPublic(row, counts.get(row.id)), bracket };
   }
 
   async listMyEntries(firebaseUid: string) {
