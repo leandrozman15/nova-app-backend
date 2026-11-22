@@ -30,7 +30,7 @@ export class PlayersService {
   async rosterBasic(companyId: string, clubId: string) {
     const rows = await this.prisma.player.findMany({
       where: { companyId, clubId },
-      select: { id: true, clubId: true, firstName: true, lastName: true, teamId: true, active: true, sport: true, divisionId: true, extra: true },
+      select: { id: true, clubId: true, firstName: true, lastName: true, teamId: true, active: true, sport: true, divisionId: true, extra: true, authUid: true },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     });
     return rows.map((p) => {
@@ -44,6 +44,8 @@ export class PlayersService {
         active: p.active,
         sport: p.sport,
         divisionId: p.divisionId,
+        // Tiene cuenta en la app (le pueden llegar avisos).
+        hasApp: Boolean(p.authUid),
         // El plantel de la consola vive en extra.teamId.
         extra: { teamId: typeof extra.teamId === 'string' ? extra.teamId : null },
       };

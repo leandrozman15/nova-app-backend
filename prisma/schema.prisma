@@ -1241,9 +1241,64 @@ model ClubTournament {
   company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
   entries TournamentEntry[]
+  teams   TournamentTeam[]
+  matches TournamentMatch[]
 
   @@index([companyId, clubId])
   @@index([status, sport, startDate])
+}
+
+/// Participante del cuadro: pareja, jugador o equipo. Se carga a mano o desde una inscripción.
+model TournamentTeam {
+  id           String   @id @default(cuid())
+  companyId    String
+  clubId       String
+  tournamentId String
+  /// "Pérez / Gómez"
+  name         String
+  /// [{ name, playerId? }]
+  players      Json     @default("[]")
+  /// Cuentas (uid de Firebase) que reciben el aviso de sus partidos.
+  notifyUids   String[] @default([])
+  /// Cabeza de serie (1 = la mejor). Vacío = sin siembra.
+  seed         Int?
+  entryId      String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament ClubTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([notifyUids], type: Gin)
+}
+
+/// Partido del cuadro de eliminación. round 1 = primera ronda; position dentro de la ronda.
+model TournamentMatch {
+  id           String    @id @default(cuid())
+  companyId    String
+  clubId       String
+  tournamentId String
+  round        Int
+  position     Int
+  teamAId      String?
+  teamBId      String?
+  /// AAAA-MM-DD
+  date         String?
+  startMinute  Int?
+  court        String?
+  score        String?
+  winnerId     String?
+  /// Última programación avisada (fecha|minuto|cancha): si cambia, se vuelve a avisar.
+  notifiedKey  String?
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tournament ClubTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, round, position])
+  @@index([teamAId])
+  @@index([teamBId])
 }
 
 enum TournamentEntryStatus {

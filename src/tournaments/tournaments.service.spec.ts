@@ -1,3 +1,5 @@
+jest.mock('../push/push.service', () => ({ PushService: class {} }));
+
 import 'reflect-metadata';
 import {
   BadRequestException,
