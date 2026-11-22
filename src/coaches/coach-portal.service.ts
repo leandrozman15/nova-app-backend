@@ -16,6 +16,7 @@ import {
 } from '../bookings/booking-time';
 import { ensureOccurrences } from '../bookings/fixed-turns';
 import { normalizeWhatsapp } from '../clubs/whatsapp';
+import { photosByUid, studentPhotos } from '../common/profile-photos';
 import {
   CoachCoreService,
   LESSON_ACTIVE,
@@ -86,7 +87,13 @@ export const LESSON_SELECT = {
       partnerName: true,
       message: true,
       student: {
-        select: { name: true, level: true, phone: true, userId: true },
+        select: {
+          name: true,
+          level: true,
+          phone: true,
+          userId: true,
+          playerId: true,
+        },
       },
     },
     orderBy: { createdAt: 'asc' as const },
@@ -100,11 +107,13 @@ type LessonRow = {
   price: unknown;
   classType: { name: string } | null;
   participants: {
+    studentId?: string;
     student: {
       name: string;
       level: string | null;
       phone: string | null;
       userId: string | null;
+      playerId?: string | null;
     };
   }[];
   [key: string]: unknown;
@@ -126,6 +135,12 @@ export class CoachPortalService {
       where: { user: { firebaseUid } },
     });
     if (!profile) return { profile: null };
+    if (!profile.photoUrl) {
+      const photo = (await photosByUid(this.prisma, [firebaseUid])).get(
+        firebaseUid,
+      );
+      if (photo) profile.photoUrl = photo;
+    }
     const today = todayIn(profile.timezone);
     const pending = await this.prisma.coachLesson.count({
       where: {
@@ -512,8 +527,28 @@ export class CoachPortalService {
     ]);
     const clubName = new Map(clubs.map((c) => [c.id, c.name]));
     const facilityName = new Map(facilities.map((f) => [f.id, f.name]));
+    const people = new Map<
+      string,
+      { id: string; userId: string | null; playerId?: string | null }
+    >();
+    for (const r of rows)
+      for (const p of r.participants)
+        if (p.studentId)
+          people.set(p.studentId, {
+            id: p.studentId,
+            userId: p.student.userId,
+            playerId: p.student.playerId,
+          });
+    const photos = await studentPhotos(this.prisma, [...people.values()]);
     return rows.map((r) => ({
       ...r,
+      participants: r.participants.map((p) => ({
+        ...p,
+        student: {
+          ...p.student,
+          photoUrl: (p.studentId && photos.get(p.studentId)) || null,
+        },
+      })),
       price: num(r.price),
       classTypeName: r.classType?.name ?? null,
       clubName: r.clubId ? (clubName.get(r.clubId) ?? null) : null,
@@ -1014,6 +1049,7 @@ export class CoachPortalService {
         level: true,
         active: true,
         userId: true,
+        playerId: true,
         createdAt: true,
         packs: {
           select: {
@@ -1032,6 +1068,7 @@ export class CoachPortalService {
         },
       },
     });
+    const photos = await studentPhotos(this.prisma, rows);
     return rows.map((s) => {
       const unpaid = s.participants
         .filter((p) => p.charge === 'UNPAID')
@@ -1046,6 +1083,7 @@ export class CoachPortalService {
       void participants;
       return {
         ...rest,
+        photoUrl: photos.get(s.id) ?? null,
         lessonsTaken: done.length,
         lastLesson: last,
         balance: studentBalance({ packs, unpaidLessons: unpaid }),
@@ -1176,8 +1214,11 @@ export class CoachPortalService {
       .sort(
         (a, b) => b.date.localeCompare(a.date) || b.startMinute - a.startMinute,
       );
+    const photo = (await studentPhotos(this.prisma, [student])).get(
+      student.id,
+    );
     return {
-      student,
+      student: { ...student, photoUrl: photo ?? null },
       lessons,
       notes,
       packs: packs.map((p) => ({

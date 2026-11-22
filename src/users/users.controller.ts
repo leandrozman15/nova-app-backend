@@ -9,11 +9,15 @@ import { CreateJoinRequestDto } from './dto/create-join-request.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterFreeUserDto } from './dto/register-free-user.dto';
 import { SetActiveClubContextDto } from './dto/set-active-club-context.dto';
+import { ProfilePhotoService } from './profile-photo.service';
 import { UsersService } from './users.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly photos: ProfilePhotoService,
+  ) {}
 
   @Public()
   @Get('bootstrap')
@@ -122,6 +126,19 @@ export class UsersController {
   @Patch('me/profile')
   async updateMyProfile(@Req() req: unknown, @Body() dto: UpdateMyProfileDto) {
     return this.usersService.updateMyProfile(requireAuth(req).uid, dto);
+  }
+
+  /** La foto de perfil, venga del legajo de staff, del padrón o del perfil de profe. */
+  @NoTenant()
+  @Get('me/photo')
+  async myPhoto(@Req() req: unknown) {
+    return this.photos.mine(requireAuth(req).uid);
+  }
+
+  @NoTenant()
+  @Patch('me/photo')
+  async setMyPhoto(@Req() req: unknown, @Body() body: { photoUrl?: unknown }) {
+    return this.photos.setMine(requireAuth(req).uid, body?.photoUrl);
   }
 
   @NoTenant()
