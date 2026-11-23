@@ -54,6 +54,9 @@ const LEGACY_CLUB_ROLES = new Set([
   'member',
 ]);
 
+/** Cuánto se recuerda el rol de un usuario entre pedidos. */
+const ROLE_CACHE_MS = 30_000;
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   private readonly logger = new Logger(RolesGuard.name);
@@ -122,6 +125,27 @@ export class RolesGuard implements CanActivate {
     }
   }
 
+  /**
+   * Usuario y membresía se consultan en cada pedido: se recuerdan unos segundos para no
+   * pagar dos viajes a la base por pedido. Un cambio de rol tarda como mucho eso en regir.
+   * Solo se recuerda lo encontrado (una ausencia se vuelve a consultar).
+   */
+  private readonly memo = new Map<string, { at: number; value: unknown }>();
+
+  private async cached<T>(key: string, load: () => Promise<T | null>): Promise<T | null> {
+    const hit = this.memo.get(key);
+    if (hit && Date.now() - hit.at < ROLE_CACHE_MS) return hit.value as T;
+    const value = await load();
+    if (value) {
+      this.memo.set(key, { at: Date.now(), value });
+      if (this.memo.size > 5000) {
+        const oldest = this.memo.keys().next().value;
+        if (oldest !== undefined) this.memo.delete(oldest);
+      }
+    }
+    return value;
+  }
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
@@ -143,10 +167,12 @@ export class RolesGuard implements CanActivate {
       throw new UnauthorizedException('Missing auth context');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: { firebaseUid: request.auth.uid },
-      select: { id: true, role: true, companyId: true },
-    });
+    const user = await this.cached(`u|${request.auth.uid}`, () =>
+      this.prisma.user.findFirst({
+        where: { firebaseUid: request.auth!.uid },
+        select: { id: true, role: true, companyId: true },
+      }),
+    );
 
     if (!user) {
       throw new UnauthorizedException('User not found for tenant');
@@ -162,17 +188,21 @@ export class RolesGuard implements CanActivate {
         throw new UnauthorizedException('Missing active club claim');
       }
 
+      const clubId = request.auth.clubId;
+      const companyId = request.companyId;
       const membership =
-        (await this.prisma.clubMembership.findFirst({
-          where: {
-            userId: user.id,
-            companyId: request.companyId,
-            clubId: request.auth.clubId,
-            status: 'ACTIVA',
-            club: { is: { companyId: request.companyId } },
-          },
-          select: { role: true },
-        })) ?? (await this.backfillLegacyMembership(user, request));
+        (await this.cached(`m|${user.id}|${companyId}|${clubId}`, () =>
+          this.prisma.clubMembership.findFirst({
+            where: {
+              userId: user.id,
+              companyId,
+              clubId,
+              status: 'ACTIVA',
+              club: { is: { companyId } },
+            },
+            select: { role: true },
+          }),
+        )) ?? (await this.backfillLegacyMembership(user, request));
 
       if (!membership) {
         throw new ForbiddenException('Active club membership required');
