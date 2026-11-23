@@ -12,4 +12,10 @@ export class HealthController {
   async getHealth() {
     return this.healthService.check();
   }
+
+  @Public()
+  @Get('db')
+  async getDbRoundTrip() {
+    return this.healthService.dbRoundTrip();
+  }
 }
