@@ -23,6 +23,25 @@ type ChargeSource = {
  * origen (sourceKey único) con el valor vigente en ese momento, y queda como
  * gasto en la Tesorería del club.
  */
+/** Datos de cobro de Fluxion (transferencia) que ven los clubes en "Mi plan". */
+export function paymentOf(settings: {
+  paymentAlias: string | null;
+  paymentCbu: string | null;
+  paymentHolder: string | null;
+  paymentBank: string | null;
+  paymentCuit: string | null;
+  paymentNote: string | null;
+}) {
+  return {
+    alias: settings.paymentAlias || null,
+    cbu: settings.paymentCbu || null,
+    holder: settings.paymentHolder || null,
+    bank: settings.paymentBank || null,
+    cuit: settings.paymentCuit || null,
+    note: settings.paymentNote || null,
+  };
+}
+
 @Injectable()
 export class PlatformService {
   private readonly logger = new Logger(PlatformService.name);
@@ -42,6 +61,7 @@ export class PlatformService {
       tournamentPublishFee: Number(settings.tournamentPublishFee),
       tournamentEntryFee: Number(settings.tournamentEntryFee),
       currency: settings.currency,
+      payment: paymentOf(settings),
       updatedAt: settings.updatedAt,
     };
   }
@@ -62,10 +82,12 @@ export class PlatformService {
         before: {
           tournamentPublishFee: before.tournamentPublishFee,
           tournamentEntryFee: before.tournamentEntryFee,
+          payment: before.payment,
         },
         after: {
           tournamentPublishFee: after.tournamentPublishFee,
           tournamentEntryFee: after.tournamentEntryFee,
+          payment: after.payment,
         },
       },
     );

@@ -286,8 +286,8 @@ describe('settings audit', () => {
       'platform.settings.update',
       { type: 'PlatformSettings', id: 'global' },
       {
-        before: { tournamentPublishFee: 0, tournamentEntryFee: 0 },
-        after: { tournamentPublishFee: 15000, tournamentEntryFee: 0 },
+        before: expect.objectContaining({ tournamentPublishFee: 0, tournamentEntryFee: 0 }),
+        after: expect.objectContaining({ tournamentPublishFee: 15000, tournamentEntryFee: 0 }),
       },
     );
   });

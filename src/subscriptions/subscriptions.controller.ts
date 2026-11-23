@@ -13,7 +13,8 @@ import {
 
 import { NoTenant } from '../common/decorators/no-tenant.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { requireClubScope } from '../common/http/request-context';
+import { requireClubScope, requireCompanyId } from '../common/http/request-context';
+import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
 import { PlatformAdminGuard } from '../platform/platform-admin.guard';
 import { actorOf } from '../platform/platform.controller';
 import {
@@ -25,6 +26,12 @@ import {
   UpdatePlanDto,
   UpsertSubscriptionDto,
 } from './dto/subscription.dto';
+import {
+  ListPlanRequestsDto,
+  PlanRequestDto,
+  ResolvePlanRequestDto,
+} from './dto/plan-request.dto';
+import { PlanRequestsService } from './plan-requests.service';
 import { SubscriptionsService } from './subscriptions.service';
 
 /** Panel de Fluxion: planes, suscripciones de clubes y mensualidades. */
@@ -32,7 +39,25 @@ import { SubscriptionsService } from './subscriptions.service';
 @UseGuards(PlatformAdminGuard)
 @Controller('platform/subscriptions')
 export class PlatformSubscriptionsController {
-  constructor(private readonly service: SubscriptionsService) {}
+  constructor(
+    private readonly service: SubscriptionsService,
+    private readonly requests: PlanRequestsService,
+  ) {}
+
+  /** Pedidos de los clubes desde "Mi plan". */
+  @Get('requests')
+  listRequests(@Query() query: ListPlanRequestsDto) {
+    return this.requests.list(query.status);
+  }
+
+  @Post('requests/:id/resolve')
+  resolveRequest(
+    @Req() req: unknown,
+    @Param('id') id: string,
+    @Body() dto: ResolvePlanRequestDto,
+  ) {
+    return this.requests.resolve(actorOf(req), id, dto);
+  }
 
   @Get('plans')
   plans() {
@@ -118,11 +143,40 @@ export class PlatformSubscriptionsController {
 @Roles('admin', 'club_admin', 'manager', 'coordinator')
 @Controller('clubs/:clubId/subscription')
 export class ClubSubscriptionController {
-  constructor(private readonly service: SubscriptionsService) {}
+  constructor(
+    private readonly service: SubscriptionsService,
+    private readonly requests: PlanRequestsService,
+  ) {}
 
   @Get()
   get(@Req() req: unknown, @Param('clubId') clubId: string) {
     requireClubScope(req, clubId);
     return this.service.forClub(clubId);
+  }
+
+  /** "Mi plan": estado, cupo, precios, datos para transferir y pedidos del club. */
+  @Roles('admin', 'club_admin', 'manager')
+  @Get('plan')
+  plan(@Req() req: unknown, @Param('clubId') clubId: string) {
+    requireClubScope(req, clubId);
+    return this.requests.myPlan(clubId);
+  }
+
+  /** Pedir más usuarios, un pack, el alta del plan o avisar un pago (se puede aunque el club esté suspendido). */
+  @Roles('admin', 'club_admin', 'manager')
+  @Post('requests')
+  request(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Body() dto: PlanRequestDto,
+  ) {
+    requireClubScope(req, clubId);
+    const auth = (req as RequestWithAuth).auth!;
+    return this.requests.request(
+      clubId,
+      requireCompanyId(req),
+      { uid: auth.uid, name: auth.email ?? null },
+      dto,
+    );
   }
 }
