@@ -358,6 +358,7 @@ model Club {
   platformCharges       PlatformCharge[]
   subscription          ClubSubscription?
   subscriptionInvoices  SubscriptionInvoice[]
+  planRequests          PlanRequest[]
   storeSettings         ClubStoreSettings?
   storePickupOrders     StoreOrder[] @relation("StoreOrderPickupClub")
   storeSellerOrders     StoreOrder[] @relation("StoreOrderSellerClub")
@@ -1343,6 +1344,14 @@ model PlatformSettings {
   commissionClubMin     Decimal @default(0) @db.Decimal(5, 2)
   commissionClubMax     Decimal @default(15) @db.Decimal(5, 2)
   currency             String   @default("ARS")
+  /// Datos de cobro de Fluxion que ven los clubes en "Mi plan" (transferencia).
+  paymentAlias         String?
+  paymentCbu           String?
+  paymentHolder        String?
+  paymentBank          String?
+  paymentCuit          String?
+  /// Texto libre: a dónde mandar el comprobante, horarios, etc.
+  paymentNote          String?
   updatedByUid         String?
   updatedAt            DateTime @updatedAt
 }
@@ -1466,6 +1475,51 @@ model ClubSubscription {
   invoices SubscriptionInvoice[]
 
   @@index([status])
+}
+
+enum PlanRequestKind {
+  /// Alta del plan (club piloto o nuevo que quiere contratar).
+  ACTIVATION
+  /// Más usuarios: bloques extra sobre los incluidos.
+  EXTRA_USERS
+  INTEGRATIONS
+  BUFFET
+  /// El club informa que transfirió una mensualidad.
+  PAYMENT
+}
+
+enum PlanRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Pedido del club a Fluxion desde "Mi plan": más usuarios, packs, alta o aviso de pago.
+model PlanRequest {
+  id            String            @id @default(cuid())
+  companyId     String
+  clubId        String
+  kind          PlanRequestKind
+  status        PlanRequestStatus @default(PENDING)
+  /// EXTRA_USERS: cuántos bloques pide.
+  extraBlocks   Int?
+  /// PAYMENT: mensualidad que paga, monto y referencia de la transferencia.
+  invoiceId     String?
+  amount        Decimal?          @db.Decimal(12, 2)
+  reference     String?
+  note          String?
+  createdByUid  String
+  createdByName String?
+  resolvedByUid String?
+  resolvedAt    DateTime?
+  response      String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId, createdAt])
+  @@index([status, createdAt])
 }
 
 enum SubscriptionInvoiceStatus {

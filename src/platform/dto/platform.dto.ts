@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  Matches,
 } from 'class-validator';
 
 export class UpdatePlatformSettingsDto {
@@ -28,6 +29,42 @@ export class UpdatePlatformSettingsDto {
   @Min(0)
   @Max(100_000_000)
   tournamentEntryFee?: number;
+
+  // Datos de cobro de Fluxion que ven los clubes en "Mi plan".
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(60)
+  paymentAlias?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.replace(/\s+/g, '') : value))
+  @Matches(/^(\d{22})?$/, { message: 'El CBU/CVU tiene 22 números' })
+  paymentCbu?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(120)
+  paymentHolder?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(80)
+  paymentBank?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(20)
+  paymentCuit?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(400)
+  paymentNote?: string;
 }
 
 export class ListChargesDto {

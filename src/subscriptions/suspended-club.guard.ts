@@ -46,6 +46,8 @@ export class SuspendedClubGuard implements CanActivate {
     if (READ_METHODS.has(request.method)) return true;
     const clubId = clubIdFromRequest(request);
     if (!clubId) return true;
+    // Un club suspendido igual puede avisar su pago o pedir el alta desde "Mi plan".
+    if (/\/subscription\/requests$/.test(request.route?.path ?? '')) return true;
 
     const subscription = await this.prisma.clubSubscription.findUnique({
       where: { clubId },
