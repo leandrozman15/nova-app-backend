@@ -5,6 +5,7 @@ import compression from 'compression';
 import helmet from 'helmet';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { serverTiming } from './common/http/server-timing';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -15,6 +16,7 @@ async function bootstrap() {
   // Respuestas JSON comprimidas (gzip): listas de clubes, agenda y productos pesan ~5 veces menos.
   // Cabeceras de seguridad; CORP cross-origin porque el front en otro dominio consume la API y los medios.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  app.use(serverTiming);
   app.use(compression({ threshold: 1024 }));
 
   app.useGlobalPipes(
