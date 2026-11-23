@@ -21,6 +21,8 @@ import { buildClubFeed } from '../matches/club-feed';
 import { toPublicMenu } from '../buffet/buffet.logic';
 import { EmailNotificationsService } from '../email/email-notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ShortMemo } from '../common/short-memo';
+import { clubFeedMemo, clubLiveMemo } from '../matches/club-memos';
 import {
   MercadoPagoClient,
   mpConfig,
@@ -68,6 +70,9 @@ function isMinorWithGuardian(player: { birthDate: Date | null; extra: unknown })
 
 @Injectable()
 export class FeePaymentsService {
+  /** Hijos por email del tutor: cuotas y citaciones cambian poco en 10 s. */
+  private readonly childrenMemo = new ShortMemo(10_000);
+
   private readonly logger = new Logger(FeePaymentsService.name);
 
   constructor(
@@ -155,7 +160,7 @@ export class FeePaymentsService {
     const feeds = await Promise.all(
       [...clubs.entries()].map(async ([clubId, companyId]) => ({
         clubId,
-        ...(await buildClubFeed(this.prisma, companyId, clubId)),
+        ...(await clubFeedMemo.get(`${companyId}|${clubId}`, () => buildClubFeed(this.prisma, companyId, clubId))),
       })),
     );
     return feeds;
@@ -169,7 +174,7 @@ export class FeePaymentsService {
     return Promise.all(
       [...clubs.entries()].map(async ([clubId, companyId]) => ({
         clubId,
-        matches: await loadClubLive(this.prisma, companyId, clubId),
+        matches: await clubLiveMemo.get(`${companyId}|${clubId}`, () => loadClubLive(this.prisma, companyId, clubId)),
       })),
     );
   }
@@ -250,9 +255,17 @@ export class FeePaymentsService {
     return menus.filter((m): m is NonNullable<typeof m> => m !== null);
   }
 
+  /**
+   * Los hijos del padre/tutor: la pantalla de familias los pide desde varias tarjetas a la vez
+   * (hijos, novedades, Live, partidos), así que se comparten unos segundos por email.
+   */
   async listChildren(auth: { email?: string; emailVerified?: boolean }) {
     const email = auth.email?.trim().toLowerCase();
     if (!email || auth.emailVerified !== true) return [];
+    return this.childrenMemo.get(email, () => this.loadChildren(email));
+  }
+
+  private async loadChildren(email: string) {
     const candidates = await this.prisma.player.findMany({
       where: {
         extra: { path: ['guardianEmail'], string_contains: email, mode: 'insensitive' },
@@ -276,17 +289,20 @@ export class FeePaymentsService {
     const children = candidates.filter(
       (p) => guardianEmailOf(p.extra) === email,
     );
-    const pending = await this.prisma.playerPayment.groupBy({
-      by: ['playerId'],
-      where: {
-        playerId: { in: children.map((c) => c.id) },
-        status: 'pending',
-      },
-      _count: { _all: true },
-    });
+    // Cuotas, equipos y citaciones no dependen entre sí: se piden juntas.
+    const [pending, teams, callups] = await Promise.all([
+      this.prisma.playerPayment.groupBy({
+        by: ['playerId'],
+        where: {
+          playerId: { in: children.map((c) => c.id) },
+          status: 'pending',
+        },
+        _count: { _all: true },
+      }),
+      loadChildTeams(this.prisma, children),
+      loadChildCallups(this.prisma, children),
+    ]);
     const pendingBy = new Map(pending.map((r) => [r.playerId, r._count._all]));
-    const teams = await loadChildTeams(this.prisma, children);
-    const callups = await loadChildCallups(this.prisma, children);
     return children.map((c) => {
       const extra = (c.extra ?? {}) as Record<string, unknown>;
       const team = teams.get(c.id) ?? null;
@@ -359,6 +375,7 @@ export class FeePaymentsService {
       throw new BadRequestException('Pago inválido');
     await this.loadGuardianFee(auth, playerId, feeId);
     await this.applyPayment(feeId, paymentId);
+    this.childrenMemo.clear(); // la cuota pagada se ve al instante
     return this.prisma.playerPayment.findUnique({
       where: { id: feeId },
       select: { status: true, paymentDate: true, mpPaymentStatus: true },

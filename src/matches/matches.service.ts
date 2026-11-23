@@ -13,13 +13,14 @@ import { UpdateMatchOperationsDto } from './dto/update-match-operations.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 
 import { buildClubFeed } from './club-feed';
+import { clubFeedMemo, clubLiveMemo } from './club-memos';
 
 @Injectable()
 export class MatchesService {
   constructor(private readonly prisma: PrismaService) {}
 
   clubFeed(companyId: string, clubId: string) {
-    return buildClubFeed(this.prisma, companyId, clubId);
+    return clubFeedMemo.get(`${companyId}|${clubId}`, () => buildClubFeed(this.prisma, companyId, clubId));
   }
 
   /** Partidos en vivo del club con escudos, goles y tarjetas. */
@@ -28,7 +29,7 @@ export class MatchesService {
   }
 
   clubLive(companyId: string, clubId: string) {
-    return loadClubLive(this.prisma, companyId, clubId);
+    return clubLiveMemo.get(`${companyId}|${clubId}`, () => loadClubLive(this.prisma, companyId, clubId));
   }
 
   async list(companyId: string, pagination?: { skip?: number; take?: number; withMeta?: boolean }) {
