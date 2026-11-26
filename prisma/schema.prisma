@@ -2093,6 +2093,8 @@ model BuffetSale {
   /// pending (cargado a la cuenta, todavía sin cobrar) | settled (cobrado al cerrar la cuenta) | null.
   accountStatus String?
   settledAt     DateTime?
+  /// Nombre de quien retiró la compra (opcional): en los consumos a cuenta suele ser alguien del grupo.
+  pickedUpBy    String?
 
   company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club     Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)

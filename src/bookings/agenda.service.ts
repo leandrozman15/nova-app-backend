@@ -617,6 +617,32 @@ export class AgendaService {
     return this.getBooking(id);
   }
 
+  /** Consumos del buffet cargados a este turno y todavía sin cobrar (solo lectura, para verlos junto al saldo). */
+  async buffetConsumptions(companyId: string, clubId: string, id: string) {
+    await this.requireBooking(companyId, clubId, id);
+    const sales = await this.prisma.buffetSale.findMany({
+      where: { bookingId: id, companyId, clubId, accountStatus: 'pending', status: 'completed' },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        total: true,
+        createdAt: true,
+        createdByName: true,
+        pickedUpBy: true,
+        items: { select: { name: true, quantity: true, unitPrice: true } },
+      },
+    });
+    const consumptions = sales.map((s) => ({
+      saleId: s.id,
+      createdAt: s.createdAt,
+      total: Number(s.total),
+      createdByName: s.createdByName,
+      pickedUpBy: s.pickedUpBy,
+      items: s.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: Number(i.unitPrice) })),
+    }));
+    return { consumptions, total: Math.round(consumptions.reduce((a, c) => a + c.total, 0) * 100) / 100 };
+  }
+
   async confirm(companyId: string, clubId: string, id: string) {
     await this.bookings.confirmByClub(companyId, clubId, id);
     return this.getBooking(id);

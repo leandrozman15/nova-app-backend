@@ -72,6 +72,7 @@ const ACCOUNT_SELECT = {
       total: true,
       createdAt: true,
       createdByName: true,
+      pickedUpBy: true,
       items: { select: { name: true, quantity: true, unitPrice: true } },
     },
   },
@@ -87,6 +88,7 @@ function presentAccount(b: AccountRow) {
     createdAt: s.createdAt,
     total: num(s.total),
     createdByName: s.createdByName,
+    pickedUpBy: s.pickedUpBy,
     items: s.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: num(i.unitPrice) })),
   }));
   const consumptionTotal = round2(consumptions.reduce((a, c) => a + c.total, 0));
@@ -414,6 +416,7 @@ export class BuffetService {
           total,
           paymentMethod: dto.bookingId ? 'account' : saleMethodOf(payments),
           bookingId: dto.bookingId,
+          pickedUpBy: dto.pickedUpBy?.trim() || null,
           accountStatus: dto.bookingId ? 'pending' : null,
           clientRef: dto.clientRef,
           createdByUid: actor.uid,

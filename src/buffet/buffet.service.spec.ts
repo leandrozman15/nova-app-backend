@@ -173,6 +173,18 @@ describe('BuffetService', () => {
       expect(data.payments.create).toEqual([{ sessionId: 's1', method: 'card', amount: 2000 }]);
     });
 
+    it('guarda quién retira la compra, sin espacios de más', async () => {
+      const { prisma, tx } = makePrisma();
+      prisma.buffetCashSession.findFirst.mockResolvedValue({ id: 's1' });
+      tx.buffetProduct.findMany.mockResolvedValue([product]);
+      tx.buffetSale.create.mockResolvedValue({ id: 'sale1', items: [], payments: [] });
+      const service = new BuffetService(prisma);
+      await service.createSale('co', 'c1', actor, { items: [{ productId: 'p1', quantity: 1 }], paymentMethod: 'cash', pickedUpBy: '  Pedro  ' });
+      expect(tx.buffetSale.create.mock.calls[0][0].data.pickedUpBy).toBe('Pedro');
+      await service.createSale('co', 'c1', actor, { items: [{ productId: 'p1', quantity: 1 }], paymentMethod: 'cash' });
+      expect(tx.buffetSale.create.mock.calls[1][0].data.pickedUpBy).toBeNull();
+    });
+
     it('exige elegir una sola forma de cobro', async () => {
       const { prisma } = makePrisma();
       const service = new BuffetService(prisma);
