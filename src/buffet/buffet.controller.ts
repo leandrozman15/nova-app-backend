@@ -13,6 +13,7 @@ import {
   DeleteProductsDto,
   OpenSessionDto,
   RegisterCanonDto,
+  SettleAccountDto,
   UpdateBuffetDto,
   UpdateProductDto,
   VoidSaleDto,
@@ -145,6 +146,26 @@ export class BuffetController {
   voidSale(@Req() req: unknown, @Param('clubId') clubId: string, @Param('id') id: string, @Body() dto: VoidSaleDto) {
     const { companyId, actor } = ctx(req, clubId);
     return this.buffet.voidSale(companyId, clubId, id, actor, dto.reason);
+  }
+
+  // Cuentas de alquiler: consumos cargados a un turno y cierre junto con el saldo de la cancha
+  @Roles(...OPERATE)
+  @Get('accounts')
+  accounts(@Req() req: unknown, @Param('clubId') clubId: string, @Query('date') date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) throw new BadRequestException('date (YYYY-MM-DD) es obligatoria');
+    return this.buffet.listAccounts(ctx(req, clubId).companyId, clubId, date);
+  }
+
+  @Roles(...OPERATE)
+  @Get('accounts/:bookingId')
+  account(@Req() req: unknown, @Param('clubId') clubId: string, @Param('bookingId') bookingId: string) {
+    return this.buffet.getAccount(ctx(req, clubId).companyId, clubId, bookingId);
+  }
+
+  @Roles(...OPERATE)
+  @Post('accounts/:bookingId/settle')
+  settle(@Req() req: unknown, @Param('clubId') clubId: string, @Param('bookingId') bookingId: string, @Body() dto: SettleAccountDto) {
+    return this.buffet.settleAccount(ctx(req, clubId).companyId, clubId, bookingId, dto);
   }
 
   // Reportes
