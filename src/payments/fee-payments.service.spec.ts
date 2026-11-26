@@ -35,7 +35,21 @@ describe('FeePaymentsService', () => {
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      player: { findFirst: jest.fn().mockResolvedValue({ id: 'p1' }) },
+      player: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'p1' }),
+        findUnique: jest.fn().mockResolvedValue({ birthDate: null, extra: {} }),
+      },
+      club: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            lateFeeMode: 'off',
+            lateFeePercent: 10,
+            lateFeeGraceDays: 0,
+            lateFeeMaxPercent: null,
+            timezone: 'America/Argentina/Buenos_Aires',
+          }),
+      },
       clubMembership: { findFirst: jest.fn().mockResolvedValue(null) },
       user: { findFirst: jest.fn().mockResolvedValue({ email: 'a@b.com' }) },
       financialTransaction: { createMany: jest.fn().mockResolvedValue({}) },
@@ -68,6 +82,22 @@ describe('FeePaymentsService', () => {
         where: { id: 'f1' },
         data: { mpPreferenceId: 'pref1' },
       });
+    });
+
+    it('cobra la cuota más la mora cuando el club la tiene activa y la cuota venció', async () => {
+      prisma.club.findUnique.mockResolvedValue({
+        lateFeeMode: 'fixed',
+        lateFeePercent: 10,
+        lateFeeGraceDays: 0,
+        lateFeeMaxPercent: null,
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+      // Cuota de marzo 2026, sin vencimiento: venció el 31/03 y ya pasó.
+      await service.createCheckout('c1', 'uid1', 'f1');
+      const input = mp.createPreference.mock.calls[0][1];
+      expect(input.amount).toBe(16500);
+      expect(input.title).toContain('con mora');
+      expect(input.idempotencyKey).toBe('pref-fee:f1:16500');
     });
 
     it('returns the player to the player portal', async () => {
@@ -193,42 +223,101 @@ describe('FeePaymentsService.listChildren (vínculo padre/tutor)', () => {
   const build = (rows: any[]) => {
     const prisma: any = {
       player: { findMany: jest.fn().mockResolvedValue(rows) },
-      playerPayment: { groupBy: jest.fn().mockResolvedValue([{ playerId: 'p1', _count: { _all: 2 } }]) },
+      playerPayment: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValue([{ playerId: 'p1', _count: { _all: 2 } }]),
+      },
       storeDocument: { findMany: jest.fn().mockResolvedValue([]) },
       matchCallup: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    return { prisma, service: new FeePaymentsService(prisma, {} as any, {} as any) };
+    return {
+      prisma,
+      service: new FeePaymentsService(prisma, {} as any, {} as any),
+    };
   };
 
   it('devuelve los hijos cuando el email del tutor coincide (sin importar mayúsculas)', async () => {
-    const { service } = build([row('p1', 'Padre@Mail.com'), row('p2', 'otro@mail.com')]);
-    const kids = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
+    const { service } = build([
+      row('p1', 'Padre@Mail.com'),
+      row('p2', 'otro@mail.com'),
+    ]);
+    const kids = await service.listChildren({
+      email: 'padre@mail.com',
+      emailVerified: true,
+    });
     expect(kids.map((k) => k.playerId)).toEqual(['p1']);
-    expect(kids[0]).toMatchObject({ clubId: 'club1', teamName: 'Sub 11', pendingFees: 2 });
+    expect(kids[0]).toMatchObject({
+      clubId: 'club1',
+      teamName: 'Sub 11',
+      pendingFees: 2,
+    });
   });
 
   it('trae el plantel del hijo (entrenador y horarios) desde el servidor', async () => {
-    const { service, prisma } = build([{ ...row('p1', 'padre@mail.com'), divisionId: 'd1' }]);
-    prisma.storeDocument.findMany.mockResolvedValue([
-      { path: 'clubs/club1/divisions/d1/teams/t1', parentPath: 'clubs/club1/divisions/d1/teams', docId: 't1', companyId: 'c1', data: { name: 'Categoría 2019', coachName: 'Seba Ruiz', trainingDays: ['Lunes', 'Miércoles'], trainingStartTime: '18:30', trainingEndTime: '20:00' } },
+    const { service, prisma } = build([
+      { ...row('p1', 'padre@mail.com'), divisionId: 'd1' },
     ]);
-    const [kid] = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
-    expect(kid.team).toMatchObject({ id: 't1', coachName: 'Seba Ruiz', trainingDays: ['Lunes', 'Miércoles'], trainingStartTime: '18:30' });
+    prisma.storeDocument.findMany.mockResolvedValue([
+      {
+        path: 'clubs/club1/divisions/d1/teams/t1',
+        parentPath: 'clubs/club1/divisions/d1/teams',
+        docId: 't1',
+        companyId: 'c1',
+        data: {
+          name: 'Categoría 2019',
+          coachName: 'Seba Ruiz',
+          trainingDays: ['Lunes', 'Miércoles'],
+          trainingStartTime: '18:30',
+          trainingEndTime: '20:00',
+        },
+      },
+    ]);
+    const [kid] = await service.listChildren({
+      email: 'padre@mail.com',
+      emailVerified: true,
+    });
+    expect(kid.team).toMatchObject({
+      id: 't1',
+      coachName: 'Seba Ruiz',
+      trainingDays: ['Lunes', 'Miércoles'],
+      trainingStartTime: '18:30',
+    });
   });
 
   it('sin equipo en la ficha usa el único equipo de la rama', async () => {
-    const { service, prisma } = build([{ ...row('p1', 'padre@mail.com'), divisionId: 'd1', extra: { guardianEmail: 'padre@mail.com' } }]);
-    prisma.storeDocument.findMany.mockResolvedValue([
-      { path: 'clubs/club1/divisions/d1/teams/t9', parentPath: 'clubs/club1/divisions/d1/teams', docId: 't9', companyId: 'c1', data: { name: 'Única', coachName: 'DT' } },
+    const { service, prisma } = build([
+      {
+        ...row('p1', 'padre@mail.com'),
+        divisionId: 'd1',
+        extra: { guardianEmail: 'padre@mail.com' },
+      },
     ]);
-    const [kid] = await service.listChildren({ email: 'padre@mail.com', emailVerified: true });
+    prisma.storeDocument.findMany.mockResolvedValue([
+      {
+        path: 'clubs/club1/divisions/d1/teams/t9',
+        parentPath: 'clubs/club1/divisions/d1/teams',
+        docId: 't9',
+        companyId: 'c1',
+        data: { name: 'Única', coachName: 'DT' },
+      },
+    ]);
+    const [kid] = await service.listChildren({
+      email: 'padre@mail.com',
+      emailVerified: true,
+    });
     expect(kid.teamId).toBe('t9');
     expect(kid.team?.coachName).toBe('DT');
   });
 
   it('no devuelve nada si el email del padre no está verificado', async () => {
     const { service, prisma } = build([row('p1', 'padre@mail.com')]);
-    expect(await service.listChildren({ email: 'padre@mail.com', emailVerified: false })).toEqual([]);
+    expect(
+      await service.listChildren({
+        email: 'padre@mail.com',
+        emailVerified: false,
+      }),
+    ).toEqual([]);
     expect(prisma.player.findMany).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,9 @@
  */
 
 /** Normaliza lo que escribe el club. null si no se puede armar un número válido. */
-export function normalizeWhatsapp(input: string | null | undefined): string | null {
+export function normalizeWhatsapp(
+  input: string | null | undefined,
+): string | null {
   if (!input) return null;
   const raw = input.trim();
   if (!raw) return null;
@@ -12,7 +14,8 @@ export function normalizeWhatsapp(input: string | null | undefined): string | nu
   let d = raw.replace(/\D/g, '');
   if (d.startsWith('00')) d = d.slice(2);
 
-  if (international && !d.startsWith('54')) return d.length >= 8 && d.length <= 15 ? d : null;
+  if (international && !d.startsWith('54'))
+    return d.length >= 8 && d.length <= 15 ? d : null;
 
   if (d.startsWith('54')) {
     d = d.slice(2);
@@ -32,7 +35,9 @@ export function normalizeWhatsapp(input: string | null | undefined): string | nu
 }
 
 /** Cómo se muestra: "11 3046-4848" para Argentina, "+<número>" para el resto. */
-export function displayWhatsapp(number: string | null | undefined): string | null {
+export function displayWhatsapp(
+  number: string | null | undefined,
+): string | null {
   if (!number) return null;
   if (number.startsWith('549') && number.length === 13) {
     const n = number.slice(3);

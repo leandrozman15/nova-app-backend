@@ -55,7 +55,13 @@ export class ClubsService {
         tournamentId: { not: null },
         OR: [{ homeTeam: { clubId } }, { awayTeam: { clubId } }],
       },
-      include: { homeTeam: team, awayTeam: team, tournament: { select: { id: true, name: true } }, suspensions: true, categoryResults: true },
+      include: {
+        homeTeam: team,
+        awayTeam: team,
+        tournament: { select: { id: true, name: true } },
+        suspensions: true,
+        categoryResults: true,
+      },
       orderBy: { scheduledAt: 'asc' },
       take: 300,
     });
@@ -68,7 +74,11 @@ export class ClubsService {
   async leagueBrackets(companyId: string, clubId: string) {
     await this.getById(companyId, clubId);
     const tournaments = await this.prisma.leagueTournament.findMany({
-      where: { companyId, formatType: { in: ['knockout', 'groups_knockout'] }, clubs: { some: { clubId } } },
+      where: {
+        companyId,
+        formatType: { in: ['knockout', 'groups_knockout'] },
+        clubs: { some: { clubId } },
+      },
       select: {
         id: true,
         name: true,
@@ -76,7 +86,9 @@ export class ClubsService {
         status: true,
         groupCount: true,
         advancePerGroup: true,
-        clubs: { select: { clubId: true, club: { select: { logoUrl: true } } } },
+        clubs: {
+          select: { clubId: true, club: { select: { logoUrl: true } } },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -84,11 +96,26 @@ export class ClubsService {
     return Promise.all(
       tournaments.map(async (t) => {
         const matches = await this.prisma.match.findMany({
-          where: { companyId, tournamentId: t.id, stage: { in: ['knockout', 'third_place'] } },
+          where: {
+            companyId,
+            tournamentId: t.id,
+            stage: { in: ['knockout', 'third_place'] },
+          },
           select: {
-            id: true, stage: true, round: true, bracketSlot: true, label: true, status: true, scheduledAt: true, venue: true,
-            homeScore: true, awayScore: true, homePens: true, awayPens: true,
-            homeTeam: team, awayTeam: team,
+            id: true,
+            stage: true,
+            round: true,
+            bracketSlot: true,
+            label: true,
+            status: true,
+            scheduledAt: true,
+            venue: true,
+            homeScore: true,
+            awayScore: true,
+            homePens: true,
+            awayPens: true,
+            homeTeam: team,
+            awayTeam: team,
           },
           orderBy: [{ round: 'asc' }, { bracketSlot: 'asc' }],
         });
@@ -97,8 +124,13 @@ export class ClubsService {
           name: t.name,
           formatType: t.formatType,
           status: t.status,
-          teamCount: t.formatType === 'knockout' ? t.clubs.length : (t.groupCount ?? 0) * (t.advancePerGroup ?? 0) || null,
-          logos: Object.fromEntries(t.clubs.map((c) => [c.clubId, c.club?.logoUrl ?? null])),
+          teamCount:
+            t.formatType === 'knockout'
+              ? t.clubs.length
+              : (t.groupCount ?? 0) * (t.advancePerGroup ?? 0) || null,
+          logos: Object.fromEntries(
+            t.clubs.map((c) => [c.clubId, c.club?.logoUrl ?? null]),
+          ),
           matches,
         };
       }),
@@ -121,11 +153,25 @@ export class ClubsService {
   async admins(companyId: string, clubId: string) {
     await this.getById(companyId, clubId);
     const rows = await this.prisma.clubMembership.findMany({
-      where: { companyId, clubId, status: 'ACTIVA', role: { in: ['club_admin', 'manager'] } },
+      where: {
+        companyId,
+        clubId,
+        status: 'ACTIVA',
+        role: { in: ['club_admin', 'manager'] },
+      },
       orderBy: { createdAt: 'asc' },
-      select: { role: true, createdAt: true, user: { select: { email: true, name: true } } },
+      select: {
+        role: true,
+        createdAt: true,
+        user: { select: { email: true, name: true } },
+      },
     });
-    return rows.map((r) => ({ email: r.user.email, name: r.user.name, role: r.role, since: r.createdAt }));
+    return rows.map((r) => ({
+      email: r.user.email,
+      name: r.user.name,
+      role: r.role,
+      since: r.createdAt,
+    }));
   }
 
   create(companyId: string, dto: CreateClubDto) {
@@ -182,7 +228,9 @@ export class ClubsService {
         billingEmail: dto.billingEmail,
         website: dto.website,
         instagram: dto.instagram,
-        ...(dto.whatsapp === undefined ? {} : { whatsapp: whatsappOrThrow(dto.whatsapp) }),
+        ...(dto.whatsapp === undefined
+          ? {}
+          : { whatsapp: whatsappOrThrow(dto.whatsapp) }),
         whatsappPublic: dto.whatsappPublic,
         facebook: dto.facebook,
         logoUrl,
@@ -198,6 +246,10 @@ export class ClubsService {
         publicShop: dto.publicShop,
         coverUrl: dto.coverUrl,
         depositPercent: dto.depositPercent,
+        lateFeeMode: dto.lateFeeMode,
+        lateFeePercent: dto.lateFeePercent,
+        lateFeeGraceDays: dto.lateFeeGraceDays,
+        lateFeeMaxPercent: dto.lateFeeMaxPercent,
         timezone: dto.timezone,
         bookingMode: dto.bookingMode,
         amenities: dto.amenities ? [...new Set(dto.amenities)] : undefined,

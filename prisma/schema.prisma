@@ -303,6 +303,14 @@ model Club {
   requireDeposit   Boolean  @default(false)
   depositAlias     String?
   depositHoldHours Int      @default(12)
+  /// Mora de las cuotas vencidas: off | daily (el % mensual sube un poco cada día) | fixed (el % completo desde el día siguiente al vencimiento).
+  lateFeeMode      String   @default("off")
+  /// % mensual (daily: se prorratea por día sobre 30) o % único (fixed).
+  lateFeePercent   Decimal  @default(10) @db.Decimal(5, 2)
+  /// Días de gracia después del vencimiento antes de empezar a cobrar mora.
+  lateFeeGraceDays Int      @default(0)
+  /// Tope del recargo en % de la cuota (null = sin tope).
+  lateFeeMaxPercent Decimal? @db.Decimal(5, 2)
   // Servicios del club (catálogo src/clubs/club-amenities.ts): wifi, vestuarios, duchas…
   amenities        String[] @default([])
   companyId        String
@@ -792,6 +800,8 @@ model PlayerPayment {
   paymentDate   DateTime?
   /// Vencimiento de la cuota (null = sin fecha: se considera vencida al pasar el mes).
   dueDate       DateTime?
+  /// Intereses por mora que se cobraron junto con la cuota (el monto base queda en `amount`).
+  lateFeeAmount Decimal?      @db.Decimal(12, 2)
   // Cobro online de la cuota por Mercado Pago (cuenta del club).
   mpPreferenceId  String?
   mpPaymentId     String?

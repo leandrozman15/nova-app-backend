@@ -6,7 +6,16 @@ import { InvoicingService } from '../invoicing/invoicing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
-import { feeReference, feeTreasuryEntry, type FeeForTreasury } from './fee-treasury';
+import {
+  LATE_FEE_CLUB_SELECT,
+  computeLateFee,
+  lateFeeConfigOf,
+} from './late-fee';
+import {
+  feeReference,
+  feeTreasuryEntry,
+  type FeeForTreasury,
+} from './fee-treasury';
 
 /** El vencimiento se guarda al mediodía UTC para que no cambie de día según la zona horaria. */
 export function toDueDate(value?: string): Date | undefined {
@@ -63,14 +72,17 @@ export class PlayerPaymentsService {
     };
 
     if (!filters?.withMeta) {
-      return this.prisma.playerPayment.findMany(baseQuery);
+      return this.withLateFee(
+        await this.prisma.playerPayment.findMany(baseQuery),
+      );
     }
 
-    const [items, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.playerPayment.findMany(baseQuery),
       this.prisma.playerPayment.count({ where }),
     ]);
 
+    const items = await this.withLateFee(rows);
     const offset = filters?.skip ?? 0;
     const limit = filters?.take ?? null;
     const hasMore = filters?.take ? offset + items.length < total : false;
@@ -84,6 +96,45 @@ export class PlayerPaymentsService {
         hasMore,
       },
     };
+  }
+
+  /** Agrega `lateFee` (intereses de hoy) a las cuotas sin cobrar, según la configuración de su club. */
+  async withLateFee<
+    T extends {
+      clubId: string;
+      amount: unknown;
+      month: number;
+      year: number;
+      dueDate?: Date | null;
+      status: string;
+    },
+  >(rows: T[]) {
+    const clubIds = [
+      ...new Set(rows.filter((r) => r.status !== 'paid').map((r) => r.clubId)),
+    ];
+    const clubs = clubIds.length
+      ? await this.prisma.club.findMany({
+          where: { id: { in: clubIds } },
+          select: { id: true, ...LATE_FEE_CLUB_SELECT },
+        })
+      : [];
+    const byClub = new Map(clubs.map((c) => [c.id, c]));
+    return rows.map((r) => {
+      const club = byClub.get(r.clubId);
+      if (r.status === 'paid' || !club) return { ...r, lateFee: null };
+      const lf = computeLateFee(
+        {
+          amount: Number(r.amount),
+          month: r.month,
+          year: r.year,
+          dueDate: r.dueDate,
+        },
+        lateFeeConfigOf(club),
+        new Date(),
+        club.timezone,
+      );
+      return { ...r, lateFee: lf.amount > 0 ? lf : null };
+    });
   }
 
   async getById(companyId: string, id: string) {
@@ -152,6 +203,13 @@ export class PlayerPaymentsService {
         paymentMethod: dto.paymentMethod,
         paymentDate,
         dueDate: toDueDate(dto.dueDate),
+        // Los intereses solo valen en una cuota cobrada; al volver a pendiente se limpian.
+        lateFeeAmount:
+          nextStatus === PaymentStatus.paid
+            ? dto.lateFeeAmount
+            : nextStatus
+              ? null
+              : undefined,
       },
       include: {
         club: true,
@@ -159,7 +217,10 @@ export class PlayerPaymentsService {
       },
     });
     await this.syncTreasury(updated);
-    if (nextStatus === PaymentStatus.paid && current.status !== PaymentStatus.paid) {
+    if (
+      nextStatus === PaymentStatus.paid &&
+      current.status !== PaymentStatus.paid
+    ) {
       void this.emails?.notifyReceipt(updated.id);
       void this.invoicing?.issueForPayment(updated.id);
     }
