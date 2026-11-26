@@ -29,6 +29,11 @@ import {
   mpConfig,
   type MpPayment,
 } from './mercadopago.client';
+import {
+  LATE_FEE_CLUB_SELECT,
+  computeLateFee,
+  lateFeeConfigOf,
+} from '../player-payments/late-fee';
 import { PaymentAccountsService } from './payment-accounts.service';
 
 const MONTHS = [
@@ -55,7 +60,10 @@ export const feeReference = (feeId: string) => `fee:${feeId}`;
  * cambia cuando se consulta el pago a la API de Mercado Pago con el token del
  * club; la notificación del webhook o la vuelta del checkout nunca bastan.
  */
-function isMinorWithGuardian(player: { birthDate: Date | null; extra: unknown }) {
+function isMinorWithGuardian(player: {
+  birthDate: Date | null;
+  extra: unknown;
+}) {
   if (!guardianEmailOf(player.extra) || !player.birthDate) return false;
   const adult = new Date(player.birthDate);
   adult.setFullYear(adult.getFullYear() + 18);
@@ -134,7 +142,10 @@ export class FeePaymentsService {
     if (!playerId) throw new BadRequestException('Falta el atleta');
     let by: 'guardian' | 'player' = 'guardian';
     const own = auth.uid
-      ? await this.prisma.player.findFirst({ where: { id: playerId, authUid: auth.uid }, select: { id: true } })
+      ? await this.prisma.player.findFirst({
+          where: { id: playerId, authUid: auth.uid },
+          select: { id: true },
+        })
       : null;
     if (own) by = 'player';
     else await this.assertGuardian(auth, playerId);
@@ -147,14 +158,19 @@ export class FeePaymentsService {
   }
 
   /** Partidos de los clubes de los hijos del padre/tutor (en vivo, próximos y últimos resultados). */
-  async clubMatchesForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+  async clubMatchesForGuardian(auth: {
+    email?: string;
+    emailVerified?: boolean;
+  }) {
     const children = await this.listChildren(auth);
     const clubs = new Map<string, string>();
     for (const c of children) clubs.set(c.clubId, c.companyId);
     const feeds = await Promise.all(
       [...clubs.entries()].map(async ([clubId, companyId]) => ({
         clubId,
-        ...(await clubFeedMemo.get(`${companyId}|${clubId}`, () => buildClubFeed(this.prisma, companyId, clubId))),
+        ...(await clubFeedMemo.get(`${companyId}|${clubId}`, () =>
+          buildClubFeed(this.prisma, companyId, clubId),
+        )),
       })),
     );
     return feeds;
@@ -168,7 +184,9 @@ export class FeePaymentsService {
     return Promise.all(
       [...clubs.entries()].map(async ([clubId, companyId]) => ({
         clubId,
-        matches: await clubLiveMemo.get(`${companyId}|${clubId}`, () => loadClubLive(this.prisma, companyId, clubId)),
+        matches: await clubLiveMemo.get(`${companyId}|${clubId}`, () =>
+          loadClubLive(this.prisma, companyId, clubId),
+        ),
       })),
     );
   }
@@ -176,10 +194,19 @@ export class FeePaymentsService {
   /** Tablas de goleadores de las categorías de mis hijos (una por categoría, solo sus jugadores). */
   async scorersForGuardian(auth: { email?: string; emailVerified?: boolean }) {
     const children = await this.listChildren(auth);
-    const clubs = new Map<string, { companyId: string; teamIds: Set<string>; allKnown: boolean }>();
+    const clubs = new Map<
+      string,
+      { companyId: string; teamIds: Set<string>; allKnown: boolean }
+    >();
     for (const c of children) {
-      const cur = clubs.get(c.clubId) ?? { companyId: c.companyId, teamIds: new Set<string>(), allKnown: true };
-      const teamId: string = String((c.team as { id?: string } | null)?.id ?? c.teamId ?? '');
+      const cur = clubs.get(c.clubId) ?? {
+        companyId: c.companyId,
+        teamIds: new Set<string>(),
+        allKnown: true,
+      };
+      const teamId: string = String(
+        (c.team as { id?: string } | null)?.id ?? c.teamId ?? '',
+      );
       if (teamId) cur.teamIds.add(teamId);
       else cur.allKnown = false;
       clubs.set(c.clubId, cur);
@@ -187,13 +214,21 @@ export class FeePaymentsService {
     return Promise.all(
       [...clubs.entries()].map(async ([clubId, v]) => ({
         clubId,
-        scorers: await loadClubScorers(this.prisma, v.companyId, clubId, v.allKnown ? { teamIds: [...v.teamIds] } : {}),
+        scorers: await loadClubScorers(
+          this.prisma,
+          v.companyId,
+          clubId,
+          v.allKnown ? { teamIds: [...v.teamIds] } : {},
+        ),
       })),
     );
   }
 
   /** Torneos, tablas de posiciones y fixture completo de los clubes de mis hijos. */
-  async competitionsForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+  async competitionsForGuardian(auth: {
+    email?: string;
+    emailVerified?: boolean;
+  }) {
     const children = await this.listChildren(auth);
     const clubs = new Map<string, string>();
     for (const c of children) clubs.set(c.clubId, c.companyId);
@@ -222,17 +257,31 @@ export class FeePaymentsService {
   }
 
   /** Carta del buffet de los clubes de mis hijos (solo lectura: sin costos ni stock). */
-  async buffetMenuForGuardian(auth: { email?: string; emailVerified?: boolean }) {
+  async buffetMenuForGuardian(auth: {
+    email?: string;
+    emailVerified?: boolean;
+  }) {
     const children = await this.listChildren(auth);
-    const clubs = new Map<string, { companyId: string; clubName: string | null }>();
-    for (const c of children) clubs.set(c.clubId, { companyId: c.companyId, clubName: c.clubName });
+    const clubs = new Map<
+      string,
+      { companyId: string; clubName: string | null }
+    >();
+    for (const c of children)
+      clubs.set(c.clubId, { companyId: c.companyId, clubName: c.clubName });
     const menus = await Promise.all(
       [...clubs.entries()].map(async ([clubId, { companyId, clubName }]) => {
-        const buffet = await this.prisma.buffet.findUnique({ where: { clubId } });
+        const buffet = await this.prisma.buffet.findUnique({
+          where: { clubId },
+        });
         if (!buffet || !buffet.active) return null;
         const [products, openSession] = await Promise.all([
-          this.prisma.buffetProduct.findMany({ where: { companyId, clubId, active: true } }),
-          this.prisma.buffetCashSession.findFirst({ where: { companyId, clubId, status: 'open' }, select: { id: true } }),
+          this.prisma.buffetProduct.findMany({
+            where: { companyId, clubId, active: true },
+          }),
+          this.prisma.buffetCashSession.findFirst({
+            where: { companyId, clubId, status: 'open' },
+            select: { id: true },
+          }),
         ]);
         const items = toPublicMenu(products);
         if (items.length === 0) return null;
@@ -262,7 +311,11 @@ export class FeePaymentsService {
   private async loadChildren(email: string) {
     const candidates = await this.prisma.player.findMany({
       where: {
-        extra: { path: ['guardianEmail'], string_contains: email, mode: 'insensitive' },
+        extra: {
+          path: ['guardianEmail'],
+          string_contains: email,
+          mode: 'insensitive',
+        },
       },
       select: {
         id: true,
@@ -344,10 +397,44 @@ export class FeePaymentsService {
     playerId: string,
   ) {
     await this.assertGuardian(auth, playerId);
-    return this.prisma.playerPayment.findMany({
+    const fees = await this.prisma.playerPayment.findMany({
       where: { playerId },
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
     });
+    const club = fees.some((f) => f.status !== 'paid')
+      ? await this.prisma.club.findUnique({
+          where: { id: fees[0].clubId },
+          select: LATE_FEE_CLUB_SELECT,
+        })
+      : null;
+    return fees.map((f) => {
+      if (f.status === 'paid' || !club) return { ...f, lateFee: null };
+      const lf = this.lateFeeOf(f, club);
+      return { ...f, lateFee: lf.amount > 0 ? lf : null };
+    });
+  }
+
+  /** Intereses por mora de una cuota hoy, con la configuración de su club. */
+  private lateFeeOf(
+    fee: {
+      amount: unknown;
+      month: number;
+      year: number;
+      dueDate?: Date | null;
+    },
+    club: Parameters<typeof lateFeeConfigOf>[0] & { timezone?: string | null },
+  ) {
+    return computeLateFee(
+      {
+        amount: Number(fee.amount),
+        month: fee.month,
+        year: fee.year,
+        dueDate: fee.dueDate,
+      },
+      lateFeeConfigOf(club),
+      new Date(),
+      club?.timezone ?? undefined,
+    );
   }
 
   async checkoutForGuardian(
@@ -421,7 +508,14 @@ export class FeePaymentsService {
     if (fee.status === 'paid')
       throw new ConflictException('Esta cuota ya está pagada');
 
-    const amount = roundMoney(Number(fee.amount));
+    const baseAmount = roundMoney(Number(fee.amount));
+    // El link cobra la cuota más los intereses de hoy; la clave de idempotencia cambia con el monto.
+    const club = await this.prisma.club.findUnique({
+      where: { id: fee.clubId },
+      select: LATE_FEE_CLUB_SELECT,
+    });
+    const lateFee = club ? this.lateFeeOf(fee, club) : null;
+    const amount = lateFee ? roundMoney(lateFee.total) : baseAmount;
     if (!(amount > 0))
       throw new BadRequestException('La cuota no tiene un monto a cobrar');
     if (!(await this.accounts.isConnected(fee.clubId)))
@@ -437,7 +531,7 @@ export class FeePaymentsService {
     const accessToken = await this.accounts.accessTokenFor(fee.clubId);
     const preference = await this.mp.createPreference(accessToken, {
       title:
-        `Cuota ${MONTHS[fee.month - 1] ?? fee.month} ${fee.year} - ${fee.club.name}`.slice(
+        `Cuota ${MONTHS[fee.month - 1] ?? fee.month} ${fee.year}${lateFee && lateFee.amount > 0 ? ' (con mora)' : ''} - ${fee.club.name}`.slice(
           0,
           250,
         ),
@@ -531,6 +625,10 @@ export class FeePaymentsService {
       where: { id: fee.id, status: { not: 'paid' } },
       data: {
         status: 'paid',
+        // Lo que se cobró de más sobre la cuota son los intereses por mora.
+        lateFeeAmount: roundMoney(
+          Math.max(0, payment.transaction_amount - Number(fee.amount)),
+        ),
         paymentMethod: 'mercadopago',
         paymentDate: payment.date_approved
           ? new Date(payment.date_approved)

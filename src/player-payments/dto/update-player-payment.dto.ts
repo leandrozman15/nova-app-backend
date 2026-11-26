@@ -30,6 +30,12 @@ export class UpdatePlayerPaymentDto {
   @Min(0)
   amount?: number;
 
+  /** Intereses por mora cobrados junto con la cuota (se suman al ingreso de Tesorería). */
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  lateFeeAmount?: number;
+
   @IsOptional()
   @IsIn(['paid', 'pending', 'overdue'])
   status?: 'paid' | 'pending' | 'overdue';

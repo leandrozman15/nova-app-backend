@@ -181,6 +181,33 @@ export class UpdateClubDto {
   @Max(100)
   depositPercent?: number;
 
+  /** Mora de cuotas vencidas: off | daily (progresiva por día) | fixed (% único tras el vencimiento). */
+  @IsOptional()
+  @IsIn(['off', 'daily', 'fixed'])
+  lateFeeMode?: 'off' | 'daily' | 'fixed';
+
+  /** % mensual (daily) o % único (fixed). */
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  @Max(100)
+  lateFeePercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  lateFeeGraceDays?: number;
+
+  /** Tope del recargo en % de la cuota. null = sin tope. */
+  @ValidateIf((_, value) => value !== null)
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  @Max(500)
+  lateFeeMaxPercent?: number | null;
+
   /** Zona horaria IANA de los turnos (ej. America/Argentina/Buenos_Aires). */
   @IsOptional()
   @IsString()

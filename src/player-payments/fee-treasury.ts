@@ -8,8 +8,18 @@
 export const FEE_CATEGORY = 'Cuotas sociales';
 
 const MONTHS = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
 ];
 
 export type FeeForTreasury = {
@@ -19,6 +29,8 @@ export type FeeForTreasury = {
   month: number;
   year: number;
   amount: unknown;
+  /** Intereses por mora cobrados con la cuota. */
+  lateFeeAmount?: unknown;
   status: string;
   paymentMethod?: string | null;
   paymentDate?: Date | null;
@@ -31,7 +43,9 @@ export const feeReference = (feeId: string) => `fee:${feeId}`;
 /** Fila de caja que corresponde a la cuota, o null si no tiene que haber ninguna. */
 export function feeTreasuryEntry(fee: FeeForTreasury, now = new Date()) {
   if (fee.status !== 'paid' || fee.mpPaymentId) return null;
-  const amount = Number(fee.amount);
+  const amount =
+    Math.round((Number(fee.amount) + Number(fee.lateFeeAmount ?? 0)) * 100) /
+    100;
   if (!Number.isFinite(amount) || amount <= 0) return null;
   const who = [fee.player?.lastName, fee.player?.firstName]
     .map((v) => (v ?? '').trim())
@@ -45,7 +59,12 @@ export function feeTreasuryEntry(fee: FeeForTreasury, now = new Date()) {
     category: FEE_CATEGORY,
     amount,
     occurredAt: fee.paymentDate ?? now,
-    description: [`Cuota ${period}`, who, fee.paymentMethod?.trim()]
+    description: [
+      `Cuota ${period}`,
+      Number(fee.lateFeeAmount ?? 0) > 0 ? 'con mora' : '',
+      who,
+      fee.paymentMethod?.trim(),
+    ]
       .filter(Boolean)
       .join(' · '),
     reference: feeReference(fee.id),

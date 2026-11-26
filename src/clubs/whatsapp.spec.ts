@@ -22,6 +22,8 @@ describe('WhatsApp del club', () => {
     expect(displayWhatsapp('5491130464848')).toBe('11 3046-4848');
     expect(displayWhatsapp('5493515123456')).toBe('351 512-3456');
     expect(displayWhatsapp('5541999998888')).toBe('+5541999998888');
-    expect(whatsappLink('5491130464848', 'Hola, quiero reservar')).toBe('https://wa.me/5491130464848?text=Hola%2C%20quiero%20reservar');
+    expect(whatsappLink('5491130464848', 'Hola, quiero reservar')).toBe(
+      'https://wa.me/5491130464848?text=Hola%2C%20quiero%20reservar',
+    );
   });
 });
