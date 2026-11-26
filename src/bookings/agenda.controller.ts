@@ -155,6 +155,15 @@ export class AgendaController {
     );
   }
 
+  @Get('bookings/:id/buffet')
+  buffet(
+    @Req() req: unknown,
+    @Param('clubId') clubId: string,
+    @Param('id') id: string,
+  ) {
+    return this.agenda.buffetConsumptions(this.scope(req, clubId), clubId, id);
+  }
+
   @Post('bookings/:id/release')
   release(
     @Req() req: unknown,

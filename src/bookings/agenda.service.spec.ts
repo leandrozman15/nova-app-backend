@@ -105,6 +105,7 @@ function setup() {
       deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
     },
     financialTransaction: { create: jest.fn() },
+    buffetSale: { findMany: jest.fn().mockResolvedValue([]) },
     coachLesson: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -377,5 +378,18 @@ describe('AgendaService', () => {
       ),
     ).toEqual(['2026-10-20', '2026-10-27']);
     expect(previousMonth('2026-01')).toBe('2025-12');
+  });
+
+  it('muestra los consumos del buffet cargados al turno y su total, con quién los retiró', async () => {
+    const { prisma, service } = setup();
+    prisma.buffetSale.findMany.mockResolvedValue([
+      { id: 's1', total: new Prisma.Decimal(3000), createdAt: new Date(), createdByName: 'buffet', pickedUpBy: 'Pedro', items: [{ name: 'Gaseosa', quantity: 2, unitPrice: new Prisma.Decimal(1500) }] },
+      { id: 's2', total: new Prisma.Decimal(1000), createdAt: new Date(), createdByName: 'buffet', pickedUpBy: null, items: [{ name: 'Agua', quantity: 1, unitPrice: new Prisma.Decimal(1000) }] },
+    ]);
+    const res = await service.buffetConsumptions('co1', 'c1', 'b1');
+    expect(res.total).toBe(4000);
+    expect(res.consumptions[0]).toMatchObject({ saleId: 's1', total: 3000, pickedUpBy: 'Pedro' });
+    expect(res.consumptions[0].items).toEqual([{ name: 'Gaseosa', quantity: 2, unitPrice: 1500 }]);
+    expect(prisma.buffetSale.findMany.mock.calls[0][0].where).toMatchObject({ bookingId: 'b1', accountStatus: 'pending', status: 'completed' });
   });
 });

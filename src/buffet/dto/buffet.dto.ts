@@ -79,6 +79,8 @@ export class CreateSaleDto {
   @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(4) @ValidateNested({ each: true }) @Type(() => PaymentLineDto)
   payments?: PaymentLineDto[];
   @IsOptional() @IsString() @MaxLength(80) bookingId?: string;
+  /** Quién retira la compra (opcional). */
+  @IsOptional() @IsString() @MaxLength(80) pickedUpBy?: string;
   /** Id único generado por el dispositivo; si ya existe, se devuelve la venta original. */
   @IsOptional() @IsString() @MaxLength(80) clientRef?: string;
 }
