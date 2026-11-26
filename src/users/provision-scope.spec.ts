@@ -1,13 +1,13 @@
 import { canAssignGlobalRole } from './provision-scope';
 
 describe('canAssignGlobalRole', () => {
-  it('municipio solo crea perfiles municipales', () => {
+  it('municipio crea perfiles municipales y administradores de liga, nada más', () => {
     for (const a of ['municipal_secretary', 'municipal_admin']) {
       expect(canAssignGlobalRole(a, 'municipal_inspector')).toBe(true);
       expect(canAssignGlobalRole(a, 'municipal_secretary')).toBe(true);
       expect(canAssignGlobalRole(a, 'admin')).toBe(false);
       expect(canAssignGlobalRole(a, 'fed_admin')).toBe(false);
-      expect(canAssignGlobalRole(a, 'league_admin')).toBe(false);
+      expect(canAssignGlobalRole(a, 'league_admin')).toBe(true);
     }
   });
   it('liga solo crea administradores de liga', () => {

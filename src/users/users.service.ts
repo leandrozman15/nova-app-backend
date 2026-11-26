@@ -13,7 +13,7 @@ import { CLUB_IN_GOOD_STANDING } from '../subscriptions/club-access';
 import { CreateJoinRequestDto } from './dto/create-join-request.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterFreeUserDto } from './dto/register-free-user.dto';
-import { canAssignGlobalRole } from './provision-scope';
+import { MUNICIPAL_ROLES, canAssignGlobalRole } from './provision-scope';
 
 export type ProvisionProfileActor = {
   uid: string;
@@ -399,6 +399,20 @@ export class UsersService {
         normalizedRole,
       );
       await this.assertWithinActorLeague(actor, input, normalizedRole, targetClub?.leagueId);
+      // Un municipio solo habilita administradores para ligas de su propia empresa que dependen de un municipio.
+      if (
+        normalizedRole === 'league_admin' &&
+        MUNICIPAL_ROLES.has(actorUser.role.trim().toLowerCase())
+      ) {
+        const league = input.leagueId
+          ? await this.prisma.league.findFirst({
+              where: { id: input.leagueId, companyId },
+              select: { municipalityId: true },
+            })
+          : null;
+        if (!league?.municipalityId)
+          throw new ForbiddenException('La liga no pertenece a tu municipio');
+      }
     }
 
     const email =
