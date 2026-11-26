@@ -82,3 +82,47 @@ export class PlayerDocumentsController {
     return this.service.remove(viewer, email, clubId, playerId, docId);
   }
 }
+
+/**
+ * Documentación de mis hijos/as: el padre, madre o tutor (email verificado cargado en la ficha del atleta)
+ * ve qué pide el club, sube lo que falta y abre lo cargado. No puede borrar.
+ */
+@Controller('users/me/children/:playerId/documents')
+export class GuardianDocumentsController {
+  constructor(private readonly service: PlayerDocumentsService) {}
+
+  @Get()
+  list(@Req() req: unknown, @Param('playerId') playerId: string) {
+    return this.service.guardianList((req as RequestWithAuth).auth!, playerId);
+  }
+
+  @Post()
+  upload(
+    @Req() req: unknown,
+    @Param('playerId') playerId: string,
+    @Body() dto: UploadDocumentDto,
+  ) {
+    return this.service.guardianUpload(
+      (req as RequestWithAuth).auth!,
+      playerId,
+      dto,
+    );
+  }
+
+  @Get(':docId/url')
+  url(
+    @Req() req: unknown,
+    @Param('playerId') playerId: string,
+    @Param('docId') docId: string,
+    @Query('mode') mode: string = 'view',
+  ) {
+    if (mode !== 'view' && mode !== 'download')
+      throw new BadRequestException('mode inválido');
+    return this.service.guardianUrl(
+      (req as RequestWithAuth).auth!,
+      playerId,
+      docId,
+      mode,
+    );
+  }
+}
