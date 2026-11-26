@@ -46,13 +46,31 @@ function build() {
       rows.set(path, data);
       return Promise.resolve({});
     }),
+    query: jest.fn(() =>
+      Promise.resolve(
+        [...rows.entries()]
+          .filter(([k]) => k.includes('/documents/'))
+          .map(([k, data]) => ({ id: k.split('/').pop(), path: k, data })),
+      ),
+    ),
     remove: jest.fn((_v: unknown, path: string) => {
       rows.delete(path);
       return Promise.resolve({ ok: true });
     }),
   };
   const prisma = {
-    player: { findFirst: jest.fn(() => Promise.resolve({ id: 'p1' })) },
+    player: {
+      findFirst: jest.fn(() => Promise.resolve({ id: 'p1' })),
+      findUnique: jest.fn(() =>
+        Promise.resolve({
+          id: 'p1',
+          clubId: 'c1',
+          companyId: 'co',
+          extra: { guardianEmail: 'mama@x.com' },
+          birthDate: new Date('2015-05-05'),
+        }),
+      ),
+    },
   };
   const service = new PlayerDocumentsService(
     prisma as never,
@@ -178,5 +196,60 @@ describe('PlayerDocumentsService', () => {
       .filter(([k]) => k.includes('document_access_log'))
       .map(([, v]) => (v as { action: string }).action);
     expect(actions).toEqual(['upload', 'delete']);
+  });
+});
+
+describe('documentación desde el portal de familias', () => {
+  const mama = { uid: 'u9', email: 'Mama@x.com', emailVerified: true };
+
+  it('rechaza si el email no está verificado o no es el del tutor', async () => {
+    const { service } = build();
+    await expect(
+      service.guardianList({ ...mama, emailVerified: false }, 'p1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.guardianList({ ...mama, email: 'otro@x.com' }, 'p1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('lista lo pedido como faltante y permite cargar con consentimiento', async () => {
+    const { service } = build();
+    const before = await service.guardianList(mama, 'p1');
+    expect(before.requested.map((r) => r.status)).toEqual([
+      'missing',
+      'missing',
+      'missing',
+    ]);
+    expect(before.canUpload).toBe(true);
+    await service.guardianUpload(mama, 'p1', dto({ consent }));
+    const after = await service.guardianList(mama, 'p1');
+    expect(after.requested[0].status).toBe('ok');
+    expect(after.requested[0].document?.uploadedByFamily).toBe(true);
+    expect(after.hasConsent).toBe(true);
+    expect(JSON.stringify(after)).not.toContain('storagePath');
+  });
+
+  it('no deja cargar a un atleta mayor de edad ni de otro club', async () => {
+    const { service, prisma } = build();
+    await expect(
+      service.guardianUpload(mama, 'p1', dto({ clubId: 'c2', consent })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    prisma.player.findUnique.mockResolvedValueOnce({
+      id: 'p1',
+      clubId: 'c1',
+      companyId: 'co',
+      extra: { guardianEmail: 'mama@x.com' },
+      birthDate: new Date('2000-01-01'),
+    });
+    await expect(
+      service.guardianUpload(mama, 'p1', dto({ consent })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('la familia obtiene el link firmado de un documento cargado', async () => {
+    const { service } = build();
+    await service.guardianUpload(mama, 'p1', dto({ consent }));
+    const res = await service.guardianUrl(mama, 'p1', 'dni_front', 'view');
+    expect(JSON.stringify(res)).toContain('signed.example');
   });
 });

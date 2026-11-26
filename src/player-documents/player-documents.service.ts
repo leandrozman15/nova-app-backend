@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { getApp } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 
+import { guardianEmailOf, isAdult } from '../common/guardian';
 import { DocStoreService } from '../docstore/docstore.service';
 import { inClub, isDirection } from '../docstore/docstore.rules';
 import type { Viewer } from '../docstore/docstore.rules';
@@ -43,8 +44,44 @@ type Meta = {
   size: number;
   uploadedAt: string;
   uploadedBy: string;
+  /** parent (lo subió la familia) o el rol de la dirección que lo cargó. */
+  uploadedByRole?: string;
   expiresAt?: string | null;
 };
+
+/** Quién hace la acción: queda en el registro de accesos y en el documento. */
+type Actor = { uid: string; email?: string; role: string };
+
+/** Lo que el servidor sabe de quien llama (viene del token verificado). */
+export type GuardianAuth = {
+  uid?: string;
+  email?: string;
+  emailVerified?: boolean;
+};
+
+const FIXED: { slot: string; label: string; hint: string }[] = [
+  {
+    slot: 'dni_front',
+    label: 'DNI · Frente',
+    hint: 'Foto o escaneo del frente',
+  },
+  { slot: 'dni_back', label: 'DNI · Dorso', hint: 'Foto o escaneo del dorso' },
+  { slot: 'medical', label: 'Certificado médico', hint: 'Apto físico vigente' },
+];
+
+/** Vigencia del certificado: soon = vence en los próximos 30 días. */
+export function expiryOf(
+  expiresAt: string | null | undefined,
+  now = new Date(),
+) {
+  if (!expiresAt) return 'none' as const;
+  const end = new Date(`${expiresAt}T23:59:59`);
+  if (Number.isNaN(end.getTime())) return 'none' as const;
+  if (end.getTime() < now.getTime()) return 'expired' as const;
+  return (end.getTime() - now.getTime()) / 86_400_000 <= 30
+    ? ('soon' as const)
+    : ('valid' as const);
+}
 
 /**
  * Documentación de los atletas (DNI, certificado médico). Los archivos se suben y se leen
@@ -82,8 +119,8 @@ export class PlayerDocumentsService {
   }
 
   private async log(
-    viewer: Viewer,
-    email: string | undefined,
+    storeViewer: Viewer,
+    actor: Actor,
     clubId: string,
     playerId: string,
     docId: string,
@@ -91,7 +128,7 @@ export class PlayerDocumentsService {
     label: string,
   ) {
     await this.store.set(
-      viewer,
+      storeViewer,
       `clubs/${clubId}/document_access_log/${randomUUID()}`,
       {
         clubId,
@@ -99,9 +136,9 @@ export class PlayerDocumentsService {
         docId,
         label,
         action,
-        byUid: viewer.uid,
-        byRole: viewer.role,
-        byEmail: email ?? null,
+        byUid: actor.uid,
+        byRole: actor.role,
+        byEmail: actor.email ?? null,
         at: new Date().toISOString(),
       },
       false,
@@ -115,6 +152,22 @@ export class PlayerDocumentsService {
     dto: UploadDocumentDto,
   ) {
     await this.assertAccess(viewer, dto.clubId, playerId);
+    return this.persist(
+      viewer,
+      { uid: viewer.uid, email, role: viewer.role ?? 'admin' },
+      playerId,
+      dto,
+    );
+  }
+
+  /** Guarda el archivo y su ficha. El acceso ya se verificó antes (dirección o tutor del atleta). */
+  private async persist(
+    viewer: Viewer,
+    actor: Actor,
+    playerId: string,
+    dto: UploadDocumentDto,
+  ) {
+    const email = actor.email;
     const buffer = Buffer.from(dto.dataBase64, 'base64');
     if (buffer.length === 0 || buffer.length > MAX_FILE_BYTES)
       throw new BadRequestException(
@@ -148,8 +201,9 @@ export class PlayerDocumentsService {
           acceptedBy: dto.consent.acceptedBy,
           relationship: dto.consent.relationship,
           textVersion: dto.consent.textVersion,
-          registeredByUid: viewer.uid,
+          registeredByUid: actor.uid,
           registeredByEmail: email ?? null,
+          registeredByRole: actor.role,
         },
         false,
       );
@@ -177,7 +231,8 @@ export class PlayerDocumentsService {
       fileName: dto.fileName,
       size: buffer.length,
       uploadedAt: new Date().toISOString(),
-      uploadedBy: viewer.uid,
+      uploadedBy: actor.uid,
+      uploadedByRole: actor.role,
       expiresAt:
         dto.slot === 'medical'
           ? (dto.expiresAt ?? prevMeta?.expiresAt ?? null)
@@ -191,7 +246,7 @@ export class PlayerDocumentsService {
         .catch(() => undefined);
     await this.log(
       viewer,
-      email,
+      actor,
       dto.clubId,
       playerId,
       dto.docId,
@@ -211,6 +266,26 @@ export class PlayerDocumentsService {
     downloadName?: string,
   ) {
     await this.assertAccess(viewer, clubId, playerId);
+    return this.makeUrl(
+      viewer,
+      { uid: viewer.uid, email, role: viewer.role ?? 'admin' },
+      clubId,
+      playerId,
+      docId,
+      mode,
+      downloadName,
+    );
+  }
+
+  private async makeUrl(
+    viewer: Viewer,
+    actor: Actor,
+    clubId: string,
+    playerId: string,
+    docId: string,
+    mode: 'view' | 'download',
+    downloadName?: string,
+  ) {
     const result = (await this.store.get(
       viewer,
       this.docPath(clubId, playerId, docId),
@@ -232,7 +307,7 @@ export class PlayerDocumentsService {
       });
     await this.log(
       viewer,
-      email,
+      actor,
       clubId,
       playerId,
       docId,
@@ -263,7 +338,7 @@ export class PlayerDocumentsService {
     await this.store.remove(viewer, path);
     await this.log(
       viewer,
-      email,
+      { uid: viewer.uid, email, role: viewer.role ?? 'admin' },
       clubId,
       playerId,
       docId,
@@ -271,5 +346,130 @@ export class PlayerDocumentsService {
       meta?.title || LABEL[meta?.slot ?? 'other'] || 'Documento',
     );
     return { ok: true };
+  }
+
+  // ─── Familias: el padre/madre/tutor carga y ve la documentación de su hijo/a ──────────────
+  // Los archivos y su ficha quedan en el mismo lugar que los de la dirección, así que aparecen
+  // solos en la ficha del atleta. La familia puede cargar, reemplazar y ver, pero no borrar.
+
+  private async assertGuardian(auth: GuardianAuth, playerId: string) {
+    const email = auth.email?.trim().toLowerCase();
+    if (!email || auth.emailVerified !== true)
+      throw new ForbiddenException('Verificá tu email para ver a tu hijo/a');
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      select: {
+        id: true,
+        clubId: true,
+        companyId: true,
+        extra: true,
+        birthDate: true,
+      },
+    });
+    if (!player || guardianEmailOf(player.extra) !== email)
+      throw new ForbiddenException('Este atleta no está vinculado a tu cuenta');
+    // El acceso a la tabla de documentos lo da la verificación de arriba, no el rol: por eso se usa
+    // una identidad interna de dirección solo para leer y escribir en el club de este atleta.
+    const viewer: Viewer = {
+      uid: auth.uid ?? '',
+      role: 'admin',
+      clubId: player.clubId,
+      companyId: player.companyId,
+    };
+    const actor: Actor = { uid: auth.uid ?? '', email, role: 'parent' };
+    return { player, viewer, actor };
+  }
+
+  /** Lo que el club pide (DNI frente y dorso, certificado médico) con su estado, más otros adjuntos. */
+  async guardianList(auth: GuardianAuth, playerId: string) {
+    const { player, viewer } = await this.assertGuardian(auth, playerId);
+    const rows = await this.store.query(viewer, {
+      path: `clubs/${player.clubId}/players/${playerId}/documents`,
+    });
+    const docs = rows
+      .filter((r) => (r.data as { slot?: string }).slot !== 'consent')
+      .map((r) => ({ ...(r.data as Meta), id: r.id }));
+    const present = (d: Meta & { id: string }) => ({
+      id: d.id,
+      slot: d.slot,
+      title: d.title ?? null,
+      fileName: d.fileName,
+      contentType: d.contentType,
+      size: d.size,
+      uploadedAt: d.uploadedAt,
+      uploadedByFamily: d.uploadedByRole === 'parent',
+      expiresAt: d.expiresAt ?? null,
+    });
+    const requested = FIXED.map((f) => {
+      const doc = docs.find((d) => d.id === f.slot || d.slot === f.slot);
+      const expiry = f.slot === 'medical' ? expiryOf(doc?.expiresAt) : 'none';
+      return {
+        slot: f.slot,
+        label: f.label,
+        hint: f.hint,
+        document: doc ? present(doc) : null,
+        // missing: falta cargar · expired/soon: certificado vencido o por vencer · ok: cargado
+        status: !doc
+          ? 'missing'
+          : expiry === 'expired'
+            ? 'expired'
+            : expiry === 'soon'
+              ? 'soon'
+              : 'ok',
+      };
+    });
+    const others = docs.filter((d) => d.slot === 'other').map(present);
+    const consent = rows.some(
+      (r) => (r.data as { slot?: string }).slot === 'consent',
+    );
+    return {
+      playerId,
+      clubId: player.clubId,
+      /** Mayor de edad: tiene que cargar sus documentos él/ella; la familia solo los ve. */
+      canUpload: !isAdult(player.birthDate),
+      hasConsent: consent,
+      requested,
+      others,
+    };
+  }
+
+  async guardianUpload(
+    auth: GuardianAuth,
+    playerId: string,
+    dto: UploadDocumentDto,
+  ) {
+    const { player, viewer, actor } = await this.assertGuardian(auth, playerId);
+    if (isAdult(player.birthDate))
+      throw new ForbiddenException(
+        'El atleta es mayor de edad: tiene que cargar su documentación él/ella mismo/a',
+      );
+    if (dto.clubId !== player.clubId)
+      throw new ForbiddenException('Este atleta no es de ese club');
+    if (dto.consent && dto.consent.relationship === 'self')
+      throw new BadRequestException(
+        'El consentimiento lo da la madre, el padre o el tutor',
+      );
+    return this.persist(viewer, actor, playerId, dto);
+  }
+
+  async guardianUrl(
+    auth: GuardianAuth,
+    playerId: string,
+    docId: string,
+    mode: 'view' | 'download',
+    name?: string,
+  ) {
+    const { player, viewer, actor } = await this.assertGuardian(auth, playerId);
+    if (docId === 'consent')
+      throw new NotFoundException('Documento inexistente');
+    return this.makeUrl(
+      viewer,
+      actor,
+      player.clubId,
+      playerId,
+      docId,
+      mode,
+      name,
+    );
   }
 }

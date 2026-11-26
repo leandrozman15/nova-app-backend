@@ -1,3 +1,4 @@
+import { guardianEmailOf } from '../common/guardian';
 import {
   BadRequestException,
   ConflictException,
@@ -54,13 +55,6 @@ export const feeReference = (feeId: string) => `fee:${feeId}`;
  * cambia cuando se consulta el pago a la API de Mercado Pago con el token del
  * club; la notificación del webhook o la vuelta del checkout nunca bastan.
  */
-function guardianEmailOf(extra: unknown): string | null {
-  const value = (extra as Record<string, unknown> | null)?.guardianEmail;
-  return typeof value === 'string' && value.trim()
-    ? value.trim().toLowerCase()
-    : null;
-}
-
 function isMinorWithGuardian(player: { birthDate: Date | null; extra: unknown }) {
   if (!guardianEmailOf(player.extra) || !player.birthDate) return false;
   const adult = new Date(player.birthDate);
