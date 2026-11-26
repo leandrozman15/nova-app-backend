@@ -1,4 +1,16 @@
-import { expectedCash, saleTotal, toPublicMenu, treasuryAmountForClose, treasuryCategory } from './buffet.logic';
+import {
+  bookingMethodOf,
+  courtBalance,
+  expectedCash,
+  mergePayments,
+  saleMethodOf,
+  saleTotal,
+  sumPayments,
+  takeFromPool,
+  toPublicMenu,
+  treasuryAmountForClose,
+  treasuryCategory,
+} from './buffet.logic';
 
 describe('buffet logic', () => {
   it('suma el total de la venta con redondeo a centavos', () => {
@@ -42,5 +54,51 @@ describe('toPublicMenu', () => {
     expect(menu.find((m) => m.name === 'Pancho')?.available).toBe(true);
     expect(Object.keys(menu[0])).not.toContain('stock');
     expect(Object.keys(menu[0])).not.toContain('cost');
+  });
+
+  describe('pagos divididos y cuenta de alquiler', () => {
+    it('une los cobros del mismo medio y descarta los vacíos', () => {
+      expect(mergePayments([
+        { method: 'cash', amount: 1000 },
+        { method: 'transfer', amount: 0 },
+        { method: 'cash', amount: 500.5 },
+        { method: 'card', amount: 200 },
+      ])).toEqual([{ method: 'cash', amount: 1500.5 }, { method: 'card', amount: 200 }]);
+    });
+
+    it('la venta guarda el medio único o "mixed" si se pagó con varios', () => {
+      expect(saleMethodOf([{ method: 'cash', amount: 10 }])).toBe('cash');
+      expect(saleMethodOf([{ method: 'cash', amount: 10 }, { method: 'transfer', amount: 5 }])).toBe('mixed');
+      expect(sumPayments([{ method: 'cash', amount: 0.1 }, { method: 'card', amount: 0.2 }])).toBe(0.3);
+    });
+
+    it('reparte lo pagado entre consumos y cancha sin perder ni inventar plata', () => {
+      // La cuenta: consumos 3000 + cancha 7000. El cliente paga 6000 en efectivo y 4000 por transferencia.
+      const pool = mergePayments([{ method: 'cash', amount: 6000 }, { method: 'transfer', amount: 4000 }]);
+      const buffet = takeFromPool(pool, 3000);
+      const court = takeFromPool(pool, 7000);
+      expect(buffet).toEqual([{ method: 'cash', amount: 3000 }]);
+      expect(court).toEqual([{ method: 'cash', amount: 3000 }, { method: 'transfer', amount: 4000 }]);
+      expect(sumPayments(buffet) + sumPayments(court)).toBe(10000);
+      expect(pool.every((p) => p.amount === 0)).toBe(true);
+    });
+
+    it('un consumo puede quedar cubierto por dos medios', () => {
+      const pool = mergePayments([{ method: 'cash', amount: 1000 }, { method: 'card', amount: 4000 }]);
+      expect(takeFromPool(pool, 2500)).toEqual([{ method: 'cash', amount: 1000 }, { method: 'card', amount: 1500 }]);
+      expect(pool).toEqual([{ method: 'cash', amount: 0 }, { method: 'card', amount: 2500 }]);
+    });
+
+    it('lo que falta de la cancha es precio menos lo cobrado y nunca negativo', () => {
+      expect(courtBalance(12000, 3000)).toBe(9000);
+      expect(courtBalance(12000, 12000)).toBe(0);
+      expect(courtBalance(12000, 15000)).toBe(0);
+    });
+
+    it('el turno registra el medio principal, y tarjeta o Mercado Pago cuentan como "otro"', () => {
+      expect(bookingMethodOf([{ method: 'cash', amount: 100 }, { method: 'transfer', amount: 900 }])).toBe('transfer');
+      expect(bookingMethodOf([{ method: 'card', amount: 100 }])).toBe('other');
+      expect(bookingMethodOf([{ method: 'cash', amount: 100 }])).toBe('cash');
+    });
   });
 });

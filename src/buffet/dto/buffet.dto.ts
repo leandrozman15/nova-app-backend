@@ -61,12 +61,32 @@ export class SaleItemDto {
   @IsInt() @Min(1) @Max(999) quantity!: number;
 }
 
+export class PaymentLineDto {
+  @IsIn(PAYMENT_METHODS as unknown as string[]) method!: string;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) @Max(100_000_000) amount!: number;
+}
+
+/**
+ * Una venta se cobra de una de tres formas:
+ *  · `paymentMethod`: un solo medio por el total (lo que mandan las versiones anteriores de la app);
+ *  · `payments`: pago dividido, varios medios que suman el total;
+ *  · `bookingId`: se carga a la cuenta de un alquiler y se cobra al cerrarla.
+ */
 export class CreateSaleDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => SaleItemDto)
   items!: SaleItemDto[];
-  @IsIn(PAYMENT_METHODS as unknown as string[]) paymentMethod!: string;
+  @IsOptional() @IsIn(PAYMENT_METHODS as unknown as string[]) paymentMethod?: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(4) @ValidateNested({ each: true }) @Type(() => PaymentLineDto)
+  payments?: PaymentLineDto[];
+  @IsOptional() @IsString() @MaxLength(80) bookingId?: string;
   /** Id único generado por el dispositivo; si ya existe, se devuelve la venta original. */
   @IsOptional() @IsString() @MaxLength(80) clientRef?: string;
+}
+
+/** Cierre de la cuenta de un alquiler: lo pagado (consumos + saldo de la cancha) en uno o más medios. */
+export class SettleAccountDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(4) @ValidateNested({ each: true }) @Type(() => PaymentLineDto)
+  payments!: PaymentLineDto[];
 }
 
 export class VoidSaleDto {

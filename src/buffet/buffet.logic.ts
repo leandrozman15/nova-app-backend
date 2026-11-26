@@ -6,6 +6,58 @@ export type BuffetMode = (typeof BUFFET_MODES)[number];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Un cobro: cuánto se pagó con qué medio. Una venta o una cuenta puede llevar varios. */
+export type PaymentLine = { method: string; amount: number };
+
+/** Une los cobros del mismo medio y descarta los de monto cero, conservando el orden en que se cargaron. */
+export function mergePayments(lines: PaymentLine[]): PaymentLine[] {
+  const out: PaymentLine[] = [];
+  for (const l of lines) {
+    const amount = round2(l.amount);
+    if (!(amount > 0)) continue;
+    const prev = out.find((o) => o.method === l.method);
+    if (prev) prev.amount = round2(prev.amount + amount);
+    else out.push({ method: l.method, amount });
+  }
+  return out;
+}
+
+export const sumPayments = (lines: PaymentLine[]) => round2(lines.reduce((a, l) => a + l.amount, 0));
+
+/** Medio que se guarda en la venta: el único usado, o "mixed" si se pagó con varios. */
+export function saleMethodOf(lines: PaymentLine[]): string {
+  return lines.length === 1 ? lines[0].method : 'mixed';
+}
+
+/**
+ * Saca `amount` del fondo de cobros (en orden) y devuelve de qué medios salió. Modifica el fondo.
+ * Sirve para repartir lo que pagó el cliente entre los consumos y el saldo de la cancha.
+ */
+export function takeFromPool(pool: PaymentLine[], amount: number): PaymentLine[] {
+  const taken: PaymentLine[] = [];
+  let need = round2(amount);
+  for (const p of pool) {
+    if (need <= 0) break;
+    if (p.amount <= 0) continue;
+    const part = round2(Math.min(p.amount, need));
+    p.amount = round2(p.amount - part);
+    need = round2(need - part);
+    taken.push({ method: p.method, amount: part });
+  }
+  return mergePayments(taken);
+}
+
+/** Lo que falta pagar de la cancha (precio menos lo ya cobrado: seña y pagos). Nunca negativo. */
+export function courtBalance(price: number, paid: number): number {
+  return Math.max(0, round2(price - paid));
+}
+
+/** Medios con los que se paga un turno en la agenda (efectivo, transferencia, otro). */
+export function bookingMethodOf(lines: PaymentLine[]): 'cash' | 'transfer' | 'other' {
+  const main = [...lines].sort((a, b) => b.amount - a.amount)[0]?.method;
+  return main === 'cash' ? 'cash' : main === 'transfer' ? 'transfer' : 'other';
+}
+
 export function saleTotal(items: { quantity: number; unitPrice: number }[]): number {
   return round2(items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0));
 }

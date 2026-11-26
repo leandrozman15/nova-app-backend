@@ -1098,6 +1098,8 @@ model Booking {
   facility  Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   user      User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   recurring RecurringBooking? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  /// Consumos del buffet cargados a la cuenta de este alquiler.
+  buffetSales BuffetSale[]
 
   @@unique([recurringId, date])
   @@index([companyId, clubId, date])
@@ -2065,6 +2067,7 @@ model BuffetCashSession {
   company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   club    Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
   sales   BuffetSale[]
+  payments BuffetSalePayment[]
 
   @@index([companyId, clubId, status])
   @@index([clubId, openedAt])
@@ -2085,13 +2088,22 @@ model BuffetSale {
   createdAt     DateTime  @default(now())
   // Id generado en el dispositivo: evita duplicar una venta hecha sin señal al reenviarla.
   clientRef     String?
+  /// Alquiler (turno) al que se cargó el consumo; null en las ventas comunes.
+  bookingId     String?
+  /// pending (cargado a la cuenta, todavía sin cobrar) | settled (cobrado al cerrar la cuenta) | null.
+  accountStatus String?
+  settledAt     DateTime?
 
-  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  club    Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  session BuffetCashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  items   BuffetSaleItem[]
+  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  club     Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  session  BuffetCashSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  booking  Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  items    BuffetSaleItem[]
+  /// Cómo se cobró: una línea por medio de pago (efectivo, transferencia, etc.).
+  payments BuffetSalePayment[]
 
   @@unique([clubId, clientRef])
+  @@index([bookingId, accountStatus])
   @@index([sessionId])
   @@index([clubId, createdAt])
 }
@@ -2110,6 +2122,25 @@ model BuffetSaleItem {
 
   @@index([saleId])
   @@index([productId])
+}
+
+/// Un cobro de una venta del buffet. Una venta puede tener varios (pago dividido). `sessionId` es la caja
+/// en la que entró el dinero: en un consumo cargado a un alquiler es la caja del momento de cerrar la cuenta.
+model BuffetSalePayment {
+  id        String   @id @default(cuid())
+  saleId    String
+  sessionId String
+  /// cash | mercadopago | transfer | card
+  method    String
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+
+  sale    BuffetSale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  session BuffetCashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([sessionId])
+  @@index([createdAt])
 }
 
 model BuffetStockMovement {
