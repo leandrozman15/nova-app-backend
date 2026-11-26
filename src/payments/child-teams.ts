@@ -27,13 +27,12 @@ export async function loadChildTeams(
     if (!c.clubId || !divisionId) continue;
     const teamId = typeof extra.teamId === 'string' ? extra.teamId : '';
     const base = `clubs/${c.clubId}/divisions/${divisionId}/teams`;
-    if (teamId && teamId !== divisionId) {
-      wantedPaths.add(`${base}/${teamId}`);
-      pathOf.set(c.id, `${base}/${teamId}`);
-    } else {
-      wantedParents.add(base);
-      pathOf.set(c.id, base);
-    }
+    // Se trae toda la categoría (todos sus planteles) para poder mostrar a todos sus entrenadores.
+    wantedParents.add(base);
+    pathOf.set(
+      c.id,
+      teamId && teamId !== divisionId ? `${base}/${teamId}` : base,
+    );
   }
   if (pathOf.size === 0) return result;
   const rows = await prisma.storeDocument.findMany({
@@ -45,7 +44,13 @@ export async function loadChildTeams(
           : []),
       ],
     },
-    select: { path: true, parentPath: true, docId: true, companyId: true, data: true },
+    select: {
+      path: true,
+      parentPath: true,
+      docId: true,
+      companyId: true,
+      data: true,
+    },
   });
   const str = (v: unknown) => (typeof v === 'string' ? v : '');
   const shape = (row: { docId: string; data: unknown }) => {
@@ -69,10 +74,26 @@ export async function loadChildTeams(
               day: str(x.day),
               start: str(x.start),
               end: str(x.end) || null,
+              ...(str(x.name) ? { name: str(x.name) } : {}),
             }))
         : [],
       mainVenue: str(d.mainVenue) || null,
     };
+  };
+  const coachesOf = (rows: Array<{ data: unknown }>) => {
+    const names: string[] = [];
+    for (const r of rows) {
+      const d = (r.data ?? {}) as Record<string, unknown>;
+      for (const n of [str(d.coachName), str(d.assistantCoachName)]) {
+        const clean = n.trim();
+        if (
+          clean &&
+          !names.some((x) => x.toLowerCase() === clean.toLowerCase())
+        )
+          names.push(clean);
+      }
+    }
+    return names;
   };
   for (const c of children) {
     const key = pathOf.get(c.id);
@@ -80,12 +101,21 @@ export async function loadChildTeams(
     const own = (r: { companyId: string | null }) =>
       !r.companyId || r.companyId === c.companyId;
     const exact = rows.find((r) => r.path === key && own(r));
+    const base = key.includes('/teams/')
+      ? key.slice(0, key.lastIndexOf('/'))
+      : key;
+    const category = rows.filter((r) => r.parentPath === base && own(r));
+    // Los del plantel del atleta primero, después los de los demás planteles de su categoría.
+    const ordered = exact
+      ? [exact, ...category.filter((r) => r !== exact)]
+      : category;
+    const coaches = coachesOf(ordered);
     if (exact) {
-      result.set(c.id, shape(exact));
+      result.set(c.id, { ...shape(exact), coaches });
       continue;
     }
-    const siblings = rows.filter((r) => r.parentPath === key && own(r));
-    if (siblings.length === 1) result.set(c.id, shape(siblings[0]));
+    if (category.length === 1)
+      result.set(c.id, { ...shape(category[0]), coaches });
   }
   return result;
 }
