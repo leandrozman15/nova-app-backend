@@ -13,6 +13,16 @@ export class HealthController {
     return this.healthService.check();
   }
 
+  /**
+   * Para el despertador de Render (.github/workflows/keep-alive.yml): responde sin tocar la
+   * base, así mantiene prendido el servidor sin mantener prendida a Neon (que cobra horas).
+   */
+  @Public()
+  @Get('ping')
+  ping() {
+    return { ok: true };
+  }
+
   @Public()
   @Get('db')
   async getDbRoundTrip() {
