@@ -20,7 +20,7 @@ describe('mi perfil y mis torneos (sin club)', () => {
             ? [
                 {
                   id: 'e1',
-                  status: 'CONFIRMED',
+                  status: 'ACCEPTED',
                   teamName: 'Fran / Ale',
                   createdAt: new Date('2026-11-01'),
                   tournament: {
@@ -53,7 +53,7 @@ describe('mi perfil y mis torneos (sin club)', () => {
     const tournaments = await svc.myTournaments('uid-1');
     expect(tournaments).toHaveLength(1);
     expect(tournaments[0].tournament.club.name).toBe('Club La Trinidad');
-    expect(tournaments[0].status).toBe('CONFIRMED');
+    expect(tournaments[0].status).toBe('ACCEPTED');
   });
 
   it('atleta sin ficha ni inscripciones: listas vacías, no error', async () => {
