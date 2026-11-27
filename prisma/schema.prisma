@@ -2936,3 +2936,46 @@ model CoachPayment {
   @@index([studentId, paidAt])
 }
 
+
+/// Extracto bancario que el club sube para conciliar cuotas y otros movimientos.
+model BankStatement {
+  id         String   @id @default(cuid())
+  companyId  String
+  clubId     String
+  fileName   String
+  rowCount   Int
+  importedBy String?
+  createdAt  DateTime @default(now())
+
+  movements BankMovement[]
+
+  @@index([companyId, clubId])
+}
+
+/// Un renglón del extracto. `amount` lleva signo: positivo = acreditación, negativo = débito.
+model BankMovement {
+  id          String   @id @default(cuid())
+  companyId   String
+  clubId      String
+  statementId String
+  /// Huella (fecha + monto + concepto + referencia + repetición dentro del archivo) para no importar dos veces el mismo renglón.
+  hash        String
+  date        DateTime @db.Date
+  description String
+  reference   String?
+  amount      Decimal  @db.Decimal(12, 2)
+  /// pending | matched (cuota) | recorded (Tesorería) | ignored
+  status      String   @default("pending")
+  matchedFeeId  String?
+  transactionId String?
+  note        String?
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  createdAt   DateTime @default(now())
+
+  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, hash])
+  @@index([companyId, clubId, status])
+  @@index([statementId])
+}

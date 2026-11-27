@@ -22,6 +22,7 @@ import { StaffImportModule } from './staff-import/staff-import.module';
 import { RosterModule } from './roster/roster.module';
 import { DocStoreModule } from './docstore/docstore.module';
 import { PlayerDocumentsModule } from './player-documents/player-documents.module';
+import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
 import { PlanPackGuard } from './subscriptions/plan-pack.guard';
 import { ClubsModule } from './clubs/clubs.module';
@@ -106,6 +107,7 @@ import { ClubAccessModule } from './club-access/club-access.module';
     RosterModule,
     DocStoreModule,
     PlayerDocumentsModule,
+    BankReconciliationModule,
     PushModule,
     ClubAccessModule,
     PublicModule,

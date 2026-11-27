@@ -41,16 +41,14 @@ function setup(current: Record<string, unknown>) {
       create: jest
         .fn()
         .mockImplementation(({ data }) => Promise.resolve({ ...fee, ...data })),
-      update: jest
-        .fn()
-        .mockImplementation(({ data }) =>
-          Promise.resolve({
-            ...fee,
-            ...Object.fromEntries(
-              Object.entries(data).filter(([, v]) => v !== undefined),
-            ),
-          }),
-        ),
+      update: jest.fn().mockImplementation(({ data }) =>
+        Promise.resolve({
+          ...fee,
+          ...Object.fromEntries(
+            Object.entries(data).filter(([, v]) => v !== undefined),
+          ),
+        }),
+      ),
     },
   };
   return { service: new PlayerPaymentsService(prisma as never), tx };

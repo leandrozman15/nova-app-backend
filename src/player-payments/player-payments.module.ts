@@ -6,5 +6,6 @@ import { PlayerPaymentsService } from './player-payments.service';
 @Module({
   controllers: [PlayerPaymentsController],
   providers: [PlayerPaymentsService],
+  exports: [PlayerPaymentsService],
 })
 export class PlayerPaymentsModule {}
