@@ -45,6 +45,7 @@ function normalizeRoles(rawRole: string): string[] {
 const LEGACY_CLUB_ROLES = new Set([
   'club_admin',
   'buffet',
+  'access_control',
   'manager',
   'coordinator',
   'coach',
