@@ -437,6 +437,7 @@ export class TournamentsService {
             top: tournament.padelTopCategory,
           },
           dto.partnerDni,
+          { companyId: tournament.companyId, clubId: tournament.clubId },
         )
       : { partnerDniHash: null };
 

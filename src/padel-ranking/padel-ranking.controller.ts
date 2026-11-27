@@ -3,7 +3,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 
 import { Roles } from '../common/decorators/roles.decorator';
 import type { RequestWithAuth } from '../common/interfaces/request-with-auth.interface';
-import { requireClubScope } from '../common/http/request-context';
+import { requireClubScope, requireCompanyId } from '../common/http/request-context';
 import { ClubProfileDto, DeclareProfileDto, RecategorizeDto } from './dto/padel.dto';
 import { PadelRankingService } from './padel-ranking.service';
 
@@ -38,6 +38,13 @@ export class ClubPadelController {
   @Get('profiles')
   list(@Req() req: unknown, @Param('clubId') clubId: string, @Query('search') search?: string) {
     requireClubScope(req, clubId);
+    return this.ranking.roster(clubId, search);
+  }
+
+  /** Buscar en toda la red (solo para no cargar un perfil duplicado). */
+  @Get('profiles/network-search')
+  networkSearch(@Req() req: unknown, @Param('clubId') clubId: string, @Query('search') search?: string) {
+    requireClubScope(req, clubId);
     return this.ranking.search(search);
   }
 
@@ -50,7 +57,7 @@ export class ClubPadelController {
   @Post('profiles')
   create(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ClubProfileDto) {
     requireClubScope(req, clubId);
-    return this.ranking.clubUpsert(clubId, uidOf(req), dto);
+    return this.ranking.clubUpsert(requireCompanyId(req), clubId, uidOf(req), dto);
   }
 
   @Post('profiles/:id/recategorize')

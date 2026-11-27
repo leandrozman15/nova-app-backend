@@ -95,11 +95,31 @@ export class PadelRankingService {
 
   // ─── Dirección del club ───────────────────────────────────────────────────
 
-  /** El club da de alta (o encuentra) a un jugador por DNI, con la categoría que verificó en cancha. */
-  async clubUpsert(clubId: string, byUid: string | undefined, input: { dni: string; name: string; category: string }) {
+  /** Suma (o refuerza) el motivo por el que un perfil aparece en el padrón de un club. */
+  private async linkToClub(companyId: string, clubId: string, profileId: string, reason: 'socio' | 'torneo') {
+    const existing = await this.prisma.clubPadelMember.findUnique({
+      where: { clubId_profileId: { clubId, profileId } },
+      select: { id: true, reasons: true },
+    });
+    if (!existing) {
+      await this.prisma.clubPadelMember.create({ data: { companyId, clubId, profileId, reasons: [reason] } });
+      return;
+    }
+    if (existing.reasons.includes(reason)) return;
+    await this.prisma.clubPadelMember.update({
+      where: { id: existing.id },
+      data: { reasons: [...existing.reasons, reason] },
+    });
+  }
+
+  /** El club da de alta (o encuentra) a un jugador por DNI, con la categoría que verificó en cancha. Queda en su padrón. */
+  async clubUpsert(companyId: string, clubId: string, byUid: string | undefined, input: { dni: string; name: string; category: string }) {
     const hash = this.hash(input.dni);
     const existing = await this.prisma.padelProfile.findUnique({ where: { dniHash: hash }, select: PROFILE_SELECT });
-    if (existing) return { ...existing, existing: true };
+    if (existing) {
+      await this.linkToClub(companyId, clubId, existing.id, 'socio');
+      return { ...existing, existing: true };
+    }
     const cat = asCategory(input.category);
     const created = await this.prisma.padelProfile.create({
       data: {
@@ -114,9 +134,26 @@ export class PadelRankingService {
       },
       select: PROFILE_SELECT,
     });
+    await this.linkToClub(companyId, clubId, created.id, 'socio');
     return { ...created, existing: false };
   }
 
+  /** Padrón del club: socios cargados por la dirección y quienes se anotaron a sus torneos. */
+  async roster(clubId: string, search?: string, limit = 100) {
+    const q = search?.trim();
+    const members = await this.prisma.clubPadelMember.findMany({
+      where: {
+        clubId,
+        ...(q ? { profile: { displayName: { contains: q, mode: 'insensitive' } } } : {}),
+      },
+      orderBy: [{ profile: { elo: 'desc' } }],
+      take: Math.min(Math.max(limit, 1), 200),
+      select: { reasons: true, profile: { select: PROFILE_SELECT } },
+    });
+    return members.map((m) => ({ ...m.profile, reasons: m.reasons }));
+  }
+
+  /** Búsqueda en toda la red (solo para no duplicar un perfil al cargar un jugador nuevo). */
   async search(search?: string, limit = 50) {
     const q = search?.trim();
     return this.prisma.padelProfile.findMany({
@@ -193,8 +230,8 @@ export class PadelRankingService {
 
   // ─── Inscripción ──────────────────────────────────────────────────────────
 
-  /** Controla la categoría del que se inscribe (y de su compañero/a) contra las reglas del torneo. */
-  async validateEntry(userId: string, rules: PadelRules, partnerDni?: string | null) {
+  /** Controla la categoría del que se inscribe (y de su compañero/a) contra las reglas del torneo. Los suma al padrón del club. */
+  async validateEntry(userId: string, rules: PadelRules, partnerDni?: string | null, club?: { companyId: string; clubId: string }) {
     if (!rules.mode) return { partnerDniHash: null as string | null };
     const me = await this.prisma.padelProfile.findUnique({ where: { userId } });
     if (!me)
@@ -204,6 +241,7 @@ export class PadelRankingService {
       });
     const players = [{ name: me.displayName, category: me.category }];
     let partnerHash: string | null = null;
+    let partnerId: string | null = null;
     if (partnerDni) {
       partnerHash = this.hash(partnerDni);
       if (partnerHash === me.dniHash)
@@ -215,12 +253,17 @@ export class PadelRankingService {
           message: 'Tu compañero/a todavía no tiene categoría en Fluxion. Que la declare desde la app (o pedile al club que la cargue).',
         });
       players.push({ name: partner.displayName, category: partner.category });
+      partnerId = partner.id;
     } else if (rules.mode === 'suma') {
       throw new BadRequestException('Este torneo es por suma: cargá el DNI de tu compañero/a.');
     }
     const verdict = checkPlayers(rules, players);
     if (!verdict.ok)
       throw new ConflictException({ code: 'PADEL_CATEGORY_BLOCKED', message: verdict.reasons.join('. ') + '.' });
+    if (club) {
+      await this.linkToClub(club.companyId, club.clubId, me.id, 'torneo');
+      if (partnerId) await this.linkToClub(club.companyId, club.clubId, partnerId, 'torneo');
+    }
     return { partnerDniHash: partnerHash };
   }
 

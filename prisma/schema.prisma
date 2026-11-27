@@ -3030,9 +3030,28 @@ model PadelProfile {
 
   changes PadelCategoryChange[]
   results PadelResult[]
+  clubs   ClubPadelMember[]
 
   @@index([displayName])
   @@index([category, elo])
+}
+
+/// Padrón de pádel de un club: quiénes son socios/jugadores del club o se anotaron a sus torneos.
+/// Un mismo perfil puede estar en varios clubes (juega en más de uno); el ELO sigue siendo único en la red.
+model ClubPadelMember {
+  id        String   @id @default(cuid())
+  companyId String
+  clubId    String
+  profileId String
+  /// Por qué aparece en el padrón de este club: socio (cargado por la dirección) y/o torneo (se anotó a uno acá).
+  reasons   String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile PadelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, profileId])
+  @@index([companyId, clubId])
 }
 
 /// Auditoría de cada cambio de categoría.
