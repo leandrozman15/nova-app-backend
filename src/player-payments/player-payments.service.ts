@@ -189,7 +189,9 @@ export class PlayerPaymentsService {
     const nextStatus = dto.status;
     const paymentDate = nextStatus
       ? nextStatus === PaymentStatus.paid
-        ? (current.paymentDate ?? new Date())
+        ? dto.paymentDate
+          ? new Date(`${dto.paymentDate}T12:00:00.000Z`)
+          : (current.paymentDate ?? new Date())
         : null
       : undefined;
 

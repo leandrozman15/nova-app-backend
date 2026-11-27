@@ -30,6 +30,11 @@ export class UpdatePlayerPaymentDto {
   @Min(0)
   amount?: number;
 
+  /** Fecha en que entró el dinero (AAAA-MM-DD); por defecto, hoy. */
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  paymentDate?: string;
+
   /** Intereses por mora cobrados junto con la cuota (se suman al ingreso de Tesorería). */
   @IsOptional()
   @Type(() => Number)
