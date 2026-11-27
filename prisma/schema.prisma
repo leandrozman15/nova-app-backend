@@ -529,6 +529,8 @@ model Player {
   role               String?
   /// Campos de la ficha que no tienen columna propia (equipo de Firestore, extras del formulario).
   extra              Json?
+  /// Débito automático de la cuota: { active, method: cbu | tarjeta, label, since, by }. Nunca guarda números de cuenta ni de tarjeta.
+  autoDebit          Json?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
