@@ -31,6 +31,11 @@ export class UpdateTrainingSessionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
+  coachName?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(500)
   notes?: string;
 }

@@ -955,6 +955,8 @@ model TrainingSession {
   scheduledAt DateTime
   status      TrainingSessionStatus @default(scheduled)
   location    String?
+  /// Entrenador a cargo de esta sesión puntual (puede diferir del DT del plantel, ej. "físico" vs "táctico").
+  coachName   String?
   notes       String?
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
