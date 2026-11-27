@@ -2979,3 +2979,18 @@ model BankMovement {
   @@index([companyId, clubId, status])
   @@index([statementId])
 }
+
+/// Fichajes por QR en la puerta del club: cada escaneo con su semáforo (green | yellow | red).
+model AccessLog {
+  id        String   @id @default(cuid())
+  companyId String
+  clubId    String
+  playerId  String
+  result    String
+  reasons   Json?
+  scannedBy String?
+  createdAt DateTime @default(now())
+
+  @@index([clubId, createdAt])
+  @@index([playerId, createdAt])
+}
