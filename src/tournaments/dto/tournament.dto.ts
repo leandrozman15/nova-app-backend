@@ -17,6 +17,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import { PADEL_CATEGORY_CODES } from '../../padel-ranking/padel-categories';
 import {
   FACILITY_SPORT_FAMILIES,
   FACILITY_SPORT_IDS,
@@ -75,6 +76,29 @@ class TournamentFieldsDto {
   @IsString()
   @MaxLength(120)
   category?: string | null;
+
+  /** Pádel: control de categorías (category = nivel del torneo, suma = suma de la pareja). */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(['category', 'suma'])
+  padelMode?: 'category' | 'suma' | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(PADEL_CATEGORY_CODES)
+  padelCategory?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(3)
+  @Max(16)
+  padelSum?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsIn(PADEL_CATEGORY_CODES)
+  padelTopCategory?: string | null;
 
   @IsOptional()
   @IsIn(ENTRY_TYPES)
@@ -216,6 +240,11 @@ export class CreateEntryDto {
   @IsString()
   @MaxLength(500)
   message?: string;
+
+  /** Pádel: DNI del compañero/a (para controlar la categoría de la pareja). */
+  @IsOptional()
+  @Matches(/^\d[\d.\s]{5,12}$/, { message: 'DNI del compañero inválido' })
+  partnerDni?: string;
 }
 
 export class ReviewEntryDto {

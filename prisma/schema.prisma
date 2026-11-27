@@ -1243,6 +1243,14 @@ model ClubTournament {
   maxEntries           Int?
   prizes               String[]         @default([])
   rules                String?
+  /// Pádel: category (nivel exigido) | suma (suma de categorías de la pareja). Vacío = sin control.
+  padelMode            String?
+  /// 8VA…1RA: categoría del torneo (modo category).
+  padelCategory        String?
+  /// Suma objetivo (modo suma): la pareja entra si la suma de sus categorías es ≥ este valor.
+  padelSum             Int?
+  /// Tope individual: nadie mejor que esta categoría (modo suma).
+  padelTopCategory     String?
   status               TournamentStatus @default(DRAFT)
   /// Primer día del torneo (YYYY-MM-DD), derivado de days, para ordenar y filtrar.
   startDate            String?
@@ -1330,6 +1338,8 @@ model TournamentEntry {
   userId       String
   teamName     String?
   message      String?
+  /// Pádel: DNI (índice ciego) del compañero/a, para controlar la categoría de la pareja.
+  partnerDniHash String?
   status       TournamentEntryStatus @default(PENDING)
   reviewNote   String?
   createdAt    DateTime              @default(now())
@@ -2993,4 +3003,66 @@ model AccessLog {
 
   @@index([clubId, createdAt])
   @@index([playerId, createdAt])
+}
+
+/// Pádel: perfil competitivo único por DNI en toda la red (no se puede jugar en dos categorías).
+model PadelProfile {
+  id          String   @id @default(cuid())
+  /// Índice ciego del DNI: llave antifraude, el DNI no se guarda acá.
+  dniHash     String   @unique
+  userId      String?  @unique
+  displayName String
+  /// 8VA | 7MA | 6TA | 5TA | 4TA | 3RA | 2DA | 1RA
+  category    String
+  /// Piso: la categoría más alta alcanzada; no se baja sin pedido auditado de la dirección.
+  floorCategory String
+  elo         Int
+  isProvisional Boolean @default(true)
+  matchesPlayed Int     @default(0)
+  matchesWon    Int     @default(0)
+  tournamentsWon Int    @default(0)
+  lastCategoryChangeAt DateTime?
+  verifiedByClubId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  changes PadelCategoryChange[]
+  results PadelResult[]
+
+  @@index([displayName])
+  @@index([category, elo])
+}
+
+/// Auditoría de cada cambio de categoría.
+model PadelCategoryChange {
+  id        String   @id @default(cuid())
+  profileId String
+  fromCategory String?
+  toCategory   String
+  /// declared | promotion | elo | recategorized | lowered
+  reason    String
+  clubId    String?
+  byUid     String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  profile PadelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
+}
+
+/// Finales jugadas (campeón o finalista) para la regla de ascenso automático.
+model PadelResult {
+  id           String   @id @default(cuid())
+  profileId    String
+  tournamentId String
+  /// champion | finalist
+  kind         String
+  teamsCount   Int
+  createdAt    DateTime @default(now())
+
+  profile PadelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, tournamentId])
+  @@index([profileId, createdAt])
 }
