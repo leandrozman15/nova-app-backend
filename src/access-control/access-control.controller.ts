@@ -34,10 +34,30 @@ export class MyAccessTokenController {
 export class AccessControlController {
   constructor(private readonly access: AccessControlService) {}
 
+  /** Alias histórico: igual que /confirm (ficha directo), por compatibilidad. */
   @Post('scan')
   scan(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ScanDto) {
     requireClubScope(req, clubId);
-    return this.access.scan(
+    return this.access.confirm(
+      requireCompanyId(req),
+      clubId,
+      (req as RequestWithAuth).auth?.uid,
+      dto.token,
+    );
+  }
+
+  /** El terminal lee el QR y muestra el semáforo + si es entrada o salida, sin fichar todavía. */
+  @Post('preview')
+  preview(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ScanDto) {
+    requireClubScope(req, clubId);
+    return this.access.preview(requireCompanyId(req), clubId, dto.token);
+  }
+
+  /** El atleta confirma en el terminal: recién ahí se ficha la entrada o salida. */
+  @Post('confirm')
+  confirm(@Req() req: unknown, @Param('clubId') clubId: string, @Body() dto: ScanDto) {
+    requireClubScope(req, clubId);
+    return this.access.confirm(
       requireCompanyId(req),
       clubId,
       (req as RequestWithAuth).auth?.uid,

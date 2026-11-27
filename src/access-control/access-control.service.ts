@@ -40,6 +40,8 @@ export type ScanResult = {
   repeat: boolean;
   at: string;
   player: { id: string; name: string; photoUrl: string | null } | null;
+  /** "in" | "out": no se muestra en /preview hasta confirmar, pero igual se informa ya calculada. */
+  direction?: 'in' | 'out';
 };
 
 @Injectable()
@@ -89,20 +91,33 @@ export class AccessControlService {
     };
   }
 
-  async scan(
-    companyId: string,
+  /** Entrada si no fichó hoy o si su último fichaje hoy fue una salida; salida si el último fue una entrada. */
+  private async nextDirection(
+    playerId: string,
     clubId: string,
-    scannedBy: string | undefined,
-    token: string,
-  ): Promise<ScanResult> {
-    const at = new Date();
-    const stop = (code: string, message: string): ScanResult => ({
-      result: 'red',
-      reasons: [{ code, message }],
-      owed: 0,
-      repeat: false,
-      at: at.toISOString(),
-      player: null,
+    timeZone: string,
+    at: Date,
+  ): Promise<'in' | 'out'> {
+    const last = await this.prisma.accessLog.findFirst({
+      where: { playerId, clubId },
+      orderBy: { createdAt: 'desc' },
+      select: { direction: true, createdAt: true },
+    });
+    if (!last || dayInZone(last.createdAt, timeZone) !== dayInZone(at, timeZone)) return 'in';
+    return last.direction === 'in' ? 'out' : 'in';
+  }
+
+  /** Valida el QR y calcula el semáforo + la dirección (entrada/salida), sin escribir nada todavía. */
+  private async resolve(companyId: string, clubId: string, token: string, at: Date) {
+    const stop = (code: string, message: string): { stop: ScanResult } => ({
+      stop: {
+        result: 'red',
+        reasons: [{ code, message }],
+        owed: 0,
+        repeat: false,
+        at: at.toISOString(),
+        player: null,
+      },
     });
 
     const check = verifyAccessToken(token);
@@ -144,6 +159,43 @@ export class AccessControlService {
       timeZone,
       today: dayInZone(at, timeZone),
     });
+    const direction = await this.nextDirection(player.id, clubId, timeZone, at);
+
+    return { player, verdict, direction, timeZone };
+  }
+
+  /** El terminal lee el QR: muestra el semáforo y la dirección detectada, pero todavía no ficha. */
+  async preview(companyId: string, clubId: string, token: string): Promise<ScanResult> {
+    const at = new Date();
+    const r = await this.resolve(companyId, clubId, token, at);
+    if ('stop' in r) return r.stop;
+    const { player, verdict, direction } = r;
+    return {
+      result: verdict.result,
+      reasons: verdict.reasons,
+      owed: verdict.owed,
+      repeat: false,
+      at: at.toISOString(),
+      direction,
+      player: {
+        id: player.id,
+        name: `${player.firstName} ${player.lastName}`.trim(),
+        photoUrl: player.photoUrl,
+      },
+    };
+  }
+
+  /** El atleta confirma: recalcula todo de nuevo (por si pasó el tiempo) y recién ahí ficha. */
+  async confirm(
+    companyId: string,
+    clubId: string,
+    scannedBy: string | undefined,
+    token: string,
+  ): Promise<ScanResult> {
+    const at = new Date();
+    const r = await this.resolve(companyId, clubId, token, at);
+    if ('stop' in r) return r.stop;
+    const { player, verdict, direction } = r;
 
     const since = new Date(at.getTime() - REPEAT_MINUTES * 60_000);
     const recent = await this.prisma.accessLog.findFirst({
@@ -157,6 +209,7 @@ export class AccessControlService {
           clubId,
           playerId: player.id,
           result: verdict.result,
+          direction,
           reasons: verdict.reasons,
           scannedBy: scannedBy ?? null,
         },
@@ -168,6 +221,7 @@ export class AccessControlService {
       owed: verdict.owed,
       repeat: !!recent,
       at: at.toISOString(),
+      direction,
       player: {
         id: player.id,
         name: `${player.firstName} ${player.lastName}`.trim(),
@@ -207,6 +261,7 @@ export class AccessControlService {
       playerId: r.playerId,
       name: name.get(r.playerId) ?? 'Atleta',
       result: r.result,
+      direction: (r.direction as 'in' | 'out' | null) ?? 'in',
       reasons: (r.reasons as Reason[] | null) ?? [],
       at: r.createdAt.toISOString(),
     }));
