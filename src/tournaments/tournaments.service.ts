@@ -10,6 +10,7 @@ import { Prisma, type TournamentStatus } from '@prisma/client';
 
 import { addDays, todayIn } from '../bookings/booking-time';
 import { facilitySportFamily } from '../facilities/facility-sports';
+import { PadelRankingService } from '../padel-ranking/padel-ranking.service';
 import { PlatformService } from '../platform/platform.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TournamentBracketService } from './tournament-bracket.service';
@@ -48,6 +49,10 @@ const TOURNAMENT_SELECT = {
   maxEntries: true,
   prizes: true,
   rules: true,
+  padelMode: true,
+  padelCategory: true,
+  padelSum: true,
+  padelTopCategory: true,
   status: true,
   startDate: true,
   endDate: true,
@@ -115,6 +120,7 @@ export class TournamentsService {
     private readonly prisma: PrismaService,
     private readonly platform: PlatformService,
     @Optional() private readonly bracket?: TournamentBracketService,
+    @Optional() private readonly ranking?: PadelRankingService,
   ) {}
 
   // ----- Consola del club -----
@@ -390,6 +396,10 @@ export class TournamentsService {
         registrationDeadline: true,
         startDate: true,
         maxEntries: true,
+        padelMode: true,
+        padelCategory: true,
+        padelSum: true,
+        padelTopCategory: true,
         club: { select: { timezone: true } },
       },
     });
@@ -416,9 +426,24 @@ export class TournamentsService {
           : 'Las inscripciones de este torneo están cerradas.',
       );
 
+    // Pádel: la categoría de quien se inscribe (y de su compañero/a) se controla contra las reglas.
+    const padel = this.ranking
+      ? await this.ranking.validateEntry(
+          user.id,
+          {
+            mode: tournament.padelMode === 'category' || tournament.padelMode === 'suma' ? tournament.padelMode : null,
+            category: tournament.padelCategory,
+            sum: tournament.padelSum,
+            top: tournament.padelTopCategory,
+          },
+          dto.partnerDni,
+        )
+      : { partnerDniHash: null };
+
     try {
       return await this.prisma.tournamentEntry.create({
         data: {
+          partnerDniHash: padel.partnerDniHash,
           companyId: tournament.companyId,
           clubId: tournament.clubId,
           tournamentId: tournament.id,
@@ -581,6 +606,10 @@ export class TournamentsService {
       maxEntries: dto.maxEntries,
       prizes: clean(dto.prizes),
       rules: dto.rules === '' ? null : dto.rules,
+      padelMode: dto.padelMode,
+      padelCategory: dto.padelCategory,
+      padelSum: dto.padelSum,
+      padelTopCategory: dto.padelTopCategory,
     };
   }
 

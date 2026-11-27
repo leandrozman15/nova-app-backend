@@ -23,6 +23,7 @@ import { RosterModule } from './roster/roster.module';
 import { DocStoreModule } from './docstore/docstore.module';
 import { PlayerDocumentsModule } from './player-documents/player-documents.module';
 import { AccessControlModule } from './access-control/access-control.module';
+import { PadelRankingModule } from './padel-ranking/padel-ranking.module';
 import { BankReconciliationModule } from './bank-reconciliation/bank-reconciliation.module';
 import { SuspendedClubGuard } from './subscriptions/suspended-club.guard';
 import { PlanPackGuard } from './subscriptions/plan-pack.guard';
@@ -109,6 +110,7 @@ import { ClubAccessModule } from './club-access/club-access.module';
     DocStoreModule,
     PlayerDocumentsModule,
     BankReconciliationModule,
+    PadelRankingModule,
     AccessControlModule,
     PushModule,
     ClubAccessModule,

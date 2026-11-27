@@ -1,3 +1,4 @@
+import { PadelRankingService } from '../padel-ranking/padel-ranking.service';
 import {
   BadRequestException,
   ConflictException,
@@ -103,6 +104,7 @@ export class TournamentBracketService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly push?: PushService,
+    @Optional() private readonly ranking?: PadelRankingService,
   ) {}
 
   // ─── Consola ──────────────────────────────────────────────────────────────
@@ -351,6 +353,18 @@ export class TournamentBracketService {
       data,
       select: MATCH_SELECT,
     });
+    // Pádel: un resultado nuevo mueve el ELO y los ascensos (los byes no cuentan).
+    if (winner && winner !== match.winnerId && teamA && teamB && this.ranking) {
+      const isFinal = !all.some(
+        (m) => m.round === nextSlot(match.round, match.position).round,
+      );
+      await this.ranking.onMatchWon({
+        tournamentId,
+        winnerTeamId: winner,
+        loserTeamId: winner === teamA ? teamB : teamA,
+        isFinal,
+      });
+    }
     let notified: { players: number } | null = null;
     if (dto.notify) notified = await this.notifyMatches(tournament, [updated]);
     return {
