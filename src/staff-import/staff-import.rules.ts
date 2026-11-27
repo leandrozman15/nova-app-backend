@@ -35,6 +35,7 @@ export const STAFF_ROLE_OPTIONS = [
   { code: 'coordinator', label: 'Coordinador de Rama', aliases: ['coordinador', 'coordinadora', 'coordinator'] },
   { code: 'club_admin', label: 'Administrador del Club', aliases: ['administrador', 'administradora', 'admin del club', 'club admin', 'club_admin'] },
   { code: 'buffet', label: 'Operador de Buffet', aliases: ['buffet', 'operador buffet', 'cantina'] },
+  { code: 'access_control', label: 'Control de Acceso', aliases: ['control de acceso', 'acceso', 'puerta', 'recepcion', 'recepción', 'access_control'] },
 ] as const;
 export type StaffRoleCode = (typeof STAFF_ROLE_OPTIONS)[number]['code'];
 
