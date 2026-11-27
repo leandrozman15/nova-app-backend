@@ -26,6 +26,13 @@ import {
 /** Un mismo atleta no se vuelve a registrar si ya fichó hace menos de esto. */
 const REPEAT_MINUTES = 10;
 
+/** Rango UTC de un mes calendario (1-12). */
+function monthRange(month: number, year: number): { from: Date; to: Date } {
+  const from = new Date(Date.UTC(year, month - 1, 1));
+  const to = new Date(Date.UTC(month === 12 ? year + 1 : year, month === 12 ? 0 : month, 1));
+  return { from, to };
+}
+
 export type ScanResult = {
   result: Light;
   reasons: Reason[];
@@ -169,12 +176,24 @@ export class AccessControlService {
     };
   }
 
-  /** Últimos fichajes del club, con el nombre del atleta. */
-  async recent(companyId: string, clubId: string, limit = 30) {
+  /** Últimos fichajes del club (o de un atleta puntual), con el nombre del atleta. */
+  async recent(
+    companyId: string,
+    clubId: string,
+    limit = 30,
+    filter?: { playerId?: string; month?: number; year?: number },
+  ) {
+    const range = filter?.month && filter?.year ? monthRange(filter.month, filter.year) : null;
     const rows = await this.prisma.accessLog.findMany({
-      where: { companyId, clubId },
+      where: {
+        companyId,
+        clubId,
+        ...(filter?.playerId ? { playerId: filter.playerId } : {}),
+        ...(range ? { createdAt: { gte: range.from, lt: range.to } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
-      take: Math.min(Math.max(limit, 1), 100),
+      // Un mes entero puede tener más de 100 fichajes; sin mes, se recorta a los últimos.
+      take: range ? 1000 : Math.min(Math.max(limit, 1), 100),
     });
     const players = await this.prisma.player.findMany({
       where: { id: { in: [...new Set(rows.map((r) => r.playerId))] } },
@@ -191,6 +210,25 @@ export class AccessControlService {
       reasons: (r.reasons as Reason[] | null) ?? [],
       at: r.createdAt.toISOString(),
     }));
+  }
+
+  /** Fichajes de un hijo/a para la familia: solo lectura, verifica que el atleta esté vinculado al tutor. */
+  async forGuardian(
+    auth: { email?: string; emailVerified?: boolean },
+    playerId: string,
+    month: number,
+    year: number,
+  ) {
+    const email = auth.email?.trim().toLowerCase();
+    if (!email || auth.emailVerified !== true)
+      throw new ForbiddenException('Verificá tu email para ver los ingresos de tu hijo/a');
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      select: { companyId: true, clubId: true, extra: true },
+    });
+    if (!player || guardianEmailOf(player.extra) !== email)
+      throw new ForbiddenException('Este atleta no está vinculado a tu cuenta');
+    return this.recent(player.companyId, player.clubId, 1000, { playerId, month, year });
   }
 
   private async medicalState(
