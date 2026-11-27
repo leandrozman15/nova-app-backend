@@ -100,6 +100,7 @@ export class TrainingSessionsService {
         title: dto.title,
         scheduledAt: dto.scheduledAt,
         location: dto.location,
+        coachName: dto.coachName,
         notes: dto.notes,
       },
     });
@@ -117,6 +118,7 @@ export class TrainingSessionsService {
         scheduledAt: dto.scheduledAt,
         status: dto.status as TrainingSessionStatus | undefined,
         location: dto.location,
+        coachName: dto.coachName,
         notes: dto.notes,
       },
     });
