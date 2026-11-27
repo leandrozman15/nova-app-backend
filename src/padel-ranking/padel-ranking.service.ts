@@ -51,8 +51,46 @@ export class PadelRankingService {
     const user = await this.user(firebaseUid);
     return this.prisma.padelProfile.findUnique({
       where: { userId: user.id },
-      select: PROFILE_SELECT,
+      select: {
+        ...PROFILE_SELECT,
+        changes: { orderBy: { createdAt: 'desc' }, take: 20 },
+        results: { orderBy: { createdAt: 'desc' }, take: 20 },
+      },
     });
+  }
+
+  /** Mis inscripciones a torneos (de cualquier club), para ver estado e historial sin pertenecer a ninguno. */
+  async myTournaments(firebaseUid: string) {
+    const user = await this.user(firebaseUid);
+    const entries = await this.prisma.tournamentEntry.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        teamName: true,
+        createdAt: true,
+        tournament: {
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            category: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+            club: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    return entries.map((e) => ({
+      id: e.id,
+      status: e.status,
+      teamName: e.teamName,
+      createdAt: e.createdAt,
+      tournament: e.tournament,
+    }));
   }
 
   /**

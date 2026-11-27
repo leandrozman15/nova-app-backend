@@ -27,6 +27,19 @@ export class MyPadelProfileController {
   }
 }
 
+/** Mis torneos (de cualquier club): para ver estado e historial sin pertenecer a ningún club. */
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 20, ttl: 60_000 } })
+@Controller('users/me/padel-tournaments')
+export class MyPadelTournamentsController {
+  constructor(private readonly ranking: PadelRankingService) {}
+
+  @Get()
+  mine(@Req() req: unknown) {
+    return this.ranking.myTournaments(uidOf(req)!);
+  }
+}
+
 /** Dirección del club: padrón de jugadores de la red, altas y recategorización auditada. */
 @Roles('admin', 'manager')
 @UseGuards(ThrottlerGuard)
