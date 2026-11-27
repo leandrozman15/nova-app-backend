@@ -4,6 +4,7 @@ import { PaymentStatus } from '@prisma/client';
 import { EmailNotificationsService } from '../email/email-notifications.service';
 import { InvoicingService } from '../invoicing/invoicing.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { autoDebitOf } from './auto-debit';
 import { CreatePlayerPaymentDto } from './dto/create-player-payment.dto';
 import { UpdatePlayerPaymentDto } from './dto/update-player-payment.dto';
 import {
@@ -108,7 +109,8 @@ export class PlayerPaymentsService {
       dueDate?: Date | null;
       status: string;
     },
-  >(rows: T[]) {
+  >(rows: (T & { playerId?: string })[]) {
+    const debit = await this.autoDebitByPlayer(rows.map((r) => r.playerId));
     const clubIds = [
       ...new Set(rows.filter((r) => r.status !== 'paid').map((r) => r.clubId)),
     ];
@@ -119,7 +121,11 @@ export class PlayerPaymentsService {
         })
       : [];
     const byClub = new Map(clubs.map((c) => [c.id, c]));
-    return rows.map((r) => {
+    return rows.map((r0) => {
+      const r = {
+        ...r0,
+        autoDebit: r0.playerId ? (debit.get(r0.playerId) ?? null) : null,
+      };
       const club = byClub.get(r.clubId);
       if (r.status === 'paid' || !club) return { ...r, lateFee: null };
       const lf = computeLateFee(
@@ -135,6 +141,17 @@ export class PlayerPaymentsService {
       );
       return { ...r, lateFee: lf.amount > 0 ? lf : null };
     });
+  }
+
+  /** Adhesión al débito automático de los atletas de una lista de cuotas (solo las activas). */
+  async autoDebitByPlayer(playerIds: (string | undefined)[]) {
+    const ids = [...new Set(playerIds.filter((v): v is string => Boolean(v)))];
+    if (!ids.length) return new Map<string, ReturnType<typeof autoDebitOf>>();
+    const rows = await this.prisma.player.findMany({
+      where: { id: { in: ids }, autoDebit: { path: ['active'], equals: true } },
+      select: { id: true, autoDebit: true },
+    });
+    return new Map(rows.map((r) => [r.id, autoDebitOf(r.autoDebit)]));
   }
 
   async getById(companyId: string, id: string) {

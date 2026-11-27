@@ -1,3 +1,4 @@
+import { autoDebitOf } from '../player-payments/auto-debit';
 import { guardianEmailOf } from '../common/guardian';
 import {
   BadRequestException,
@@ -330,6 +331,7 @@ export class FeePaymentsService {
         sport: true,
         divisionId: true,
         branch: true,
+        autoDebit: true,
         club: { select: { name: true, logoUrl: true } },
       },
     });
@@ -388,6 +390,7 @@ export class FeePaymentsService {
         photoUrl: c.photoUrl,
         birthDate: c.birthDate?.toISOString() ?? null,
         pendingFees: pendingBy.get(c.id) ?? 0,
+        autoDebit: autoDebitOf(c.autoDebit),
       };
     });
   }
@@ -407,10 +410,15 @@ export class FeePaymentsService {
           select: LATE_FEE_CLUB_SELECT,
         })
       : null;
+    const player = await this.prisma.player.findUnique({
+      where: { id: playerId },
+      select: { autoDebit: true },
+    });
+    const autoDebit = autoDebitOf(player?.autoDebit);
     return fees.map((f) => {
-      if (f.status === 'paid' || !club) return { ...f, lateFee: null };
+      if (f.status === 'paid' || !club) return { ...f, lateFee: null, autoDebit };
       const lf = this.lateFeeOf(f, club);
-      return { ...f, lateFee: lf.amount > 0 ? lf : null };
+      return { ...f, lateFee: lf.amount > 0 ? lf : null, autoDebit };
     });
   }
 
