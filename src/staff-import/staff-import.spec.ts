@@ -47,6 +47,7 @@ describe('validateStaffRows', () => {
 describe('roleOf', () => {
   it('acepta la etiqueta de la lista, el código y nombres cortos', () => {
     expect(roleOf('Operador de Buffet')).toBe('buffet');
+    expect(roleOf('Control de acceso')).toBe('access_control');
     expect(roleOf('coordinador')).toBe('coordinator');
     expect(roleOf('Entrenador Nivel 1 (Jefe de Rama)')).toBe('coach_lvl1');
     expect(roleOf('club_admin')).toBe('club_admin');

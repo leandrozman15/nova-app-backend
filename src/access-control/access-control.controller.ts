@@ -21,7 +21,7 @@ export class MyAccessTokenController {
 }
 
 /** Puerta del club: escanear el QR y ver el semáforo. */
-@Roles('admin', 'manager', 'coach')
+@Roles('admin', 'manager', 'coach', 'access_control')
 @UseGuards(ThrottlerGuard)
 @Throttle({ default: { limit: 120, ttl: 60_000 } })
 @Controller('clubs/:clubId/access')
