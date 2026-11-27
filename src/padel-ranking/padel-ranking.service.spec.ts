@@ -43,3 +43,48 @@ describe('inscripción con control de categoría', () => {
     expect(r.partnerDniHash).toBe(dniHash('20333444'));
   });
 });
+
+describe('padrón de pádel del club', () => {
+  const mkWithRoster = () => {
+    const members = new Map<string, { id: string; clubId: string; profileId: string; reasons: string[] }>();
+    const profiles: Record<string, any> = {
+      'u:me': { id: 'p1', displayName: 'Yo', category: '7MA', dniHash: dniHash('30111222') },
+      p2: { id: 'p2', displayName: 'Ami', category: '8VA', dniHash: dniHash('20333444') },
+    };
+    const prisma: any = {
+      padelProfile: {
+        findUnique: jest.fn(async ({ where }: any) =>
+          where.userId ? profiles[`u:${where.userId}`] ?? null : Object.values(profiles).find((p: any) => p.dniHash === where.dniHash) ?? null,
+        ),
+      },
+      clubPadelMember: {
+        findUnique: jest.fn(async ({ where }: any) => members.get(`${where.clubId_profileId.clubId}|${where.clubId_profileId.profileId}`) ?? null),
+        create: jest.fn(async ({ data }: any) => {
+          const row = { id: `m${members.size + 1}`, ...data };
+          members.set(`${data.clubId}|${data.profileId}`, row);
+          return row;
+        }),
+        update: jest.fn(async ({ where, data }: any) => {
+          const row = [...members.values()].find((m) => m.id === where.id)!;
+          Object.assign(row, data);
+          return row;
+        }),
+      },
+    };
+    return { svc: new PadelRankingService(prisma), members };
+  };
+
+  it('al inscribirse a un torneo, la pareja queda en el padrón del club con motivo "torneo"', async () => {
+    const { svc, members } = mkWithRoster();
+    await svc.validateEntry('me', { mode: 'category', category: '7MA' }, '20333444', { companyId: 'c1', clubId: 'club1' });
+    expect(members.get('club1|p1')?.reasons).toEqual(['torneo']);
+    expect(members.get('club1|p2')?.reasons).toEqual(['torneo']);
+  });
+
+  it('no duplica el motivo si ya estaba', async () => {
+    const { svc, members } = mkWithRoster();
+    await svc.validateEntry('me', { mode: 'category', category: '7MA' }, undefined, { companyId: 'c1', clubId: 'club1' });
+    await svc.validateEntry('me', { mode: 'category', category: '7MA' }, undefined, { companyId: 'c1', clubId: 'club1' });
+    expect(members.get('club1|p1')?.reasons).toEqual(['torneo']);
+  });
+});
