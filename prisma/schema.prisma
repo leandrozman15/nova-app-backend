@@ -3035,9 +3035,26 @@ model PadelProfile {
   changes PadelCategoryChange[]
   results PadelResult[]
   clubs   ClubPadelMember[]
+  eloHistory PadelEloHistory[]
 
   @@index([displayName])
   @@index([category, elo])
+}
+
+/// Punto del historial de ELO: uno por cada vez que cambió (partido, ascenso, declaración inicial…).
+/// Permite graficar la evolución, algo que el valor único en PadelProfile.elo no guarda.
+model PadelEloHistory {
+  id           String   @id @default(cuid())
+  profileId    String
+  elo          Int
+  /// declared | win | loss | promotion | recategorized | lowered | historico (backfill de perfiles previos)
+  reason       String
+  tournamentId String?
+  createdAt    DateTime @default(now())
+
+  profile PadelProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
 }
 
 /// Padrón de pádel de un club: quiénes son socios/jugadores del club o se anotaron a sus torneos.

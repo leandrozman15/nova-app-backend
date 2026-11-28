@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 
 import { dniHash } from '../common/pii-crypto';
+import { placementOf, type BracketMatchLite } from './padel-placement';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   FINALS_WINDOW_DAYS,
@@ -49,48 +50,146 @@ export class PadelRankingService {
 
   async myProfile(firebaseUid: string) {
     const user = await this.user(firebaseUid);
-    return this.prisma.padelProfile.findUnique({
+    const profile = await this.prisma.padelProfile.findUnique({
       where: { userId: user.id },
       select: {
         ...PROFILE_SELECT,
         changes: { orderBy: { createdAt: 'desc' }, take: 20 },
         results: { orderBy: { createdAt: 'desc' }, take: 20 },
+        eloHistory: {
+          orderBy: { createdAt: 'desc' },
+          take: 200,
+          select: { elo: true, reason: true, tournamentId: true, createdAt: true },
+        },
       },
     });
+    if (!profile) return null;
+    // Se pidió descendente para limitar a los últimos 200 cambios; para el gráfico va en orden cronológico.
+    return { ...profile, eloHistory: [...profile.eloHistory].reverse() };
   }
 
-  /** Mis inscripciones a torneos (de cualquier club), para ver estado e historial sin pertenecer a ninguno. */
+  /**
+   * Mis torneos de pádel en cualquier club (socio, alumno cargado directo al cuadro, o anotado
+   * desde la app), con fecha y el puesto alcanzado en el cuadro cuando ya se jugó.
+   */
   async myTournaments(firebaseUid: string) {
     const user = await this.user(firebaseUid);
-    const entries = await this.prisma.tournamentEntry.findMany({
+    const profile = await this.prisma.padelProfile.findUnique({
       where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
+      select: { id: true, dniHash: true },
+    });
+
+    const tournamentSelect = {
+      id: true,
+      name: true,
+      sport: true,
+      category: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      club: { select: { id: true, name: true } },
+    } as const;
+
+    const entries = await this.prisma.tournamentEntry.findMany({
+      where: {
+        tournament: { sport: 'padel' },
+        ...(profile ? { OR: [{ userId: user.id }, { partnerDniHash: profile.dniHash }] } : { userId: user.id }),
+      },
       select: {
         id: true,
         status: true,
         teamName: true,
         createdAt: true,
-        tournament: {
-          select: {
-            id: true,
-            name: true,
-            sport: true,
-            category: true,
-            status: true,
-            startDate: true,
-            endDate: true,
-            club: { select: { id: true, name: true } },
-          },
-        },
+        tournamentId: true,
+        tournament: { select: tournamentSelect },
       },
     });
-    return entries.map((e) => ({
-      id: e.id,
-      status: e.status,
-      teamName: e.teamName,
-      createdAt: e.createdAt,
-      tournament: e.tournament,
-    }));
+    const entryIds = new Set(entries.map((e) => e.id));
+    const entryByTournament = new Map(entries.map((e) => [e.tournamentId, e] as const));
+
+    // Alumnos de pádel que el club cargó directo al cuadro (sin pasar por una inscripción de la app):
+    // se reconocen por su DNI en el padrón del club, no por la inscripción.
+    let rosterClubIds: string[] = [];
+    let rosterPlayerIds: string[] = [];
+    if (profile) {
+      const [members, players] = await Promise.all([
+        this.prisma.clubPadelMember.findMany({ where: { profileId: profile.id }, select: { clubId: true } }),
+        this.prisma.player.findMany({ where: { dniHash: profile.dniHash }, select: { id: true, clubId: true } }),
+      ]);
+      rosterClubIds = [...new Set([...members.map((m) => m.clubId), ...players.map((p) => p.clubId)])];
+      rosterPlayerIds = players.map((p) => p.id);
+    }
+
+    type Row = {
+      tournamentId: string;
+      teamId: string | null;
+      tournament: { id: string; name: string; sport: string; category: string | null; status: string; startDate: string | null; endDate: string | null; club: { id: string; name: string } };
+      entry?: (typeof entries)[number];
+    };
+    const rows = new Map<string, Row>();
+
+    if (rosterClubIds.length) {
+      const rosterTeams = await this.prisma.tournamentTeam.findMany({
+        where: { tournament: { sport: 'padel', clubId: { in: rosterClubIds } } },
+        select: {
+          id: true,
+          entryId: true,
+          players: true,
+          tournamentId: true,
+          tournament: { select: tournamentSelect },
+        },
+      });
+      for (const t of rosterTeams) {
+        const players = Array.isArray(t.players) ? (t.players as { playerId?: string | null }[]) : [];
+        const mine = (t.entryId != null && entryIds.has(t.entryId)) || players.some((p) => p.playerId && rosterPlayerIds.includes(p.playerId));
+        if (!mine) continue;
+        rows.set(t.tournamentId, {
+          tournamentId: t.tournamentId,
+          teamId: t.id,
+          tournament: t.tournament,
+          entry: t.entryId ? entryByTournament.get(t.tournamentId) : undefined,
+        });
+      }
+    }
+    for (const e of entries) {
+      if (!rows.has(e.tournamentId)) rows.set(e.tournamentId, { tournamentId: e.tournamentId, teamId: null, tournament: e.tournament, entry: e });
+    }
+
+    type MatchRow = BracketMatchLite & { tournamentId: string; date: string | null };
+    const tournamentIds = [...rows.keys()];
+    const matches: MatchRow[] = tournamentIds.length
+      ? await this.prisma.tournamentMatch.findMany({
+          where: { tournamentId: { in: tournamentIds } },
+          select: { tournamentId: true, round: true, teamAId: true, teamBId: true, winnerId: true, date: true },
+        })
+      : [];
+    const matchesByTournament = new Map<string, typeof matches>();
+    for (const m of matches) {
+      const list = matchesByTournament.get(m.tournamentId) ?? [];
+      list.push(m);
+      matchesByTournament.set(m.tournamentId, list);
+    }
+
+    return [...rows.values()]
+      .map((r) => {
+        const tMatches = matchesByTournament.get(r.tournamentId) ?? [];
+        const totalRounds = tMatches.reduce((max, m) => Math.max(max, m.round), 0);
+        const placement = r.teamId ? placementOf(tMatches, r.teamId, totalRounds) : null;
+        const lastMatch = r.teamId
+          ? [...tMatches].filter((m) => m.teamAId === r.teamId || m.teamBId === r.teamId).sort((a, b) => b.round - a.round)[0]
+          : undefined;
+        return {
+          id: r.entry?.id ?? r.teamId ?? r.tournamentId,
+          status: r.entry?.status ?? 'ACCEPTED',
+          teamName: r.entry?.teamName ?? null,
+          createdAt: r.entry?.createdAt ?? new Date(r.tournament.startDate ?? 0),
+          date: lastMatch?.date ?? r.tournament.startDate ?? null,
+          placement: placement?.label ?? null,
+          champion: placement?.champion ?? false,
+          tournament: r.tournament,
+        };
+      })
+      .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
   }
 
   /**
@@ -116,6 +215,7 @@ export class PadelRankingService {
       return this.pick(linked, true);
     }
     const cat = asCategory(category);
+    const startElo = startingElo(cat);
     const created = await this.prisma.padelProfile.create({
       data: {
         dniHash: hash,
@@ -123,9 +223,10 @@ export class PadelRankingService {
         displayName: user.name?.trim() || 'Jugador/a',
         category: cat,
         floorCategory: cat,
-        elo: startingElo(cat),
+        elo: startElo,
         isProvisional: true,
         changes: { create: { toCategory: cat, reason: 'declared' } },
+        eloHistory: { create: { elo: startElo, reason: 'declared' } },
       },
     });
     return this.pick(created, false);
@@ -159,16 +260,18 @@ export class PadelRankingService {
       return { ...existing, existing: true };
     }
     const cat = asCategory(input.category);
+    const startElo = startingElo(cat);
     const created = await this.prisma.padelProfile.create({
       data: {
         dniHash: hash,
         displayName: input.name,
         category: cat,
         floorCategory: cat,
-        elo: startingElo(cat),
+        elo: startElo,
         isProvisional: true,
         verifiedByClubId: clubId,
         changes: { create: { toCategory: cat, reason: 'declared', clubId, byUid: byUid ?? null } },
+        eloHistory: { create: { elo: startElo, reason: 'declared' } },
       },
       select: PROFILE_SELECT,
     });
@@ -261,6 +364,7 @@ export class PadelRankingService {
             note: [input.reason, input.note?.trim()].filter(Boolean).join(' · '),
           },
         },
+        eloHistory: { create: { elo, reason: lowering ? 'lowered' : 'recategorized' } },
       },
     });
     return this.detail(id);
@@ -325,8 +429,8 @@ export class PadelRankingService {
       if (!winners.length || !losers.length) return;
       const avg = (list: { elo: number }[]) => list.reduce((n, p) => n + p.elo, 0) / list.length;
       const delta = eloDelta(avg(winners), avg(losers));
-      for (const p of winners) await this.win(p.id, delta);
-      for (const p of losers) await this.lose(p.id, delta);
+      for (const p of winners) await this.win(p.id, delta, input.tournamentId);
+      for (const p of losers) await this.lose(p.id, delta, input.tournamentId);
       if (input.isFinal) {
         const teamsCount = await this.prisma.tournamentTeam.count({ where: { tournamentId: input.tournamentId } });
         for (const p of winners) await this.final(p.id, input.tournamentId, 'champion', teamsCount);
@@ -337,7 +441,7 @@ export class PadelRankingService {
     }
   }
 
-  private async win(id: string, delta: number) {
+  private async win(id: string, delta: number, tournamentId?: string) {
     const p = await this.prisma.padelProfile.findUniqueOrThrow({ where: { id } });
     const elo = p.elo + delta;
     const played = p.matchesPlayed + 1;
@@ -356,19 +460,22 @@ export class PadelRankingService {
           lastCategoryChangeAt: new Date(),
           changes: { create: { fromCategory: p.category, toCategory: reached, reason: 'elo' } },
         }),
+        eloHistory: { create: { elo, reason: 'win', tournamentId } },
       },
     });
   }
 
-  private async lose(id: string, delta: number) {
+  private async lose(id: string, delta: number, tournamentId?: string) {
     const p = await this.prisma.padelProfile.findUniqueOrThrow({ where: { id } });
     const played = p.matchesPlayed + 1;
+    const elo = applyLoss(p.elo, delta, asCategory(p.floorCategory));
     await this.prisma.padelProfile.update({
       where: { id },
       data: {
-        elo: applyLoss(p.elo, delta, asCategory(p.floorCategory)),
+        elo,
         matchesPlayed: played,
         isProvisional: p.isProvisional && played < 3,
+        eloHistory: { create: { elo, reason: 'loss', tournamentId } },
       },
     });
   }
@@ -387,12 +494,13 @@ export class PadelRankingService {
     const p = await this.prisma.padelProfile.findUniqueOrThrow({ where: { id } });
     const to = oneUp(asCategory(p.category));
     if (to === p.category) return;
+    const elo = Math.max(p.elo, startingElo(to));
     await this.prisma.padelProfile.update({
       where: { id },
       data: {
         category: to,
         floorCategory: to,
-        elo: Math.max(p.elo, startingElo(to)),
+        elo,
         lastCategoryChangeAt: new Date(),
         changes: {
           create: {
@@ -402,6 +510,7 @@ export class PadelRankingService {
             note: why === 'champion' ? `Campeón con ${teamsCount} parejas` : 'Dos finales en 60 días',
           },
         },
+        eloHistory: { create: { elo, reason: 'promotion', tournamentId } },
       },
     });
   }
